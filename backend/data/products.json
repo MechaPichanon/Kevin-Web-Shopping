@@ -1,0 +1,57 @@
+[
+  {
+    "id": "shirt_001",
+    "name": "Basic Cotton Shirt",
+    "category": "shirt",
+    "price": 299,
+    "currency": "THB",
+    "sizes": ["S", "M", "L", "XL"],
+    "colors": ["white", "black", "blue"],
+    "material": "100% cotton",
+    "description": "A comfortable everyday cotton shirt."
+  },
+  {
+    "id": "shirt_002",
+    "name": "Slim Fit Shirt",
+    "category": "shirt",
+    "price": 399,
+    "currency": "THB",
+    "sizes": ["S", "M", "L"],
+    "colors": ["black", "gray"],
+    "material": "cotton blend",
+    "description": "A modern slim fit shirt suitable for casual wear."
+  },
+  {
+    "id": "jacket_001",
+    "name": "Lightweight Jacket",
+    "category": "jacket",
+    "price": 899,
+    "currency": "THB",
+    "sizes": ["M", "L", "XL"],
+    "colors": ["black", "green"],
+    "material": "polyester",
+    "description": "A lightweight jacket for mild weather."
+  },
+  {
+    "id": "pants_001",
+    "name": "Casual Pants",
+    "category": "pants",
+    "price": 499,
+    "currency": "THB",
+    "sizes": ["M", "L", "XL"],
+    "colors": ["black", "khaki"],
+    "material": "cotton",
+    "description": "Comfortable pants for everyday use."
+  },
+  {
+    "id": "Tshirt_001",
+    "name": "Cotton T-Shirt",
+    "category": "Tshirt",
+    "price": 250,
+    "currency": "THB",
+    "sizes": ["S", "M", "L", "XL"],
+    "colors": ["black", "white"],
+    "material": "100% cotton",
+    "description": "A comfortable cotton t-shirt for everyday wear."
+  }
+]
