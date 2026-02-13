@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Navbarsub from "@/components/navbarsub";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [form, setForm] = useState({ email: "", password: "" });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,7 +19,20 @@ export default function LoginPage() {
     });
 
     const data = await res.json();
-    alert(data.message || data.error);
+
+    if (!res.ok) {
+      alert(data.error || "Login failed");
+      return;
+    }
+
+    localStorage.setItem("token", data.token);
+
+    //  แจ้งทุก component ว่า login ระบบจะได้ไม่เอ๋อ ตอนแรกมีปัญหา Login เสร็จไม่ขึ้นปุ่ม logout
+    window.dispatchEvent(new Event("login"));
+
+    router.push("/profile");
+
+
   };
 
   return (
@@ -59,6 +74,7 @@ export default function LoginPage() {
     </>
   );
 }
+
 
 const styles: any = {
   page: {
