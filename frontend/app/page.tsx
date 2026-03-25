@@ -1,26 +1,32 @@
-import Navbar from "@/components/navbarsub";
-import Recommendation from "@/components/recommendation";
 import ProductGrid from "@/components/productgrid";
-import Navbarsub from "@/components/navbarsub";
 
 export default function HomePage() {
   return (
-    <>
-      <Navbarsub />
-      <Recommendation />
+    <div style={styles.container}>
+      <h1 style={styles.title}>RECOMMENDATION</h1>
 
-      <main style={{ padding: 40, background: "#8b6f5a" }}>
-        <div style={{
-          display: "flex",
-          gap: 24,
-          justifyContent: "center"
-        }}>
-          <ProductGrid />
-
-        </div>
-      </main>
-
-
-    </>
+      <div style={styles.grid}>
+        <ProductGrid columns={4} />
+      </div>
+    </div>
   );
 }
+
+const styles: any = {
+  container: {
+    background: "#b89f8d",
+    minHeight: "100vh",
+    padding: "40px",
+    color: "#000",
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: "30px",
+    color: "#fff",
+  },
+  grid: {
+    background: "#8b6f5a",
+    padding: "20px",
+    borderRadius: "10px",
+  },
+};

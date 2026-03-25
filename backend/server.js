@@ -1,4 +1,4 @@
-require("dotenv").config(); // ⭐ ต้องอยู่บรรทัดบนสุด
+require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
@@ -63,7 +63,7 @@ app.post("/auth/register", async (req, res) => {
       [username, email, hash]
     );
 
-    res.json({ message: "Register success 🎉" });
+    res.json({ message: "Register success" });
 
   } catch (err) {
     console.error("REGISTER ERROR:", err.message);
@@ -104,7 +104,7 @@ app.post("/auth/login", async (req, res) => {
     );
 
     res.json({
-      message: "Login success 🎉",
+      message: "Login success",
       token,
       user: {
         id: user.id,
@@ -142,5 +142,5 @@ app.get("/profile", auth, async (req, res) => {
 ====================== */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(` Server running on http://localhost:${PORT}`);
 });

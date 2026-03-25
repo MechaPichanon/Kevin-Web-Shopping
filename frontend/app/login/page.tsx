@@ -36,8 +36,6 @@ export default function LoginPage() {
   };
 
   return (
-    <>
-      <Navbarsub />
       <div style={styles.page}>
         <div style={styles.card}>
           <h1 style={styles.title}>Login</h1>
@@ -71,7 +69,6 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-    </>
   );
 }
 

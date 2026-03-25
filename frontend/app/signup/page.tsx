@@ -24,7 +24,6 @@ export default function SignupPage() {
     };
 
     return (
-      <><Navbarsub />
       <div style={styles.page}>
             <div style={styles.card}>
                 <h1 style={styles.title}>Sign Up</h1>
@@ -65,7 +64,7 @@ export default function SignupPage() {
                     </button>
                 </div>
             </div>
-        </div></>
+        </div>
     );
 }
 

@@ -33,12 +33,11 @@ export default function ProfilePage() {
     if (!user) return <p>Loading...</p>;
 
     return (
-        <><Navbarsub />
             <div style={{ maxWidth: 400, margin: "100px auto" }}>
 
                 <h1>Profile</h1>
                 <p><b>Username:</b> {user.username}</p>
                 <p><b>Email:</b> {user.email}</p>
-            </div></>
+            </div>
     );
 }
