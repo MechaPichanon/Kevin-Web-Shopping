@@ -5,8 +5,7 @@ import ProductGrid from "@/components/productgrid";
 import { products } from "@/lib/mockdata";
 export default function ProductPage() {
   const [minPrice, setMinPrice] = useState(0);
-  const [maxPri
-    ce, setMaxPrice] = useState(1000);
+  const [maxPrice, setMaxPrice] = useState(1000);
 
   const filtered = products.filter(
     (p) => p.price >= minPrice && p.price <= maxPrice
