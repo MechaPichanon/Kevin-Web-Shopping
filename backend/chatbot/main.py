@@ -163,6 +163,32 @@ def is_product_domain_query(message: str) -> bool:
     ]
     return any(p in text for p in shopping_phrases)
 
+
+def is_smalltalk_strict(message: str) -> bool:
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+
+    # Avoid substring matches like "s(h)i(r)t" matching "hi".
+    patterns = [
+        r"\bhello\b",
+        r"\bhi\b",
+        r"\bhey\b",
+        r"\bgood\s+morning\b",
+        r"\bgood\s+afternoon\b",
+        r"\bgood\s+evening\b",
+        r"\bhow\s+are\s+you\b",
+        r"\bhow'?s\s+it\s+going\b",
+        r"\bwhat'?s\s+up\b",
+        r"\bthanks\b",
+        r"\bthank\s+you\b",
+        r"สวัสดี",
+        r"หวัดดี",
+        r"ขอบคุณ",
+    ]
+
+    return any(re.search(p, text) for p in patterns)
+
 class ChatRequest(BaseModel):
     message: str
 
@@ -170,7 +196,7 @@ class ChatRequest(BaseModel):
 def chat(request: ChatRequest):
     logger.info(f"Incoming message: {request.message}")
 
-    if is_smalltalk(request.message):
+    if is_smalltalk_strict(request.message):
         logger.info("Smalltalk detected; returning a friendly greeting.")
         return {
             "reply": "Hi! I can help you find and compare our shirts and pants. What are you looking for today?",
