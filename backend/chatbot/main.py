@@ -4,6 +4,7 @@ from intent import detect_intent,Intent
 from retrieval import retrieve_products
 import requests
 import logging
+import re
 
 logging.basicConfig(
     filename='chatbot.log',
@@ -68,10 +69,19 @@ def is_smalltalk(message: str) -> bool:
     if not text:
         return False
 
-    patterns = [
+    tokens = set(re.findall(r"[a-z0-9']+", text))
+
+    single_word = {
         "hello",
         "hi",
         "hey",
+        "thanks",
+    }
+    if tokens.intersection(single_word):
+        return True
+
+    # Multi-word phrases are safe to check as substrings.
+    phrases = [
         "good morning",
         "good afternoon",
         "good evening",
@@ -80,13 +90,78 @@ def is_smalltalk(message: str) -> bool:
         "hows it going",
         "what's up",
         "whats up",
-        "thanks",
         "thank you",
         "สวัสดี",
         "หวัดดี",
         "ขอบคุณ",
     ]
-    return any(p in text for p in patterns)
+    return any(p in text for p in phrases)
+
+def is_product_domain_query(message: str) -> bool:
+    """
+    Lightweight router: returns True when the query is likely about store products.
+
+    This prevents embedding retrieval from "hallucinating" relevance for unrelated queries
+    (e.g., weather) and accidentally flipping OUT_OF_SCOPE into PRODUCT_INFO.
+    """
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+
+    tokens = set(re.findall(r"[a-z0-9']+", text))
+
+    product_type_tokens = {
+        "shirt",
+        "shirts",
+        "tshirt",
+        "tshirts",
+        "t-shirt",
+        "tee",
+        "pants",
+        "trousers",
+        "jeans",
+        "jacket",
+        "hoodie",
+    }
+    if tokens.intersection(product_type_tokens):
+        return True
+
+    product_attribute_tokens = {
+        "price",
+        "cost",
+        "size",
+        "sizes",
+        "color",
+        "colors",
+        "material",
+        "feature",
+        "features",
+        "available",
+        "stock",
+        "cotton",
+        "polyester",
+    }
+    if tokens.intersection(product_attribute_tokens):
+        return True
+
+    shopping_phrases = [
+        "show me",
+        "find",
+        "search",
+        "looking for",
+        "do you have",
+        "have any",
+        "sell",
+        "buy",
+        "order",
+        "recommend",
+        "suggest",
+        "under",
+        "below",
+        "less than",
+        "cheaper than",
+    ]
+    return any(p in text for p in shopping_phrases)
 
 class ChatRequest(BaseModel):
     message: str
@@ -112,6 +187,13 @@ def chat(request: ChatRequest):
     products = []
 
     if intent == Intent.OUT_OF_SCOPE:
+        if not is_product_domain_query(request.message):
+            logger.warning("Out of scope detected (non-product query).")
+            return {
+                "reply": OUT_OF_SCOPE_RESPONSE,
+                "intent": intent,
+            }
+
         logger.info("Intent out_of_scope; trying retrieval to confirm product relevance.")
         products = retrieve_products(request.message)
         if products:
@@ -153,7 +235,8 @@ Answer in English.
 
 Hard rules:
 - Use ONLY the provided product data. Do not invent anything.
-- If the question is not about store products, reply exactly: OUT_OF_SCOPE
+- If the question is not about store products (shirts, pants, jackets), reply exactly: OUT_OF_SCOPE
+- If the question is about products but none match the user's constraints (e.g., budget), say you couldn't find a match (do NOT reply OUT_OF_SCOPE).
 - Do not mention internal ids or the word "Product Data".
 - Do not copy the field labels verbatim (avoid lines like "Name: ...", "Price: ..."). Rewrite naturally.
 
@@ -185,6 +268,16 @@ User Question: {request.message}
     
     data = response.json()
     reply = data.get("response", "Sorry, something went wrong.")
+
+    # Guard: the model may output the literal string OUT_OF_SCOPE even for in-scope queries
+    # (e.g., when no products match constraints). Keep API semantics consistent.
+    if isinstance(reply, str) and reply.strip() == "OUT_OF_SCOPE" and intent != Intent.OUT_OF_SCOPE:
+        if not is_product_domain_query(request.message):
+            reply = OUT_OF_SCOPE_RESPONSE
+            intent = Intent.OUT_OF_SCOPE
+            products = []
+        else:
+            reply = "Sorry, I couldn't find any products that match what you're looking for."
     logger.info("LLM response received")
     return{
         "reply": reply,
