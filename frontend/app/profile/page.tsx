@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/auth";
-import Navbarsub from "@/components/navbarsub";
 export default function ProfilePage() {
     const router = useRouter();
     const [user, setUser] = useState<any>(null);
