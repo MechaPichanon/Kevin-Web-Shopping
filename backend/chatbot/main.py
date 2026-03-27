@@ -1,7 +1,10 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from intent import detect_intent,Intent
 from retrieval import retrieve_products
+from typing import Dict, Any, List, Optional
+import uuid
 import requests
 import logging
 import re
@@ -21,6 +24,46 @@ OUT_OF_SCOPE_RESPONSE = (
     "Sorry, I can only help with questions about products"
 )
 
+# Lightweight in-memory conversation state for demos (not persistent).
+# Keyed by conversation_id generated/returned by this API.
+_CONVERSATIONS: Dict[str, Dict[str, Any]] = {}
+_MAX_CONVERSATIONS = 500
+
+def _get_or_create_conversation_id(conversation_id: Optional[str]) -> str:
+    cid = (conversation_id or "").strip()
+    if not cid:
+        cid = str(uuid.uuid4())
+    if cid not in _CONVERSATIONS:
+        if len(_CONVERSATIONS) >= _MAX_CONVERSATIONS:
+            # Drop an arbitrary item to keep memory bounded.
+            _CONVERSATIONS.pop(next(iter(_CONVERSATIONS)))
+        _CONVERSATIONS[cid] = {}
+    return cid
+
+def _is_followup_reference(message: str) -> bool:
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+
+    tokens = set(re.findall(r"[a-z0-9']+", text))
+    referential = {
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "they",
+        "them",
+        "one",
+        "ones",
+    }
+    if tokens.intersection(referential):
+        return True
+
+    # Short follow-ups like "what about size?" often omit a product name.
+    return len(tokens) <= 5
+
 def format_products_for_prompt(products):
     lines = []
     for p in products:
@@ -36,6 +79,17 @@ def format_products_for_prompt(products):
     return "\n".join(lines)
 
 app = FastAPI()
+
+# Allow the Next.js dev server (and similar local demos) to call this API from the browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():
@@ -165,9 +219,11 @@ def is_product_domain_query(message: str) -> bool:
 
 class ChatRequest(BaseModel):
     message: str
+    conversation_id: Optional[str] = None
 
 @app.post("/chat")
 def chat(request: ChatRequest):
+    conversation_id = _get_or_create_conversation_id(request.conversation_id)
     logger.info(f"Incoming message: {request.message}")
 
     if is_smalltalk(request.message):
@@ -175,11 +231,12 @@ def chat(request: ChatRequest):
         return {
             "reply": "Hi! I can help you find and compare our shirts and pants. What are you looking for today?",
             "intent": Intent.OUT_OF_SCOPE,
+            "conversation_id": conversation_id,
         }
 
     if is_unsupported_store_question(request.message):
         logger.info("Unsupported store question detected; returning OUT_OF_SCOPE.")
-        return {"reply": "OUT_OF_SCOPE", "intent": Intent.OUT_OF_SCOPE}
+        return {"reply": "OUT_OF_SCOPE", "intent": Intent.OUT_OF_SCOPE, "conversation_id": conversation_id}
 
     intent = detect_intent(request.message)
     logger.info(f"Detected intent: {intent}")
@@ -192,6 +249,7 @@ def chat(request: ChatRequest):
             return {
                 "reply": OUT_OF_SCOPE_RESPONSE,
                 "intent": intent,
+                "conversation_id": conversation_id,
             }
 
         logger.info("Intent out_of_scope; trying retrieval to confirm product relevance.")
@@ -204,17 +262,29 @@ def chat(request: ChatRequest):
             return {
                 "reply": OUT_OF_SCOPE_RESPONSE,
                 "intent": intent
+                ,
+                "conversation_id": conversation_id,
             }
     else:
         products = retrieve_products(request.message)
 
     logger.info(f"Retrieved products count: {len(products)}")
     if not products:
-        return {
-            "reply": "Sorry, I couldn't find any products related to your query.",
-            "intent": intent
-        }
+        previous_products = _CONVERSATIONS.get(conversation_id, {}).get("last_products")
+        if _is_followup_reference(request.message) and isinstance(previous_products, list) and previous_products:
+            logger.info("No products retrieved; using previous conversation products for follow-up.")
+            products = previous_products
+            if intent == Intent.OUT_OF_SCOPE:
+                intent = Intent.PRODUCT_INFO
+        else:
+            return {
+                "reply": "Sorry, I couldn't find any products related to your query.",
+                "intent": intent,
+                "conversation_id": conversation_id,
+            }
     logger.info(f"Products used: {[p['id'] for p in products]}")
+
+    _CONVERSATIONS[conversation_id]["last_products"] = products
 
     products_context = format_products_for_prompt(products)
     
@@ -282,5 +352,6 @@ User Question: {request.message}
     return{
         "reply": reply,
         "intent": intent,
-        "products_used": [p["id"] for p in products]
+        "products_used": [p["id"] for p in products],
+        "conversation_id": conversation_id,
     }
