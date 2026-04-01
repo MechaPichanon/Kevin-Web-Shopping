@@ -9,5 +9,14 @@ venv/
 # Logs
 *.log
 
+#.env
+.env
+
 # OS files
 .DS_Store
+
+# Node.js
+node_modules/
+
+# npm (local cache/logs)
+.npm-cache/
