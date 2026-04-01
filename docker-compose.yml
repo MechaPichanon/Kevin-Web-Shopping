@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_CHAT_MODEL: "qwen2.5:7b"
+      OLLAMA_EMBED_MODEL: "nomic-embed-text"
+    volumes:
+      - ./backend:/app/backend
+    command: uvicorn chatbot.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - ollama
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      FASTAPI_BASE_URL: "http://backend:8000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  ollama:

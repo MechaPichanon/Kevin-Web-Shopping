@@ -1,5 +1,22 @@
 # Web shopping project
 
+## Run with Docker (Docker Desktop)
+From `Kevin-Web-Shopping/`:
+
+1. Start everything:
+   - `docker compose up --build`
+
+2. One-time: pull the Ollama models (in another terminal):
+   - `docker compose exec ollama ollama pull qwen2.5:7b`
+   - `docker compose exec ollama ollama pull nomic-embed-text`
+
+3. Open:
+   - UI: `http://localhost:3000`
+   - API: `http://localhost:8000`
+
+Notes:
+- If you already run Ollama on your host, you can remove/disable the `ollama` service and set `OLLAMA_BASE_URL=http://host.docker.internal:11434` on the `backend` service instead.
+
 ## How to run Chatbot API (FastAPI)
 1. Start Ollama (chat model): `ollama run qwen2.5:7b`
 

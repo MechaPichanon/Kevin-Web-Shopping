@@ -2,7 +2,10 @@ import argparse
 import os
 from pathlib import Path
 
-from retrieval import EMBEDDINGS_CACHE_PATH, retrieve_products
+try:
+    from .retrieval import EMBEDDINGS_CACHE_PATH, retrieve_products
+except ImportError:
+    from retrieval import EMBEDDINGS_CACHE_PATH, retrieve_products
 
 
 def main() -> int:

@@ -1,13 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from intent import detect_intent,Intent
-from retrieval import retrieve_products
+try:
+    from .intent import detect_intent, Intent
+    from .retrieval import retrieve_products
+except ImportError:
+    from intent import detect_intent, Intent
+    from retrieval import retrieve_products
 from typing import Dict, Any, List, Optional
 import uuid
 import requests
 import logging
 import re
+import os
 
 logging.basicConfig(
     filename='chatbot.log',
@@ -19,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 "ollama run qwen2.5:7b uvicorn chatbot.main:app --reload"
 
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
 
 OUT_OF_SCOPE_RESPONSE = (
     "Sorry, I can only help with questions about products"
@@ -327,9 +334,9 @@ User Question: {request.message}
     logger.info("sending prompt to LLM")
 
     response = requests.post(
-        "http://localhost:11434/api/generate",
+        f"{OLLAMA_BASE_URL}/api/generate",
         json={
-            "model": "qwen2.5:7b",
+            "model": OLLAMA_CHAT_MODEL,
             "prompt": prompt,
             "stream": False,
         },

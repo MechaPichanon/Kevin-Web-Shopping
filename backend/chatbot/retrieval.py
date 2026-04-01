@@ -8,7 +8,10 @@ import difflib
 from typing import List, Dict
 from pathlib import Path
 
-from embeddings import EmbeddingError, get_ollama_embedding
+try:
+    from .embeddings import EmbeddingError, get_ollama_embedding
+except ImportError:
+    from embeddings import EmbeddingError, get_ollama_embedding
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PRODUCTS_PATH = BASE_DIR / "data" / "products.json"
