@@ -17,3 +17,6 @@ venv/
 
 # Node.js
 node_modules/
+
+# npm (local cache/logs)
+.npm-cache/

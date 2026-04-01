@@ -6,7 +6,7 @@
 ## How to run Chatbot part
 1. Start Ollama: ollama run qwen2.5:7b
 
-2. Install requirement : pip install -r requirement.txt
+2. Install requirement : pip install -r requirements.txt
 
 3.Run it :
     cd chatbot
