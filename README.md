@@ -14,6 +14,10 @@ From `Kevin-Web-Shopping/`:
    - UI: `http://localhost:3000`
    - API: `http://localhost:8000`
 
+Database notes:
+- The `postgres` service auto-creates the demo schema on first start from `postgres/init/01_schema.sql` (fresh `postgres_data` volume).
+- If you want to re-initialize the DB from scratch, run `docker compose down -v` and then `docker compose up --build` again.
+
 Notes:
 - If you already run Ollama on your host, you can remove/disable the `ollama` service and set `OLLAMA_BASE_URL=http://host.docker.internal:11434` on the `backend` service instead.
 
