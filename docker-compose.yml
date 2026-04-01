@@ -10,11 +10,15 @@ services:
       OLLAMA_BASE_URL: "http://ollama:11434"
       OLLAMA_CHAT_MODEL: "qwen2.5:7b"
       OLLAMA_EMBED_MODEL: "nomic-embed-text"
+      DATABASE_URL: postgresql://postgres:bosbutter%40db@postgres:5432/bos_butter
     volumes:
       - ./backend:/app/backend
     command: uvicorn chatbot.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      - ollama
+      ollama:
+        condition: service_started
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -40,5 +44,41 @@ services:
     volumes:
       - ollama:/root/.ollama
 
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bos_butter"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    depends_on:
+      - ollama  # Optional, if needed
+
+  auth-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.node
+    working_dir: /app/backend
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://postgres:bosbutter%40db@postgres:5432/bos_butter
+      JWT_SECRET: MY_SUPER_SECRET_KEY_KEVWEB
+      PORT: 5000
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   ollama:
+  postgres_data:
