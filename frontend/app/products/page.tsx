@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import ProductGrid from "@/components/productgrid";
+import ProductCard from "@/components/productcard";
 import { products } from "@/lib/mockdata";
+
 export default function ProductPage() {
   const [minPrice, setMinPrice] = useState(0);
-  const [maxPri
-    ce, setMaxPrice] = useState(1000);
+  const [maxPrice, setMaxPrice] = useState(1000);
 
   const filtered = products.filter(
     (p) => p.price >= minPrice && p.price <= maxPrice
@@ -47,26 +47,15 @@ export default function ProductPage() {
 
       {/* RIGHT PRODUCT */}
       <div style={styles.products}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3,1fr)",
-            gap: "20px",
-          }}
-        >
+        <div style={styles.grid}>
           {filtered.map((p) => (
-            <div key={p.id}>
-              {/* reuse card */}
-              <ProductGrid columns={3} />
-            </div>
+            <ProductCard key={p.id} product={p} />
           ))}
         </div>
       </div>
-
     </div>
   );
 }
-
 const styles: any = {
   container: {
     display: "flex",
@@ -81,6 +70,7 @@ const styles: any = {
     background: "#ddd",
     padding: "20px",
     borderRadius: "8px",
+    flexShrink: 0, // 🔥 กันโดนดัน
   },
   input: {
     width: "100%",
@@ -88,5 +78,10 @@ const styles: any = {
   },
   products: {
     flex: 1,
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", // 🔥 responsive
+    gap: "20px",
   },
 };
