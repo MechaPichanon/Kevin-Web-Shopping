@@ -1,20 +1,32 @@
-import ChatPage from "./chat/ChatPage";
+import ProductGrid from "@/components/productgrid";
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <main className="flex min-h-full flex-1 flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Web Shopping Chatbot Demo
-        </h1>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Ask about products (shirts, pants, jackets).
-        </p>
+    <div style={styles.container}>
+      <h1 style={styles.title}>RECOMMENDATION</h1>
 
-        <div className="mt-6 flex-1">
-          <ChatPage />
-        </div>
+      <div style={styles.grid}>
+        <ProductGrid columns={4} />
       </div>
-    </main>
+    </div>
   );
 }
+
+const styles: any = {
+  container: {
+    background: "#b89f8d",
+    minHeight: "100vh",
+    padding: "40px",
+    color: "#000",
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: "30px",
+    color: "#fff",
+  },
+  grid: {
+    background: "#8b6f5a",
+    padding: "20px",
+    borderRadius: "10px",
+  },
+};

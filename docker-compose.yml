@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    working_dir: /app/backend
     ports:
       - "8000:8000"
     environment:
@@ -19,10 +20,12 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    working_dir: /app
     ports:
       - "3000:3000"
     environment:
       FASTAPI_BASE_URL: "http://backend:8000"
+      WATCHPACK_POLLING: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules
