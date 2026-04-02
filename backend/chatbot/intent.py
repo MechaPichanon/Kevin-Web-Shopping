@@ -17,6 +17,8 @@ def detect_intent(message: str) -> Intent:
     tokens = set(re.findall(r"[a-z0-9']+", text))
 
     product_types = [
+        "products",
+        "product",
         "shirt",
         "shirts",
         "tshirt",
