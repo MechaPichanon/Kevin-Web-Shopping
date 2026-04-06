@@ -7,16 +7,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
       OLLAMA_CHAT_MODEL: "qwen2.5:7b"
-      OLLAMA_EMBED_MODEL: "nomic-embed-text"
+      OLLAMA_EMBED_MODEL: "bge-m3"
       DATABASE_URL: postgresql://postgres:bosbutter%40db@postgres:5432/bos_butter
     volumes:
       - ./backend:/app/backend
     command: uvicorn chatbot.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      ollama:
-        condition: service_started
       postgres:
         condition: service_healthy
 
@@ -37,15 +35,8 @@ services:
     depends_on:
       - backend
 
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama:/root/.ollama
-
   postgres:
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     environment:
       POSTGRES_DB: ${DB_NAME:-bos_butter}
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -60,8 +51,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
-    depends_on:
-      - ollama  # Optional, if needed
+      - ./postgres/migrations:/migrations:ro
 
   auth-backend:
     build:
@@ -72,6 +62,8 @@ services:
       - "5000:5000"
     environment:
       DATABASE_URL: postgresql://postgres:bosbutter%40db@postgres:5432/bos_butter
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+      OLLAMA_EMBED_MODEL: "bge-m3"
       JWT_SECRET: MY_SUPER_SECRET_KEY_KEVWEB
       PORT: 5000
     volumes:
@@ -81,5 +73,4 @@ services:
         condition: service_healthy
 
 volumes:
-  ollama:
   postgres_data:
