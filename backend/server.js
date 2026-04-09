@@ -14,6 +14,16 @@ app.use(cors({
 }));
 app.use(express.json());
 
+async function ensureUserProfileColumns() {
+  await pool.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT '';
+  `);
+}
+
 /* ======================
    JWT Middleware
 ====================== */
@@ -123,24 +133,91 @@ app.post("/auth/login", async (req, res) => {
    PROFILE (Protected)
 ====================== */
 app.get("/profile", auth, async (req, res) => {
-  const userId = req.user.id;
+  try {
+    const userId = req.user.id;
 
-  const result = await pool.query(
-    "SELECT id, username, email FROM users WHERE id = $1",
-    [userId]
-  );
+    const result = await pool.query(
+      `SELECT id, username, email, first_name AS "firstName", last_name AS "lastName",
+              phone, address
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
 
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: "User not found" });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("PROFILE GET ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
   }
+});
 
-  res.json(result.rows[0]);
+app.put("/profile", auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      firstName = "",
+      lastName = "",
+      email = "",
+      phone = "",
+      address = "",
+    } = req.body;
+
+    if (!email.trim()) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const result = await pool.query(
+      `UPDATE users
+       SET email = $1,
+           first_name = $2,
+           last_name = $3,
+           phone = $4,
+           address = $5
+       WHERE id = $6
+       RETURNING id, username, email, first_name AS "firstName", last_name AS "lastName",
+                 phone, address`,
+      [
+        email.trim(),
+        firstName.trim(),
+        lastName.trim(),
+        phone.trim(),
+        address.trim(),
+        userId,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      message: "Profile updated",
+      user: result.rows[0],
+    });
+  } catch (err) {
+    console.error("PROFILE UPDATE ERROR:", err.message);
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Email already in use" });
+    }
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 /* ======================
    START SERVER
 ====================== */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(` Server running on http://localhost:${PORT}`);
-});
+ensureUserProfileColumns()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(` Server running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("SCHEMA INIT ERROR:", err.message);
+    process.exit(1);
+  });

@@ -1,14 +1,13 @@
 import ProductGrid from "@/components/productgrid";
+import Recommendation from "@/components/recommendation";
 
 export default function HomePage() {
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>RECOMMENDATION</h1>
-
-      <div style={styles.grid}>
-        <ProductGrid columns={4} />
+    <div className="flex min-h-screen flex-col">
+      <main className="flex-1">
+        <Recommendation />
+      </main>
       </div>
-    </div>
   );
 }
 

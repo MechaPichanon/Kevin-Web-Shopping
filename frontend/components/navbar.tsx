@@ -99,7 +99,7 @@ export default function Navbar() {
             </Link>
             {/* Keeping old references as well */}
             <div className="h-4 w-px bg-white/30 hidden xl:block"></div>
-            <Link
+             {/* <Link
               href="/"
               className="hidden xl:block hover:text-amber-200 transition-colors duration-200"
             >
@@ -110,7 +110,7 @@ export default function Navbar() {
               className="hidden xl:block hover:text-amber-200 transition-colors duration-200"
             >
               Currency
-            </Link>
+            </Link> */}
           </div>
 
           {/* 3. Search Bar */}
