@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   password TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'customer',
   first_name TEXT NOT NULL DEFAULT '',
   last_name TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
@@ -16,6 +17,10 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS users_email_idx ON users (email);
+
+ALTER TABLE users
+  ADD CONSTRAINT IF NOT EXISTS users_role_check
+  CHECK (role IN ('admin', 'staff', 'customer'));
 
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
