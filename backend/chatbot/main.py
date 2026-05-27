@@ -72,17 +72,61 @@ def _is_followup_reference(message: str) -> bool:
     return len(tokens) <= 5
 
 def format_products_for_prompt(products):
+    """
+    Format retrieved products for the LLM system prompt.
+    Handles both new format (variants list) and old flat format.
+    """
     lines = []
     for p in products:
-        lines.append(
-            f"- Name: {p['name']}\n"
-            f" Category: {p['category']}\n"
-            f" Price: {p['price']} {p['currency']}\n"
-            f" Sizes: {', '.join(p['sizes'])}\n"
-            f" Colors: {', '.join(p['colors'])}\n"
-            f" Material: {p['material']}\n"
-            f" Description: {p['description']}\n"
-        )
+        # ── New format: variants list ────────────────────────────
+        variants = p.get("variants", []) or []
+        if variants:
+            sizes   = sorted(set(v.get("size",  "") for v in variants if v.get("size")))
+            colors  = sorted(set(v.get("color", "") for v in variants if v.get("color")))
+            sleeves = sorted(set(v.get("sleeve","") for v in variants if v.get("sleeve")))
+            prices  = [float(v["price"]) for v in variants if v.get("price") is not None]
+            price_str = ""
+            if prices:
+                lo, hi = min(prices), max(prices)
+                price_str = f"{lo:.0f} THB" if lo == hi else f"{lo:.0f}–{hi:.0f} THB"
+
+            name     = p.get("product_name") or p.get("name", "")
+            category = p.get("category", "")
+            sub_cat  = p.get("sub_category", "")
+            desc     = p.get("description",  "")
+
+            block = f"- Name: {name}\n"
+            block += f"  Category: {category}"
+            if sub_cat:     block += f" ({sub_cat})"
+            block += "\n"
+            if price_str:   block += f"  Price: {price_str}\n"
+            if sizes:       block += f"  Sizes: {', '.join(sizes)}\n"
+            if colors:      block += f"  Colors: {', '.join(colors)}\n"
+            if sleeves:     block += f"  Sleeve: {', '.join(sleeves)}\n"
+            if desc:        block += f"  Description: {desc}\n"
+            lines.append(block)
+        else:
+            # ── Legacy flat format ───────────────────────────────
+            name     = p.get("product_name") or p.get("name", "")
+            category = p.get("category",     "")
+            price    = p.get("price",        "")
+            currency = p.get("currency",     "THB")
+            sizes    = p.get("sizes",        []) or []
+            colors   = p.get("colors",       []) or []
+            material = p.get("material",     "")
+            desc     = p.get("description",  "")
+
+            block = (
+                f"- Name: {name}\n"
+                f"  Category: {category}\n"
+                f"  Price: {price} {currency}\n"
+            )
+            if sizes:    block += f"  Sizes: {', '.join(str(s) for s in sizes)}\n"
+            if colors:   block += f"  Colors: {', '.join(str(c) for c in colors)}\n"
+            if material: block += f"  Material: {material}\n"
+            if desc:     block += f"  Description: {desc}\n"
+            lines.append(block)
+
     return "\n".join(lines)
 
 app = FastAPI()

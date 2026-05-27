@@ -1,57 +1,94 @@
 [
   {
-    "id": "shirt_001",
-    "name": "Basic Cotton Shirt",
+    "product_id": "SS01",
+    "product_name": "Slim Fit Cotton Shirt",
     "category": "shirt",
-    "price": 299,
-    "currency": "THB",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["white", "black", "blue"],
-    "material": "100% cotton",
-    "description": "A comfortable everyday cotton shirt."
+    "sub_category": "slim_shirt",
+    "description": "A modern slim fit shirt made from premium cotton blend. Perfect for both office and casual wear. Features a spread collar and long sleeves for a sophisticated look. Machine washable.",
+    "variants": [
+      { "variant_id": "SS01-WHITE-S",  "size": "S",  "color": "White", "sleeve": "long", "collar": "spread", "chest_min": 86.0,  "chest_max": 90.0,  "price": 599, "cost_price": 250, "stock": 20 },
+      { "variant_id": "SS01-WHITE-M",  "size": "M",  "color": "White", "sleeve": "long", "collar": "spread", "chest_min": 91.0,  "chest_max": 96.0,  "price": 599, "cost_price": 250, "stock": 25 },
+      { "variant_id": "SS01-WHITE-L",  "size": "L",  "color": "White", "sleeve": "long", "collar": "spread", "chest_min": 97.0,  "chest_max": 102.0, "price": 599, "cost_price": 250, "stock": 15 },
+      { "variant_id": "SS01-WHITE-XL", "size": "XL", "color": "White", "sleeve": "long", "collar": "spread", "chest_min": 103.0, "chest_max": 108.0, "price": 599, "cost_price": 250, "stock": 10 },
+      { "variant_id": "SS01-BLUE-S",   "size": "S",  "color": "Blue",  "sleeve": "long", "collar": "spread", "chest_min": 86.0,  "chest_max": 90.0,  "price": 599, "cost_price": 250, "stock": 18 },
+      { "variant_id": "SS01-BLUE-M",   "size": "M",  "color": "Blue",  "sleeve": "long", "collar": "spread", "chest_min": 91.0,  "chest_max": 96.0,  "price": 599, "cost_price": 250, "stock": 22 },
+      { "variant_id": "SS01-BLUE-L",   "size": "L",  "color": "Blue",  "sleeve": "long", "collar": "spread", "chest_min": 97.0,  "chest_max": 102.0, "price": 599, "cost_price": 250, "stock": 12 },
+      { "variant_id": "SS01-BLACK-M",  "size": "M",  "color": "Black", "sleeve": "long", "collar": "spread", "chest_min": 91.0,  "chest_max": 96.0,  "price": 599, "cost_price": 250, "stock": 20 },
+      { "variant_id": "SS01-BLACK-L",  "size": "L",  "color": "Black", "sleeve": "long", "collar": "spread", "chest_min": 97.0,  "chest_max": 102.0, "price": 599, "cost_price": 250, "stock": 16 }
+    ]
   },
   {
-    "id": "shirt_002",
-    "name": "Slim Fit Shirt",
+    "product_id": "CS01",
+    "product_name": "Casual Cotton Shirt",
     "category": "shirt",
-    "price": 399,
-    "currency": "THB",
-    "sizes": ["S", "M", "L"],
-    "colors": ["black", "gray"],
-    "material": "cotton blend",
-    "description": "A modern slim fit shirt suitable for casual wear."
+    "sub_category": "casual_shirt",
+    "description": "A comfortable everyday cotton shirt ideal for relaxed settings. Available in short and long sleeve. Band collar gives it a clean, contemporary look. 100% cotton fabric.",
+    "variants": [
+      { "variant_id": "CS01-WHITE-S-SHORT",  "size": "S",  "color": "White", "sleeve": "short", "collar": "band", "chest_min": 88.0, "chest_max": 92.0,  "price": 399, "cost_price": 160, "stock": 30 },
+      { "variant_id": "CS01-WHITE-M-SHORT",  "size": "M",  "color": "White", "sleeve": "short", "collar": "band", "chest_min": 93.0, "chest_max": 98.0,  "price": 399, "cost_price": 160, "stock": 35 },
+      { "variant_id": "CS01-WHITE-L-SHORT",  "size": "L",  "color": "White", "sleeve": "short", "collar": "band", "chest_min": 99.0, "chest_max": 104.0, "price": 399, "cost_price": 160, "stock": 25 },
+      { "variant_id": "CS01-BLACK-M-SHORT",  "size": "M",  "color": "Black", "sleeve": "short", "collar": "band", "chest_min": 93.0, "chest_max": 98.0,  "price": 399, "cost_price": 160, "stock": 28 },
+      { "variant_id": "CS01-BLACK-L-SHORT",  "size": "L",  "color": "Black", "sleeve": "short", "collar": "band", "chest_min": 99.0, "chest_max": 104.0, "price": 399, "cost_price": 160, "stock": 20 },
+      { "variant_id": "CS01-WHITE-M-LONG",   "size": "M",  "color": "White", "sleeve": "long",  "collar": "band", "chest_min": 93.0, "chest_max": 98.0,  "price": 449, "cost_price": 180, "stock": 22 },
+      { "variant_id": "CS01-WHITE-L-LONG",   "size": "L",  "color": "White", "sleeve": "long",  "collar": "band", "chest_min": 99.0, "chest_max": 104.0, "price": 449, "cost_price": 180, "stock": 18 },
+      { "variant_id": "CS01-BLACK-M-LONG",   "size": "M",  "color": "Black", "sleeve": "long",  "collar": "band", "chest_min": 93.0, "chest_max": 98.0,  "price": 449, "cost_price": 180, "stock": 20 },
+      { "variant_id": "CS01-BLACK-L-LONG",   "size": "L",  "color": "Black", "sleeve": "long",  "collar": "band", "chest_min": 99.0, "chest_max": 104.0, "price": 449, "cost_price": 180, "stock": 18 }
+    ]
   },
   {
-    "id": "jacket_001",
-    "name": "Lightweight Jacket",
-    "category": "jacket",
-    "price": 899,
-    "currency": "THB",
-    "sizes": ["M", "L", "XL"],
-    "colors": ["black", "green"],
-    "material": "polyester",
-    "description": "A lightweight jacket for mild weather."
+    "product_id": "TS01",
+    "product_name": "Basic Cotton T-Shirt",
+    "category": "tshirt",
+    "sub_category": "basic_tshirt",
+    "description": "A comfortable 100% cotton t-shirt for everyday wear. Soft, breathable and durable with a regular fit. Great for layering or wearing on its own.",
+    "variants": [
+      { "variant_id": "TS01-BLACK-S",   "size": "S",  "color": "Black", "price": 250, "cost_price": 90, "stock": 50 },
+      { "variant_id": "TS01-BLACK-M",   "size": "M",  "color": "Black", "price": 250, "cost_price": 90, "stock": 60 },
+      { "variant_id": "TS01-BLACK-L",   "size": "L",  "color": "Black", "price": 250, "cost_price": 90, "stock": 45 },
+      { "variant_id": "TS01-BLACK-XL",  "size": "XL", "color": "Black", "price": 250, "cost_price": 90, "stock": 30 },
+      { "variant_id": "TS01-WHITE-S",   "size": "S",  "color": "White", "price": 250, "cost_price": 90, "stock": 55 },
+      { "variant_id": "TS01-WHITE-M",   "size": "M",  "color": "White", "price": 250, "cost_price": 90, "stock": 65 },
+      { "variant_id": "TS01-WHITE-L",   "size": "L",  "color": "White", "price": 250, "cost_price": 90, "stock": 50 },
+      { "variant_id": "TS01-WHITE-XL",  "size": "XL", "color": "White", "price": 250, "cost_price": 90, "stock": 35 },
+      { "variant_id": "TS01-GRAY-S",    "size": "S",  "color": "Gray",  "price": 250, "cost_price": 90, "stock": 40 },
+      { "variant_id": "TS01-GRAY-M",    "size": "M",  "color": "Gray",  "price": 250, "cost_price": 90, "stock": 45 },
+      { "variant_id": "TS01-GRAY-L",    "size": "L",  "color": "Gray",  "price": 250, "cost_price": 90, "stock": 38 },
+      { "variant_id": "TS01-NAVY-M",    "size": "M",  "color": "Navy",  "price": 250, "cost_price": 90, "stock": 35 },
+      { "variant_id": "TS01-NAVY-L",    "size": "L",  "color": "Navy",  "price": 250, "cost_price": 90, "stock": 30 }
+    ]
   },
   {
-    "id": "pants_001",
-    "name": "Casual Pants",
+    "product_id": "PT01",
+    "product_name": "Slim Fit Chino Pants",
     "category": "pants",
-    "price": 499,
-    "currency": "THB",
-    "sizes": ["M", "L", "XL"],
-    "colors": ["black", "khaki"],
-    "material": "cotton",
-    "description": "Comfortable pants for everyday use."
+    "sub_category": "slim_pants",
+    "description": "Slim fit chino pants made from cotton blend fabric. Versatile style suitable for casual and semi-formal occasions. Includes two front pockets and two back pockets.",
+    "variants": [
+      { "variant_id": "PT01-BLACK-28", "size": "28", "color": "Black", "waist_min": 68.0, "waist_max": 72.0, "price": 699, "cost_price": 280, "stock": 20 },
+      { "variant_id": "PT01-BLACK-30", "size": "30", "color": "Black", "waist_min": 74.0, "waist_max": 78.0, "price": 699, "cost_price": 280, "stock": 25 },
+      { "variant_id": "PT01-BLACK-32", "size": "32", "color": "Black", "waist_min": 80.0, "waist_max": 84.0, "price": 699, "cost_price": 280, "stock": 20 },
+      { "variant_id": "PT01-BLACK-34", "size": "34", "color": "Black", "waist_min": 86.0, "waist_max": 90.0, "price": 699, "cost_price": 280, "stock": 12 },
+      { "variant_id": "PT01-KHAKI-28", "size": "28", "color": "Khaki", "waist_min": 68.0, "waist_max": 72.0, "price": 699, "cost_price": 280, "stock": 18 },
+      { "variant_id": "PT01-KHAKI-30", "size": "30", "color": "Khaki", "waist_min": 74.0, "waist_max": 78.0, "price": 699, "cost_price": 280, "stock": 22 },
+      { "variant_id": "PT01-KHAKI-32", "size": "32", "color": "Khaki", "waist_min": 80.0, "waist_max": 84.0, "price": 699, "cost_price": 280, "stock": 15 },
+      { "variant_id": "PT01-NAVY-30",  "size": "30", "color": "Navy",  "waist_min": 74.0, "waist_max": 78.0, "price": 699, "cost_price": 280, "stock": 16 },
+      { "variant_id": "PT01-NAVY-32",  "size": "32", "color": "Navy",  "waist_min": 80.0, "waist_max": 84.0, "price": 699, "cost_price": 280, "stock": 14 }
+    ]
   },
   {
-    "id": "Tshirt_001",
-    "name": "Cotton T-Shirt",
-    "category": "Tshirt",
-    "price": 250,
-    "currency": "THB",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["black", "white"],
-    "material": "100% cotton",
-    "description": "A comfortable cotton t-shirt for everyday wear."
+    "product_id": "JK01",
+    "product_name": "Lightweight Windbreaker Jacket",
+    "category": "jacket",
+    "sub_category": "windbreaker",
+    "description": "A lightweight windbreaker jacket perfect for mild weather and outdoor activities. Water-resistant outer shell with breathable inner lining. Features a full-zip front and two side pockets.",
+    "variants": [
+      { "variant_id": "JK01-BLACK-M",   "size": "M",  "color": "Black",      "chest_min": 94.0,  "chest_max": 99.0,  "price": 1299, "cost_price": 550, "stock": 15 },
+      { "variant_id": "JK01-BLACK-L",   "size": "L",  "color": "Black",      "chest_min": 100.0, "chest_max": 105.0, "price": 1299, "cost_price": 550, "stock": 12 },
+      { "variant_id": "JK01-BLACK-XL",  "size": "XL", "color": "Black",      "chest_min": 106.0, "chest_max": 111.0, "price": 1299, "cost_price": 550, "stock": 10 },
+      { "variant_id": "JK01-GREEN-M",   "size": "M",  "color": "Olive Green","chest_min": 94.0,  "chest_max": 99.0,  "price": 1299, "cost_price": 550, "stock": 8  },
+      { "variant_id": "JK01-GREEN-L",   "size": "L",  "color": "Olive Green","chest_min": 100.0, "chest_max": 105.0, "price": 1299, "cost_price": 550, "stock": 10 },
+      { "variant_id": "JK01-NAVY-M",    "size": "M",  "color": "Navy Blue",  "chest_min": 94.0,  "chest_max": 99.0,  "price": 1299, "cost_price": 550, "stock": 12 },
+      { "variant_id": "JK01-NAVY-L",    "size": "L",  "color": "Navy Blue",  "chest_min": 100.0, "chest_max": 105.0, "price": 1299, "cost_price": 550, "stock": 14 }
+    ]
   }
 ]

@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Thai clothing e-commerce platform (thesis project) with an AI product chatbot. Four services run together via Docker Compose: a Next.js storefront, a Node.js/Express auth API, a Python/FastAPI chatbot, and PostgreSQL 15 with the pgvector extension. Ollama runs on the **host machine** (not in Docker) and serves both the chat LLM (`qwen2.5:7b`) and the embedding model (`bge-m3`).
 
+## project duty
+
+this is duo work project amd I'm take care of chatbot, image search and database structure while my friend care of frontend and web system if can, try not to change the part that didn't in my side.
+
 ## Running the project
 
 ### Full stack (recommended)
@@ -58,34 +62,70 @@ Browser
         └─► /auth/* /profile  ──────────►  Express (port 5000)
                                                └─ bcrypt + JWT + pg
 
-PostgreSQL 15 + pgvector (port 5432)
-  ├─ users           – auth + profile
-  ├─ products        – product catalogue (imported from backend/data/products.json)
-  └─ product_chunks  – text chunks with vector(1024) embeddings for RAG
+PostgreSQL 15 + pgvector (port 5432)  ← single source of truth for all data
+  ├─ users / addresses          – auth, profile, multi-address
+  ├─ products / variants        – catalogue with SKU-level stock & price
+  ├─ product_images             – gallery URLs (+ product_image_embeddings for CLIP)
+  ├─ carts / cart_items         – active shopping carts
+  ├─ orders / order_items       – order headers + line items
+  ├─ payments                   – payment records
+  ├─ reviews                    – product reviews
+  ├─ discount_codes             – coupons / promotions
+  ├─ product_chunks             – RAG text chunks + vector(1024) bge-m3 embeddings
+  │                               ↑ retrieval.py reads embeddings from here at startup
+  └─ product_image_embeddings   – CLIP visual search, vector(512) (stub, not yet filled)
 
 Ollama (host :11434)  ←  both FastAPI and backfill scripts reach it directly
+
+chatbot/db.py           — psycopg2 ThreadedConnectionPool (lazy init, fallback-safe)
+backend/data/products.json — seed/import tool only; NOT read at chatbot runtime
 ```
 
 ## Database
 
 ### Schema files
 
-- `postgres/init/01_schema.sql` — auto-runs on fresh volume; do **not** edit for changes
-- `postgres/migrations/` — numbered incremental migrations (`002_` through `004_`)
+- `postgres/init/01_schema.sql` — auto-runs on fresh volume (complete schema, all 14 tables)
+- `postgres/migrations/` — numbered incremental migrations (`002_` through `005_`)
+  - `005_new_ecommerce_schema.sql` — migrates an existing DB from old schema → new schema
+
+### users table — backward-compat note
+
+The Express auth backend (`backend/server.js`) queries `id`, `password`, and `address` column names.
+The new `users` table keeps those exact names:
+- `id` (not `user_id`) as PK
+- `password` (stores bcrypt hash — not plain text)
+- `address` (single-line legacy; structured addresses live in the `addresses` table)
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/005_description.sql` (next number is `005`).
+1. Create `postgres/migrations/006_description.sql` (next number is `006`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/005_description.sql`
-4. If needed at fresh-volume init time, mirror the change in `postgres/init/01_schema.sql`.
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/006_description.sql`
+4. Mirror the change in `postgres/init/01_schema.sql`.
 
-### Seeding products
+### Full seed (fresh Docker volume)
 
 ```bash
-# Run from project root with DATABASE_URL set
-node backend/scripts/import_products.js           # upserts products.json → PostgreSQL
-node backend/scripts/backfill_chunk_embeddings.js # generates vector(1024) embeddings → product_chunks
+# 1. Start the stack
+docker compose up --build
+
+# 2. Import products + variants + RAG text chunks
+node backend/scripts/import_products.js
+
+# 3. Generate pgvector embeddings for RAG
+node backend/scripts/backfill_chunk_embeddings.js
+
+# 4. Seed users, orders, reviews, discount codes
+psql "$DATABASE_URL" -f backend/scripts/seed_database.sql
+```
+
+### Migrating an existing database (no fresh volume)
+
+```bash
+psql "$DATABASE_URL" -f postgres/migrations/005_new_ecommerce_schema.sql
+node backend/scripts/import_products.js           # re-seed products with new schema
+node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
 
 `backfill_chunk_embeddings.js` is hash-aware and skips rows that haven't changed.
@@ -100,13 +140,28 @@ combined = (0.78 × cosine_similarity) + (0.22 × token_overlap_ratio)
 
 Products not matching a detected clothing type are penalised ×0.25. Top `RAG_TOP_K` results above `RAG_MIN_SCORE` are injected into the LLM system prompt.
 
-**Embedding cache** (`backend/data/products_embeddings.json`) is keyed by model name + SHA-256 of `products.json`. Delete it to force a rebuild, or:
+### Data flow (PostgreSQL is now the single source of truth)
 
-```bash
-python backend/chatbot/demo_retrieval.py --rebuild "query"
+```
+PostgreSQL
+  products + variants  ──────────────────────► retrieval.py (load_products)
+  product_chunks.embedding (vector 1024)  ────► retrieval.py (index build, no Ollama call if pre-filled)
+                                                      │
+                                                      └─► in-memory _VECTOR_INDEX (hybrid scoring)
 ```
 
-**pgvector** embeddings in `product_chunks.embedding` are separate from the Python cache and must be regenerated with `backfill_chunk_embeddings.js` after any model or product change.
+**Cache invalidation:** `retrieval.py` checks `MAX(products.updated_at)` on every `/chat` request. If a product is updated in the DB, the in-memory index auto-rebuilds on the next request — no restart needed.
+
+**Embedding priority:**
+1. `product_chunks.embedding` (pre-computed by `backfill_chunk_embeddings.js`) — loaded at index build time
+2. Ollama bge-m3 on-the-fly — fallback for any product with NULL embedding
+
+**`backend/data/products_embeddings.json`** is no longer read or written. It can be deleted.
+**`backend/data/products.json`** is no longer read at chatbot runtime. It is only used by `import_products.js`.
+
+To force a full index rebuild: update any product in the DB (triggers `updated_at`), or restart the chatbot container.
+
+**pgvector** embeddings must be regenerated with `backfill_chunk_embeddings.js` after any model or product change.
 
 Use `<=>` (cosine distance) for similarity queries, not `<->` (L2):
 
@@ -137,12 +192,22 @@ Vector/lexical weights and the clothing-type penalty are hardcoded in `backend/c
 
 ## Image search
 
-**Not yet implemented.** Stubs exist at `frontend/components/navbar.tsx` (camera button) and `frontend/app/search/page.tsx` (placeholder page).
+**DB table exists; ingest pipeline not yet implemented.**
+The `product_image_embeddings` table (vector(512)) is ready in the schema.
 
-To implement, add:
-- CLIP embeddings (`vector(512)`) via a new migration `005_image_embeddings.sql`
-- A FastAPI multipart upload endpoint that embeds with CLIP and queries via `<=>`
+To complete implementation:
+- Add a FastAPI multipart upload endpoint that embeds query image with CLIP → queries `product_image_embeddings` via `<=>` cosine distance
+- Populate `product_images` rows (real URLs) and run CLIP ingest to fill `product_image_embeddings`
 - `frontend/app/api/image-search/route.ts` proxying to FastAPI (mirror `app/api/chat/route.ts`)
+
+Query pattern (once embeddings are filled):
+```sql
+SELECT pi.product_id, pi.image_url, pie.embedding <=> $1 AS distance
+FROM product_image_embeddings pie
+JOIN product_images pi ON pi.image_id = pie.image_id
+ORDER BY distance
+LIMIT 10;
+```
 
 ## Key env vars
 
@@ -159,7 +224,14 @@ FASTAPI_BASE_URL=http://localhost:8000
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `005_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `006_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
-- `product_chunks.embedding` is `vector(1024)` (bge-m3). Planned CLIP image embeddings will be `vector(512)` in a separate column/table.
+- `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
+- Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`
+- `retrieval.py` reads products from PostgreSQL at runtime (NOT from products.json). Falls back to products.json only when `DATABASE_URL` is unset.
+- `retrieval.py` and `import_products.js` both handle the new variant-based format AND old flat format (backward compat).
+- `chatbot/db.py` — psycopg2 ThreadedConnectionPool; `get_conn()` returns `None` (not exception) when unavailable.
 - Conversation state is in-memory only (max 500 sessions, not persisted across restarts). Clients must echo back the `conversation_id` UUID returned on first message.
+
+## new comer updated
+- when new improtant code that effect to project or in this claude.md updated the claude.md
