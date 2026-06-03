@@ -5,7 +5,7 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
-
+const productRoutes = require("./routes/productRoutes");
 const app = express();
 
 app.use(cors({
@@ -24,6 +24,8 @@ async function ensureUserProfileColumns() {
   `);
 }
 
+
+app.use("/products", productRoutes)
 /* ======================
    JWT Middleware
 ====================== */
@@ -42,6 +44,26 @@ function auth(req, res, next) {
     next();
   } catch {
     res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+async function requireAdmin(req, res, next) {
+  try {
+    const result = await pool.query(
+      "SELECT role, is_active FROM users WHERE id = $1",
+      [req.user.id]
+    );
+
+    const user = result.rows[0];
+
+    if (!user || user.role !== "admin" || user.is_active === false) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    next();
+  } catch (err) {
+    console.error("ADMIN CHECK ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
   }
 }
 
@@ -120,6 +142,7 @@ app.post("/auth/login", async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
+        role: user.role,
       },
     });
 
@@ -203,6 +226,114 @@ app.put("/profile", auth, async (req, res) => {
     if (err.code === "23505") {
       return res.status(400).json({ error: "Email already in use" });
     }
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/users", auth, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, username, email, first_name, last_name, phone, role, is_active, created_at
+      FROM users
+      ORDER BY id
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("USERS LIST ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.put("/users/:id", auth, requireAdmin, async (req, res) => {
+  try {
+    const { username, email, first_name, last_name, phone, role, is_active } = req.body;
+
+    const result = await pool.query(
+      `UPDATE users
+       SET username = $1,
+           email = $2,
+           first_name = $3,
+           last_name = $4,
+           phone = $5,
+           role = $6,
+           is_active = $7
+       WHERE id = $8
+       RETURNING id, username, email, first_name, last_name, phone, role, is_active, created_at`,
+      [username, email, first_name, last_name, phone, role, is_active, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("USER UPDATE ERROR:", err.message);
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Username or email already exists" });
+    }
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.delete("/users/:id", auth, requireAdmin, async (req, res) => {
+  try {
+    if (Number(req.params.id) === req.user.id) {
+      return res.status(400).json({ error: "You cannot delete your own account" });
+    }
+
+    const result = await pool.query(
+      "DELETE FROM users WHERE id = $1 RETURNING id",
+      [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ message: "User deleted" });
+  } catch (err) {
+    console.error("USER DELETE ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/admin/stats", auth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        COALESCE((SELECT SUM(total_price) FROM orders WHERE ordered_at::date = CURRENT_DATE), 0)::numeric AS sales,
+        (SELECT COUNT(*) FROM orders WHERE ordered_at::date = CURRENT_DATE)::integer AS orders,
+        (SELECT COUNT(*) FROM products)::integer AS products,
+        (SELECT COUNT(*) FROM users)::integer AS users
+    `);
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("ADMIN STATS ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/admin/orders/recent", auth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        o.order_id AS id,
+        COALESCE(NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''), u.username) AS customer,
+        o.total_price AS total,
+        o.status,
+        o.ordered_at::date AS date
+      FROM orders o
+      JOIN users u ON u.id = o.user_id
+      ORDER BY o.ordered_at DESC
+      LIMIT 10
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("ADMIN RECENT ORDERS ERROR:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 });

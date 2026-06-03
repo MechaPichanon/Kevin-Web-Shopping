@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Navbarsub from "@/components/navbarsub";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,11 +25,16 @@ export default function LoginPage() {
     }
 
     localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
 
     //  แจ้งทุก component ว่า login ระบบจะได้ไม่เอ๋อ ตอนแรกมีปัญหา Login เสร็จไม่ขึ้นปุ่ม logout
     window.dispatchEvent(new Event("login"));
 
-    router.push("/profile");
+    if (data.user?.role === "admin") {
+      router.push("/admin");
+    } else {
+      router.push("/profile");
+    }
 
 
   };
@@ -73,7 +77,7 @@ export default function LoginPage() {
 }
 
 
-const styles: any = {
+const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
     display: "flex",

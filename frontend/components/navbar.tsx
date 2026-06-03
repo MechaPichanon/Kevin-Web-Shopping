@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
+import { products } from "@/lib/mockdata";
 type User = {
   id: number;
   username: string;
@@ -11,6 +11,8 @@ type User = {
 };
 
 export default function Navbar() {
+
+  const [search, setSearch] = useState("");
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
@@ -99,7 +101,7 @@ export default function Navbar() {
             </Link>
             {/* Keeping old references as well */}
             <div className="h-4 w-px bg-white/30 hidden xl:block"></div>
-             {/* <Link
+            {/* <Link
               href="/"
               className="hidden xl:block hover:text-amber-200 transition-colors duration-200"
             >
@@ -117,9 +119,17 @@ export default function Navbar() {
           <div className="flex-1 max-w-xl hidden sm:flex items-center relative group">
             <input
               type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && search.trim()) {
+                  router.push(`/search?q=${encodeURIComponent(search.trim())}`);
+                }
+              }}
               placeholder="Search products..."
               className="w-full pl-5 pr-14 py-2.5 rounded-full bg-white/10 border border-white/20 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white/20 transition-all duration-300 shadow-inner"
             />
+
             <div className="absolute right-2 flex items-center gap-1">
               {/* Camera Button */}
               <button
@@ -148,7 +158,12 @@ export default function Navbar() {
                 </svg>
               </button>
               {/* Search Icon */}
-              <button className="bg-white text-[#8b6f5a] hover:bg-gray-100 p-1.5 rounded-full transition-colors shadow-sm">
+              <button
+                onClick={() => {
+                  if (search.trim()) {
+                    router.push(`/search?q=${encodeURIComponent(search.trim())}`);
+                  }
+                }} className="bg-white text-[#8b6f5a] hover:bg-gray-100 p-1.5 rounded-full transition-colors shadow-sm">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   className="h-4 w-4"

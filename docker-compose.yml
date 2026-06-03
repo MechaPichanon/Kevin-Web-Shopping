@@ -54,6 +54,13 @@ services:
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
       - ./postgres/migrations:/migrations:ro
 
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
   auth-backend:
     build:
       context: .
