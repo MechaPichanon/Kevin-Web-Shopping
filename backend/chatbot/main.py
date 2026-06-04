@@ -3,10 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 try:
     from .intent import detect_intent, Intent
-    from .retrieval import retrieve_products
+    from .retrieval import retrieve_products, load_products
+    from .db import get_conn, release_conn
 except ImportError:
     from intent import detect_intent, Intent
-    from retrieval import retrieve_products
+    from retrieval import retrieve_products, load_products
+    from db import get_conn, release_conn
 from typing import Dict, Any, List, Optional
 import uuid
 import requests
@@ -30,6 +32,143 @@ OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
 OUT_OF_SCOPE_RESPONSE = (
     "Sorry, I can only help with questions about products"
 )
+
+
+def _build_catalog_summary() -> str:
+    try:
+        products = load_products()
+        cats = sorted({p.get("category", "") for p in products if p.get("category")})
+        prices = [
+            float(v["price"])
+            for p in products
+            for v in (p.get("variants") or [])
+            if v.get("price") is not None
+        ]
+        if prices and cats:
+            return (
+                f"{', '.join(cats)} "
+                f"(prices {min(prices):.0f}–{max(prices):.0f} THB, "
+                f"{len(products)} products)"
+            )
+        return ", ".join(cats) if cats else "shirts, pants, and jackets"
+    except Exception:
+        return "shirts, pants, and jackets"
+
+
+_CATALOG_SUMMARY = _build_catalog_summary()
+
+STORE_POLICY_INFO = """
+Shipping:
+- Standard shipping: 2–5 business days, flat rate 50 THB
+- Free shipping on orders over 999 THB
+- Bangkok same-day delivery available for orders placed before 12:00 PM
+
+Returns & Exchanges:
+- Return or exchange within 7 days of receipt
+- Item must be unworn, unwashed, with original tags
+- Contact us via chat to initiate a return
+
+Payment Methods:
+- Credit / debit card (Visa, Mastercard)
+- PromptPay QR code
+- Cash on delivery (COD)
+"""
+
+
+def _fetch_stock_context(product_ids: list) -> str:
+    conn = get_conn()
+    if not conn:
+        return ""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT product_id, size, color, stock
+            FROM variants
+            WHERE product_id = ANY(%s) AND is_active = true
+            ORDER BY product_id, size, color
+            """,
+            (product_ids,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        release_conn(conn)
+    if not rows:
+        return ""
+    lines = ["Current stock:"]
+    for pid, size, color, stock in rows:
+        status = f"{stock} left" if stock > 0 else "out of stock"
+        lines.append(f"  {pid} | {size} | {color}: {status}")
+    return "\n".join(lines)
+
+
+def _fetch_measurement_context(product_ids: list) -> str:
+    conn = get_conn()
+    if not conn:
+        return ""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT product_id, size, chest_min, chest_max, waist_min, waist_max
+            FROM variants
+            WHERE product_id = ANY(%s)
+              AND (chest_min IS NOT NULL OR waist_min IS NOT NULL)
+              AND is_active = true
+            ORDER BY product_id, size
+            """,
+            (product_ids,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        release_conn(conn)
+    if not rows:
+        return ""
+    lines = ["Size measurement guide (cm):"]
+    for pid, size, ch_min, ch_max, w_min, w_max in rows:
+        parts = [f"{pid} | {size}"]
+        if ch_min is not None:
+            parts.append(f"chest {ch_min}–{ch_max}")
+        if w_min is not None:
+            parts.append(f"waist {w_min}–{w_max}")
+        lines.append("  " + " | ".join(parts))
+    return "\n".join(lines)
+
+
+def _fetch_active_discounts() -> str:
+    conn = get_conn()
+    if not conn:
+        return "No active discount codes at this time."
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT code, discount_type, discount_value, min_order, expires_at
+            FROM discount_codes
+            WHERE is_active = true
+              AND (expires_at IS NULL OR expires_at > NOW())
+            ORDER BY discount_value DESC
+            """
+        )
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        release_conn(conn)
+    if not rows:
+        return "No active discount codes at this time."
+    lines = ["Active discount codes:"]
+    for code, dtype, value, min_order, expires in rows:
+        val_str = f"{float(value):.0f}%" if dtype == "percent" else f"{float(value):.0f} THB off"
+        line = f"  Code: {code} — {val_str}"
+        if min_order and float(min_order) > 0:
+            line += f" (min order {float(min_order):.0f} THB)"
+        if expires:
+            line += f", expires {expires.strftime('%Y-%m-%d')}"
+        lines.append(line)
+    return "\n".join(lines)
+
 
 # Lightweight in-memory conversation state for demos (not persistent).
 # Keyed by conversation_id generated/returned by this API.
@@ -311,41 +450,21 @@ def chat(request: ChatRequest):
             "conversation_id": conversation_id,
         }
 
+    unsupported_context = ""
     if is_unsupported_store_question(request.message):
-        logger.info("Unsupported store question detected; returning OUT_OF_SCOPE.")
-        return {"reply": "OUT_OF_SCOPE", "intent": Intent.OUT_OF_SCOPE, "conversation_id": conversation_id}
+        logger.info("Unsupported store question detected; injecting soft context.")
+        unsupported_context = (
+            "Note: The user is asking about popularity or sales rankings. "
+            "We don't have that data. Acknowledge this politely and offer to show "
+            "available products instead.\n"
+        )
 
     intent = detect_intent(request.message)
     logger.info(f"Detected intent: {intent}")
 
-    products = []
-
-    if intent == Intent.OUT_OF_SCOPE:
-        if not is_product_domain_query(request.message):
-            logger.warning("Out of scope detected (non-product query).")
-            return {
-                "reply": OUT_OF_SCOPE_RESPONSE,
-                "intent": intent,
-                "conversation_id": conversation_id,
-            }
-
-        logger.info("Intent out_of_scope; trying retrieval to confirm product relevance.")
-        products = retrieve_products(request.message)
-        if products:
-            intent = Intent.PRODUCT_INFO
-            logger.info("Retrieval found products; overriding intent to product_info.")
-        else:
-            logger.warning("Out of scope detected (no products retrieved).")
-            return {
-                "reply": OUT_OF_SCOPE_RESPONSE,
-                "intent": intent
-                ,
-                "conversation_id": conversation_id,
-            }
-    else:
-        products = retrieve_products(request.message)
-
+    products = retrieve_products(request.message)
     logger.info(f"Retrieved products count: {len(products)}")
+
     if not products:
         previous_products = _CONVERSATIONS.get(conversation_id, {}).get("last_products")
         if _is_followup_reference(request.message) and isinstance(previous_products, list) and previous_products:
@@ -353,53 +472,96 @@ def chat(request: ChatRequest):
             products = previous_products
             if intent == Intent.OUT_OF_SCOPE:
                 intent = Intent.PRODUCT_INFO
+        elif intent in (Intent.STORE_POLICY, Intent.DISCOUNT_QUERY):
+            pass  # these intents don't require product context — continue to LLM
+        elif intent == Intent.OUT_OF_SCOPE:
+            logger.warning("Out of scope detected (no retrieval results, no product signal).")
+            return {
+                "reply": OUT_OF_SCOPE_RESPONSE,
+                "intent": intent,
+                "conversation_id": conversation_id,
+            }
         else:
             return {
                 "reply": "Sorry, I couldn't find any products related to your query.",
                 "intent": intent,
                 "conversation_id": conversation_id,
             }
-    logger.info(f"Products used: {[p['id'] for p in products]}")
 
-    _CONVERSATIONS[conversation_id]["last_products"] = products
+    if products:
+        logger.info(f"Products used: {[p['id'] for p in products]}")
+        _CONVERSATIONS[conversation_id]["last_products"] = products
 
     products_context = format_products_for_prompt(products)
-    
-    intent_instruction = ""
-    if intent == Intent.PRODUCT_COMPARE:
-        intent_instruction = (
+
+    # Gather extra context based on intent.
+    extra_context = ""
+    product_ids = [p.get("product_id") or p.get("id", "") for p in products]
+
+    if intent == Intent.STORE_POLICY:
+        extra_context = f"\nStore Policy:\n{STORE_POLICY_INFO}"
+    elif intent == Intent.DISCOUNT_QUERY:
+        extra_context = f"\n{_fetch_active_discounts()}"
+    elif intent == Intent.SIZE_GUIDE and product_ids:
+        measurement_data = _fetch_measurement_context(product_ids)
+        if measurement_data:
+            extra_context = f"\n{measurement_data}"
+    elif intent == Intent.STOCK_CHECK and product_ids:
+        stock_data = _fetch_stock_context(product_ids)
+        if stock_data:
+            extra_context = f"\n{stock_data}"
+
+    intent_instruction_map = {
+        Intent.PRODUCT_COMPARE: (
             "The user wants a comparison. Compare the relevant products using only the provided data. "
-            "Focus on price, material, sizes, and colors. "
-        )
-    else:
-        intent_instruction = (
-            "The user is asking about products. Answer using only the provided product data. "
-        )
+            "Focus on price, material, sizes, and colors."
+        ),
+        Intent.SIZE_GUIDE: (
+            "The user wants sizing help. Use the measurement guide below to recommend a size. "
+            "If they gave measurements, match them to the size ranges provided."
+        ),
+        Intent.STOCK_CHECK: (
+            "The user wants to know if something is in stock. Use the stock data below. "
+            "Be specific about which size/color combinations are available."
+        ),
+        Intent.STORE_POLICY: (
+            "The user is asking about store policy (shipping, returns, or payment). "
+            "Answer using only the store policy info provided below."
+        ),
+        Intent.DISCOUNT_QUERY: (
+            "The user is asking about discounts or promo codes. "
+            "Share the available discount codes and their conditions from the data below."
+        ),
+    }
+    intent_instruction = intent_instruction_map.get(
+        intent,
+        "The user is asking about products. Answer using only the provided product data.",
+    )
 
-    prompt = f"""
-You are a helpful assistant for an online clothing store.
-Answer in English.
+    prompt = f"""You are a helpful assistant for an online Thai clothing store.
+Answer in English unless the user writes in Thai.
 
-Hard rules:
-- Use ONLY the provided product data. Do not invent anything.
-- If the question is not about store products (shirts, pants, jackets), reply exactly: OUT_OF_SCOPE
-- If the question is about products but none match the user's constraints (e.g., budget), say you couldn't find a match (do NOT reply OUT_OF_SCOPE).
-- Do not mention internal ids or the word "Product Data".
-- Do not copy the field labels verbatim (avoid lines like "Name: ...", "Price: ..."). Rewrite naturally.
+The store sells: {_CATALOG_SUMMARY}
+
+Rules:
+- Use ONLY the provided data below. Do not invent prices, sizes, colors, or policies.
+- If no product matches the user's constraints, say so clearly and suggest the closest available option.
+- Do not mention internal IDs. Do not copy field labels like "Name:", "Price:" — rewrite naturally.
 
 Style:
 - Sound natural and friendly, like a store assistant.
-- Prefer 1–2 short sentences first.
-- If needed, add up to 3 bullets for key details.
-
+- Use **bold** for product names and key attributes (price, size, color).
+- Use a bullet list (- item) when listing features, sizes, colors, or policy points.
+- For comparisons, give a short intro sentence then a bullet block for each product.
+- Keep it concise: 1–2 intro sentences + bullets. Avoid long paragraphs.
+{unsupported_context}
 Task:
 {intent_instruction}
 
 Product Data:
 {products_context}
-
-User Question: {request.message}
-"""
+{extra_context}
+User Question: {request.message}"""
     
     logger.info("sending prompt to LLM")
 
@@ -416,15 +578,10 @@ User Question: {request.message}
     data = response.json()
     reply = data.get("response", "Sorry, something went wrong.")
 
-    # Guard: the model may output the literal string OUT_OF_SCOPE even for in-scope queries
-    # (e.g., when no products match constraints). Keep API semantics consistent.
-    if isinstance(reply, str) and reply.strip() == "OUT_OF_SCOPE" and intent != Intent.OUT_OF_SCOPE:
-        if not is_product_domain_query(request.message):
-            reply = OUT_OF_SCOPE_RESPONSE
-            intent = Intent.OUT_OF_SCOPE
-            products = []
-        else:
-            reply = "Sorry, I couldn't find any products that match what you're looking for."
+    if isinstance(reply, str) and reply.strip().upper() == "OUT_OF_SCOPE":
+        reply = OUT_OF_SCOPE_RESPONSE
+        intent = Intent.OUT_OF_SCOPE
+        products = []
     logger.info("LLM response received")
     return{
         "reply": reply,

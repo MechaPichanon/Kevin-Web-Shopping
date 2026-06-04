@@ -550,6 +550,34 @@ def keyword_retrieve_products(query: str) -> List[Dict]:
     return matched
 
 
+_THAI_TO_EN = {
+    "เสื้อ":      "shirt",
+    "เสื้อยืด":   "tshirt",
+    "กางเกง":     "pants",
+    "แจ็กเก็ต":   "jacket",
+    "ราคา":       "price",
+    "ไซส์":       "size",
+    "ขนาด":       "size",
+    "ผ้าฝ้าย":    "cotton",
+    "ถูก":        "cheap affordable",
+    "สั้น":       "short",
+    "ยาว":        "long",
+    "ขาว":        "white",
+    "ดำ":         "black",
+    "น้ำเงิน":    "navy blue",
+    "เทา":        "gray",
+    "เปรียบเทียบ": "compare",
+}
+
+
+def _preprocess_query(query: str) -> str:
+    """Translate Thai product terms to English so tokenization and embedding work correctly."""
+    text = (query or "").strip()
+    for thai, en in _THAI_TO_EN.items():
+        text = text.replace(thai, f" {en} ")
+    return text
+
+
 def retrieve_products(query: str) -> List[Dict]:
     """
     Hybrid vector + lexical retrieval.
@@ -567,9 +595,10 @@ def retrieve_products(query: str) -> List[Dict]:
 
     try:
         index            = _get_index()
-        query_tokens     = _tokenize(query)
+        preprocessed     = _preprocess_query(query)
+        query_tokens     = _tokenize(preprocessed)
         corrected_tokens = _autocorrect_tokens(query_tokens, index.get("vocab", []))
-        corrected_query  = " ".join(corrected_tokens).strip() or (query or "")
+        corrected_query  = " ".join(corrected_tokens).strip() or preprocessed or (query or "")
         query_vec        = get_ollama_embedding(corrected_query)
     except (EmbeddingError, OSError, json.JSONDecodeError):
         return keyword_retrieve_products(query)
@@ -602,12 +631,14 @@ def retrieve_products(query: str) -> List[Dict]:
         combined     = (0.78 * vec_score) + (0.22 * lex_score)
         matches_type = bool(type_targets.intersection(product_token_set)) if type_targets else True
         if type_targets and not matches_type:
-            combined *= 0.25
+            type_penalty = float(os.getenv("RAG_TYPE_PENALTY", "0.6"))
+            combined *= type_penalty
 
         if combined >= min_score:
             scored.append((combined, matches_type, pid))
 
-    if best_lex == 0.0 and best_vec < 0.55:
+    vec_floor = float(os.getenv("RAG_VEC_FLOOR", "0.35"))
+    if best_lex == 0.0 and best_vec < vec_floor:
         return []
 
     scored.sort(reverse=True, key=lambda x: x[0])

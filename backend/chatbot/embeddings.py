@@ -13,7 +13,7 @@ def _ollama_base_url() -> str:
 
 
 def _ollama_embed_model() -> str:
-    return os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+    return os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
 
 
 def get_ollama_embedding(text: str, *, timeout_s: int = 60) -> List[float]:

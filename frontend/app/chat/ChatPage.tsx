@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -120,7 +121,22 @@ export default function ChatPage() {
                   : "max-w-[85%] rounded-2xl bg-zinc-100 px-4 py-2 text-sm text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50"
               }
             >
-              {m.content}
+              {m.role === "assistant" ? (
+                <ReactMarkdown
+                  components={{
+                    p:      ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                    ul:     ({ children }) => <ul className="mt-1 list-disc pl-4 space-y-0.5">{children}</ul>,
+                    ol:     ({ children }) => <ol className="mt-1 list-decimal pl-4 space-y-0.5">{children}</ol>,
+                    li:     ({ children }) => <li>{children}</li>,
+                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                    h3:     ({ children }) => <h3 className="font-semibold mt-2 mb-1 text-sm">{children}</h3>,
+                  }}
+                >
+                  {m.content}
+                </ReactMarkdown>
+              ) : (
+                m.content
+              )}
             </div>
           </div>
         ))}
