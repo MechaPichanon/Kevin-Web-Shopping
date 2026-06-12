@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/navbar";
 import Navbarsub from "@/components/navbarsub";
+import { CartProvider } from "@/lib/cart-context";
+
 export default function RootLayout({
   children,
 }: {
@@ -10,9 +12,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Navbar />
-        {/* <Navbarsub /> */}
-        {children}
+        <CartProvider>
+          <Navbar />
+          {/* <Navbarsub /> */}
+          {children}
+        </CartProvider>
       </body>
     </html>
   );

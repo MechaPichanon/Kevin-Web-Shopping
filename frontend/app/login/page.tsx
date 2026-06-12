@@ -1,81 +1,111 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
   const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async () => {
-    const res = await fetch("http://localhost:5000/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError("");
 
-    const data = await res.json();
+    const email = form.email.trim();
+    const password = form.password.trim();
 
-    if (!res.ok) {
-      alert(data.error || "Login failed");
+    if (!email || !password) {
+      setError("Please enter both email and password.");
       return;
     }
 
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+    try {
+      setIsSubmitting(true);
 
-    //  แจ้งทุก component ว่า login ระบบจะได้ไม่เอ๋อ ตอนแรกมีปัญหา Login เสร็จไม่ขึ้นปุ่ม logout
-    window.dispatchEvent(new Event("login"));
+      const res = await fetch("http://localhost:5000/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (data.user?.role === "admin") {
-      router.push("/admin");
-    } else {
-      router.push("/profile");
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data.error || "Login failed.");
+        return;
+      }
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      window.dispatchEvent(new Event("login"));
+
+      if (data.user?.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/profile");
+      }
+    } catch {
+      setError(
+        "Cannot connect to the server. Please check that backend is running on port 5000."
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-
-
   };
 
   return (
-      <div style={styles.page}>
-        <div style={styles.card}>
-          <h1 style={styles.title}>Login</h1>
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <h1 style={styles.title}>Login</h1>
 
-          <div style={styles.form}>
-            <div>
-              <label style={styles.label}>Email</label>
-              <input
-                name="email"
-                type="email"
-                placeholder="Enter your email"
-                onChange={handleChange}
-                style={styles.input}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Password</label>
-              <input
-                name="password"
-                type="password"
-                placeholder="Enter your password"
-                onChange={handleChange}
-                style={styles.input}
-              />
-            </div>
-
-            <button onClick={handleSubmit} style={styles.button}>
-              Login
-            </button>
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <div>
+            <label style={styles.label}>Email</label>
+            <input
+              name="email"
+              type="email"
+              placeholder="Enter your email"
+              value={form.email}
+              onChange={handleChange}
+              style={styles.input}
+            />
           </div>
-        </div>
+
+          <div>
+            <label style={styles.label}>Password</label>
+            <input
+              name="password"
+              type="password"
+              placeholder="Enter your password"
+              value={form.password}
+              onChange={handleChange}
+              style={styles.input}
+            />
+          </div>
+
+          {error ? <p style={styles.error}>{error}</p> : null}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            style={{
+              ...styles.button,
+              ...(isSubmitting ? styles.buttonDisabled : {}),
+            }}
+          >
+            {isSubmitting ? "Logging in..." : "Login"}
+          </button>
+        </form>
       </div>
+    </div>
   );
 }
-
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
@@ -127,5 +157,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "16px",
     fontWeight: "600",
     cursor: "pointer",
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+    cursor: "not-allowed",
+  },
+  error: {
+    margin: 0,
+    color: "#b42318",
+    fontSize: "14px",
+    lineHeight: 1.4,
   },
 };
