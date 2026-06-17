@@ -1,4 +1,46 @@
+const crypto = require("crypto")
 const db = require("../db")
+
+function buildChunkText({ product_name, category, sub_category, description, price, size, color }) {
+  const lines = [
+    `Name: ${product_name || ""}`,
+    `Category: ${category || ""}`,
+    sub_category  ? `Sub-category: ${sub_category}`     : null,
+    price != null ? `Price: ${price} THB`               : null,
+    size          ? `Sizes: ${size}`                    : null,
+    color         ? `Colors: ${color}`                  : null,
+    description   ? `Description: ${description}`       : null,
+  ].filter(Boolean)
+  return lines.join("\n").trim()
+}
+
+async function generateAndStoreEmbedding(productId, content) {
+  const baseUrl = (process.env.OLLAMA_BASE_URL || "http://localhost:11434").replace(/\/$/, "")
+  const model   = process.env.OLLAMA_EMBED_MODEL || "bge-m3"
+
+  const res = await fetch(`${baseUrl}/api/embeddings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, prompt: content }),
+  })
+  if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`)
+
+  const data = await res.json()
+  if (!Array.isArray(data.embedding)) throw new Error("Ollama response missing embedding array")
+
+  const vec  = `[${data.embedding.join(",")}]`
+  const hash = crypto.createHash("sha256").update(content, "utf8").digest("hex")
+
+  await db.query(
+    `UPDATE product_chunks
+     SET embedding    = $2::vector(1024),
+         embed_model  = $3,
+         embedded_at  = NOW(),
+         content_hash = $4
+     WHERE product_id = $1 AND chunk_index = 0`,
+    [productId, vec, model, hash]
+  )
+}
 
 const getProducts = async (req, res) => {
   try {
@@ -65,6 +107,7 @@ const addProduct = async (req, res) => {
     const now = Date.now()
     const productId = "P" + now
     const variantId = "V" + now
+    const chunkContent = buildChunkText({ product_name, category, sub_category, description, price, size, color })
 
     client = await db.connect()
     await client.query("BEGIN")
@@ -133,11 +176,26 @@ const addProduct = async (req, res) => {
         ]
       )
     }
+
+    await client.query(
+      `INSERT INTO product_chunks (product_id, chunk_index, content)
+       VALUES ($1, 0, $2)
+       ON CONFLICT (product_id, chunk_index) DO UPDATE SET
+         content      = EXCLUDED.content,
+         content_hash = '',
+         embedded_at  = NULL`,
+      [productId, chunkContent]
+    )
+
     await client.query("COMMIT")
 
     res.status(201).json({
       message: "เพิ่มสินค้าสำเร็จ",
     })
+
+    generateAndStoreEmbedding(productId, chunkContent).catch((err) =>
+      console.error("[embed] failed for", productId, err.message)
+    )
   } catch (err) {
     if (client) {
       await client.query("ROLLBACK")
