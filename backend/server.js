@@ -6,14 +6,66 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const productRoutes = require("./routes/productRoutes");
+const cartRoutes = require("./routes/cartRoutes");
 const app = express();
-
+const multer = require("multer")
+const path = require("path")
+const orderRoutes =
+  require("./routes/orderRoutes");
 app.use(cors({
   origin: "http://localhost:3000",
   credentials: true,
 }));
+
 app.use(express.json());
 
+app.use("/cart", cartRoutes);
+
+app.use("/orders", orderRoutes);
+
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "Auth backend is running" });
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.use(
+  "/uploads",
+  express.static(
+    path.join(__dirname, "uploads")
+  )
+)
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/")
+  },
+
+  filename: function (req, file, cb) {
+    cb(
+      null,
+      Date.now() +
+      "-" +
+      file.originalname
+    )
+  },
+})
+
+const upload = multer({
+  storage,
+})
+app.post(
+  "/upload/image",
+  upload.single("image"),
+  (req, res) => {
+    res.json({
+      imageUrl:
+        "http://localhost:5000/uploads/" +
+        req.file.filename,
+    })
+  }
+)
 async function ensureUserProfileColumns() {
   await pool.query(`
     ALTER TABLE users
