@@ -23,11 +23,12 @@ const pool = require("../db");
 function productToChunkText(product) {
   const variants = Array.isArray(product.variants) ? product.variants : [];
 
-  const sizes   = [...new Set(variants.map((v) => v.size).filter(Boolean))].sort();
-  const colors  = [...new Set(variants.map((v) => v.color).filter(Boolean))];
-  const sleeves = [...new Set(variants.map((v) => v.sleeve).filter(Boolean))];
-  const collars = [...new Set(variants.map((v) => v.collar).filter(Boolean))];
-  const prices  = variants.map((v) => v.price).filter((p) => p != null && !isNaN(p));
+  const sizes     = [...new Set(variants.map((v) => v.size).filter(Boolean))].sort();
+  const colors    = [...new Set(variants.map((v) => v.color).filter(Boolean))];
+  const colorsTh  = [...new Set(variants.map((v) => v.color_th).filter(Boolean))];
+  const sleeves   = [...new Set(variants.map((v) => v.sleeve).filter(Boolean))];
+  const collars   = [...new Set(variants.map((v) => v.collar).filter(Boolean))];
+  const prices    = variants.map((v) => v.price).filter((p) => p != null && !isNaN(p));
 
   let priceStr = "";
   if (prices.length) {
@@ -46,6 +47,10 @@ function productToChunkText(product) {
     sleeves.length     ? `Sleeve: ${sleeves.join(", ")}`        : null,
     collars.length     ? `Collar: ${collars.join(", ")}`        : null,
     product.description ? `Description: ${product.description}` : null,
+    // Thai block — included when available so bge-m3 can match Thai queries
+    product.product_name_th ? `ชื่อ: ${product.product_name_th}` : null,
+    colorsTh.length ? `สี: ${colorsTh.join(", ")}` : null,
+    product.description_th ? `คำอธิบาย: ${product.description_th}` : null,
   ].filter(Boolean);
 
   return lines.join("\n").trim();
@@ -81,22 +86,26 @@ async function main() {
       const productId = String(product.product_id || product.id || "").trim();
       if (!productId) continue;
 
-      const productName = String(product.product_name || product.name || "").trim();
-      const category    = String(product.category || "").trim();
-      const subCategory = product.sub_category ? String(product.sub_category) : null;
-      const description = product.description  ? String(product.description)  : null;
+      const productName   = String(product.product_name || product.name || "").trim();
+      const productNameTh = product.product_name_th ? String(product.product_name_th) : null;
+      const category      = String(product.category || "").trim();
+      const subCategory   = product.sub_category ? String(product.sub_category) : null;
+      const description   = product.description    ? String(product.description)    : null;
+      const descriptionTh = product.description_th ? String(product.description_th) : null;
 
       // ── Upsert product ──
       await client.query(
-        `INSERT INTO products (product_id, product_name, category, sub_category, description)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO products (product_id, product_name, product_name_th, category, sub_category, description, description_th)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (product_id) DO UPDATE SET
-           product_name = EXCLUDED.product_name,
-           category     = EXCLUDED.category,
-           sub_category = EXCLUDED.sub_category,
-           description  = EXCLUDED.description,
-           updated_at   = NOW()`,
-        [productId, productName, category, subCategory, description]
+           product_name    = EXCLUDED.product_name,
+           product_name_th = EXCLUDED.product_name_th,
+           category        = EXCLUDED.category,
+           sub_category    = EXCLUDED.sub_category,
+           description     = EXCLUDED.description,
+           description_th  = EXCLUDED.description_th,
+           updated_at      = NOW()`,
+        [productId, productName, productNameTh, category, subCategory, description, descriptionTh]
       );
       productCount++;
 
@@ -128,15 +137,16 @@ async function main() {
 
         await client.query(
           `INSERT INTO variants (
-             variant_id, product_id, size, color, pattern,
+             variant_id, product_id, size, color, color_th, pattern,
              chest_min, chest_max, waist_min, waist_max,
              sleeve, collar, price, cost_price, stock, is_active
            ) VALUES (
-             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
            )
            ON CONFLICT (variant_id) DO UPDATE SET
              size       = EXCLUDED.size,
              color      = EXCLUDED.color,
+             color_th   = EXCLUDED.color_th,
              pattern    = EXCLUDED.pattern,
              chest_min  = EXCLUDED.chest_min,
              chest_max  = EXCLUDED.chest_max,
@@ -151,8 +161,9 @@ async function main() {
           [
             String(v.variant_id),
             productId,
-            String(v.size   || ""),
-            String(v.color  || ""),
+            String(v.size     || ""),
+            String(v.color    || ""),
+            v.color_th  ? String(v.color_th)  : null,
             v.pattern   ? String(v.pattern)   : null,
             v.chest_min != null ? Number(v.chest_min) : null,
             v.chest_max != null ? Number(v.chest_max) : null,

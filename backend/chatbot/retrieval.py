@@ -80,25 +80,32 @@ def _product_to_text(product: Dict) -> str:
     variants: List[Dict] = product.get("variants", []) or []
 
     if variants:
-        sizes   = sorted(set(v.get("size",   "") for v in variants if v.get("size")))
-        colors  = sorted(set(v.get("color",  "") for v in variants if v.get("color")))
-        sleeves = sorted(set(v.get("sleeve", "") for v in variants if v.get("sleeve")))
-        collars = sorted(set(v.get("collar", "") for v in variants if v.get("collar")))
-        prices  = [float(v["price"]) for v in variants if v.get("price") is not None]
+        sizes     = sorted(set(v.get("size",     "") for v in variants if v.get("size")))
+        colors    = sorted(set(v.get("color",    "") for v in variants if v.get("color")))
+        colors_th = sorted(set(v.get("color_th", "") for v in variants if v.get("color_th")))
+        sleeves   = sorted(set(v.get("sleeve",   "") for v in variants if v.get("sleeve")))
+        collars   = sorted(set(v.get("collar",   "") for v in variants if v.get("collar")))
+        prices    = [float(v["price"]) for v in variants if v.get("price") is not None]
 
         price_str = ""
         if prices:
             lo, hi = min(prices), max(prices)
             price_str = f"{lo:.0f} THB" if lo == hi else f"{lo:.0f}–{hi:.0f} THB"
 
+        name_th = product.get("product_name_th", "") or ""
+        desc_th = product.get("description_th",  "") or ""
+
         lines = [f"Name: {name}", f"Category: {category}"]
-        if sub_cat:   lines.append(f"Sub-category: {sub_cat}")
-        if price_str: lines.append(f"Price: {price_str}")
-        if sizes:     lines.append(f"Sizes: {', '.join(sizes)}")
-        if colors:    lines.append(f"Colors: {', '.join(colors)}")
-        if sleeves:   lines.append(f"Sleeve: {', '.join(sleeves)}")
-        if collars:   lines.append(f"Collar: {', '.join(collars)}")
-        if desc:      lines.append(f"Description: {desc}")
+        if sub_cat:    lines.append(f"Sub-category: {sub_cat}")
+        if price_str:  lines.append(f"Price: {price_str}")
+        if sizes:      lines.append(f"Sizes: {', '.join(sizes)}")
+        if colors:     lines.append(f"Colors: {', '.join(colors)}")
+        if sleeves:    lines.append(f"Sleeve: {', '.join(sleeves)}")
+        if collars:    lines.append(f"Collar: {', '.join(collars)}")
+        if desc:       lines.append(f"Description: {desc}")
+        if name_th:    lines.append(f"ชื่อ: {name_th}")
+        if colors_th:  lines.append(f"สี: {', '.join(colors_th)}")
+        if desc_th:    lines.append(f"คำอธิบาย: {desc_th}")
         return "\n".join(lines).strip()
 
     # ── Legacy flat format ──────────────────────────────────────
@@ -309,7 +316,9 @@ def load_products() -> List[Dict]:
                 p.product_name,
                 p.category,
                 p.sub_category,
-                p.description
+                p.description,
+                p.product_name_th,
+                p.description_th
             FROM products p
             WHERE p.is_active = TRUE
             ORDER BY p.product_id
@@ -329,6 +338,7 @@ def load_products() -> List[Dict]:
                 v.variant_id,
                 v.size,
                 v.color,
+                v.color_th,
                 v.pattern,
                 v.chest_min,
                 v.chest_max,
@@ -356,16 +366,17 @@ def load_products() -> List[Dict]:
                 "variant_id": row[1],
                 "size":       row[2],
                 "color":      row[3],
-                "pattern":    row[4],
-                "chest_min":  float(row[5])  if row[5]  is not None else None,
-                "chest_max":  float(row[6])  if row[6]  is not None else None,
-                "waist_min":  float(row[7])  if row[7]  is not None else None,
-                "waist_max":  float(row[8])  if row[8]  is not None else None,
-                "sleeve":     row[9],
-                "collar":     row[10],
-                "price":      float(row[11]) if row[11] is not None else None,
-                "cost_price": float(row[12]) if row[12] is not None else None,
-                "stock":      row[13],
+                "color_th":   row[4],
+                "pattern":    row[5],
+                "chest_min":  float(row[6])  if row[6]  is not None else None,
+                "chest_max":  float(row[7])  if row[7]  is not None else None,
+                "waist_min":  float(row[8])  if row[8]  is not None else None,
+                "waist_max":  float(row[9])  if row[9]  is not None else None,
+                "sleeve":     row[10],
+                "collar":     row[11],
+                "price":      float(row[12]) if row[12] is not None else None,
+                "cost_price": float(row[13]) if row[13] is not None else None,
+                "stock":      row[14],
             })
 
         # ── Assemble product dicts ─────────────────────────────────────────────
@@ -373,13 +384,15 @@ def load_products() -> List[Dict]:
         for row in product_rows:
             pid = row[0]
             products.append({
-                "product_id":   pid,
-                "id":           pid,    # alias — main.py accesses p["id"]
-                "product_name": row[1],
-                "category":     row[2],
-                "sub_category": row[3],
-                "description":  row[4],
-                "variants":     variants_by_product.get(pid, []),
+                "product_id":      pid,
+                "id":              pid,    # alias — main.py accesses p["id"]
+                "product_name":    row[1],
+                "category":        row[2],
+                "sub_category":    row[3],
+                "description":     row[4],
+                "product_name_th": row[5],
+                "description_th":  row[6],
+                "variants":        variants_by_product.get(pid, []),
             })
 
         logger.info("Loaded %d product(s) from PostgreSQL", len(products))

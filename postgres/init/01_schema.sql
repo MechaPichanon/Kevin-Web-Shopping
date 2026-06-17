@@ -23,14 +23,16 @@
 
   -- products — top-level product catalogue
   CREATE TABLE IF NOT EXISTS products (
-    product_id   VARCHAR(20)  PRIMARY KEY,
-    product_name VARCHAR(150) NOT NULL,
-    category     VARCHAR(50)  NOT NULL,
-    sub_category VARCHAR(50)  DEFAULT NULL,
-    description  TEXT         DEFAULT NULL,
-    is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    product_id      VARCHAR(20)  PRIMARY KEY,
+    product_name    VARCHAR(150) NOT NULL,
+    product_name_th VARCHAR(150) DEFAULT NULL,
+    category        VARCHAR(50)  NOT NULL,
+    sub_category    VARCHAR(50)  DEFAULT NULL,
+    description     TEXT         DEFAULT NULL,
+    description_th  TEXT         DEFAULT NULL,
+    is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
   );
 
   CREATE INDEX IF NOT EXISTS products_category_idx ON products (category);
@@ -53,6 +55,7 @@
     product_id VARCHAR(20)   NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
     size       VARCHAR(10)   NOT NULL,
     color      VARCHAR(50)   NOT NULL,
+    color_th   VARCHAR(50)   DEFAULT NULL,
     pattern    VARCHAR(50)   DEFAULT NULL,
     chest_min  NUMERIC(5,1)  DEFAULT NULL,
     chest_max  NUMERIC(5,1)  DEFAULT NULL,
@@ -292,6 +295,16 @@
   -- IVFFlat index for cosine similarity search (enable after data is loaded):
   -- CREATE INDEX product_chunks_embedding_idx
   --   ON product_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10);
+
+  -- store_policies — shipping, return, and payment policies in Thai and English
+  CREATE TABLE IF NOT EXISTS store_policies (
+    policy_id   SERIAL       PRIMARY KEY,
+    policy_type VARCHAR(50)  NOT NULL UNIQUE,  -- 'SHIPPING' | 'RETURN' | 'PAYMENT'
+    content_en  TEXT         NOT NULL,
+    content_th  TEXT         NOT NULL,
+    is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  );
 
   -- product_image_embeddings — CLIP visual embeddings for image search
   -- Embedding model: CLIP  →  vector(512)

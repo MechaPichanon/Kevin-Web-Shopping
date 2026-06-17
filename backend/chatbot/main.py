@@ -57,7 +57,7 @@ def _build_catalog_summary() -> str:
 
 _CATALOG_SUMMARY = _build_catalog_summary()
 
-STORE_POLICY_INFO = """
+_STORE_POLICY_FALLBACK_EN = """\
 Shipping:
 - Standard shipping: 2–5 business days, flat rate 50 THB
 - Free shipping on orders over 999 THB
@@ -71,8 +71,52 @@ Returns & Exchanges:
 Payment Methods:
 - Credit / debit card (Visa, Mastercard)
 - PromptPay QR code
-- Cash on delivery (COD)
-"""
+- Cash on delivery (COD)"""
+
+_STORE_POLICY_FALLBACK_TH = """\
+การจัดส่ง:
+- จัดส่งมาตรฐาน: 2–5 วันทำการ ค่าจัดส่งคงที่ 50 บาท
+- จัดส่งฟรีสำหรับคำสั่งซื้อที่มีมูลค่าตั้งแต่ 999 บาทขึ้นไป
+- บริการส่งด่วนภายในวันเดียวสำหรับกรุงเทพฯ (สำหรับคำสั่งซื้อก่อน 12:00 น.)
+
+การคืนและแลกเปลี่ยนสินค้า:
+- สามารถคืนหรือแลกเปลี่ยนสินค้าได้ภายใน 7 วันหลังจากได้รับสินค้า
+- สินค้าต้องอยู่ในสภาพที่ยังไม่ได้สวมใส่ ยังไม่ได้ซัก และมีป้ายครบ
+- ติดต่อเราผ่านแชทเพื่อเริ่มกระบวนการคืนสินค้า
+
+วิธีการชำระเงิน:
+- บัตรเครดิต / บัตรเดบิต (Visa, Mastercard)
+- พร้อมเพย์ QR code
+- เก็บเงินปลายทาง (COD)"""
+
+
+def _is_thai(text: str) -> bool:
+    return bool(re.search(r'[฀-๿]', text or ''))
+
+
+def _fetch_store_policy(message: str = "") -> str:
+    use_thai = _is_thai(message)
+    content_col = "content_th" if use_thai else "content_en"
+    fallback = _STORE_POLICY_FALLBACK_TH if use_thai else _STORE_POLICY_FALLBACK_EN
+
+    conn = get_conn()
+    if not conn:
+        return fallback
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT {content_col} FROM store_policies WHERE is_active = true ORDER BY policy_id"
+        )
+        rows = cur.fetchall()
+        cur.close()
+    except Exception:
+        return fallback
+    finally:
+        release_conn(conn)
+
+    if not rows:
+        return fallback
+    return "\n\n".join(row[0] for row in rows if row[0])
 
 
 def _fetch_stock_context(product_ids: list) -> str:
@@ -220,29 +264,39 @@ def format_products_for_prompt(products):
         # ── New format: variants list ────────────────────────────
         variants = p.get("variants", []) or []
         if variants:
-            sizes   = sorted(set(v.get("size",  "") for v in variants if v.get("size")))
-            colors  = sorted(set(v.get("color", "") for v in variants if v.get("color")))
-            sleeves = sorted(set(v.get("sleeve","") for v in variants if v.get("sleeve")))
-            prices  = [float(v["price"]) for v in variants if v.get("price") is not None]
+            sizes     = sorted(set(v.get("size",     "") for v in variants if v.get("size")))
+            colors    = sorted(set(v.get("color",    "") for v in variants if v.get("color")))
+            colors_th = sorted(set(v.get("color_th", "") for v in variants if v.get("color_th")))
+            sleeves   = sorted(set(v.get("sleeve",   "") for v in variants if v.get("sleeve")))
+            prices    = [float(v["price"]) for v in variants if v.get("price") is not None]
             price_str = ""
             if prices:
                 lo, hi = min(prices), max(prices)
                 price_str = f"{lo:.0f} THB" if lo == hi else f"{lo:.0f}–{hi:.0f} THB"
 
             name     = p.get("product_name") or p.get("name", "")
+            name_th  = p.get("product_name_th", "") or ""
             category = p.get("category", "")
             sub_cat  = p.get("sub_category", "")
             desc     = p.get("description",  "")
+            desc_th  = p.get("description_th", "") or ""
 
-            block = f"- Name: {name}\n"
+            name_display = f"{name} ({name_th})" if name_th else name
+
+            block = f"- Name: {name_display}\n"
             block += f"  Category: {category}"
             if sub_cat:     block += f" ({sub_cat})"
             block += "\n"
             if price_str:   block += f"  Price: {price_str}\n"
             if sizes:       block += f"  Sizes: {', '.join(sizes)}\n"
-            if colors:      block += f"  Colors: {', '.join(colors)}\n"
+            if colors:
+                color_display = ", ".join(colors)
+                if colors_th:
+                    color_display += f" ({', '.join(colors_th)})"
+                block += f"  Colors: {color_display}\n"
             if sleeves:     block += f"  Sleeve: {', '.join(sleeves)}\n"
             if desc:        block += f"  Description: {desc}\n"
+            if desc_th:     block += f"  คำอธิบาย: {desc_th}\n"
             lines.append(block)
         else:
             # ── Legacy flat format ───────────────────────────────
@@ -462,6 +516,21 @@ def chat(request: ChatRequest):
     intent = detect_intent(request.message)
     logger.info(f"Detected intent: {intent}")
 
+    # Short-circuit OUT_OF_SCOPE before any retrieval or LLM calls.
+    # Exception: if the message looks like a follow-up referencing a previous product,
+    # promote it to PRODUCT_INFO instead.
+    if intent == Intent.OUT_OF_SCOPE:
+        previous_products = _CONVERSATIONS.get(conversation_id, {}).get("last_products")
+        if _is_followup_reference(request.message) and isinstance(previous_products, list) and previous_products:
+            intent = Intent.PRODUCT_INFO
+        else:
+            out_msg = (
+                "ขอโทษค่ะ ฉันช่วยได้แค่เรื่องสินค้า ขนาด ราคา และนโยบายร้านค้าเท่านั้นค่ะ 😊"
+                if _is_thai(request.message)
+                else OUT_OF_SCOPE_RESPONSE
+            )
+            return {"reply": out_msg, "intent": intent, "conversation_id": conversation_id}
+
     products = retrieve_products(request.message)
     logger.info(f"Retrieved products count: {len(products)}")
 
@@ -472,8 +541,8 @@ def chat(request: ChatRequest):
             products = previous_products
             if intent == Intent.OUT_OF_SCOPE:
                 intent = Intent.PRODUCT_INFO
-        elif intent in (Intent.STORE_POLICY, Intent.DISCOUNT_QUERY):
-            pass  # these intents don't require product context — continue to LLM
+        elif intent == Intent.STORE_POLICY:
+            pass  # this intent doesn't require product context — continue to LLM
         elif intent == Intent.OUT_OF_SCOPE:
             logger.warning("Out of scope detected (no retrieval results, no product signal).")
             return {
@@ -499,9 +568,13 @@ def chat(request: ChatRequest):
     product_ids = [p.get("product_id") or p.get("id", "") for p in products]
 
     if intent == Intent.STORE_POLICY:
-        extra_context = f"\nStore Policy:\n{STORE_POLICY_INFO}"
-    elif intent == Intent.DISCOUNT_QUERY:
-        extra_context = f"\n{_fetch_active_discounts()}"
+        _discount_kw = ["discount", "promo", "promotion", "coupon", "code", "deal", "sale", "offer",
+                        "โปรโมชัน", "ส่วนลด", "โค้ด", "ลดราคา"]
+        _msg_lower = request.message.lower()
+        if any(k in _msg_lower for k in _discount_kw):
+            extra_context = f"\n{_fetch_active_discounts()}"
+        else:
+            extra_context = f"\nStore Policy:\n{_fetch_store_policy(request.message)}"
     elif intent == Intent.SIZE_GUIDE and product_ids:
         measurement_data = _fetch_measurement_context(product_ids)
         if measurement_data:
@@ -512,10 +585,6 @@ def chat(request: ChatRequest):
             extra_context = f"\n{stock_data}"
 
     intent_instruction_map = {
-        Intent.PRODUCT_COMPARE: (
-            "The user wants a comparison. Compare the relevant products using only the provided data. "
-            "Focus on price, material, sizes, and colors."
-        ),
         Intent.SIZE_GUIDE: (
             "The user wants sizing help. Use the measurement guide below to recommend a size. "
             "If they gave measurements, match them to the size ranges provided."
@@ -525,21 +594,23 @@ def chat(request: ChatRequest):
             "Be specific about which size/color combinations are available."
         ),
         Intent.STORE_POLICY: (
-            "The user is asking about store policy (shipping, returns, or payment). "
-            "Answer using only the store policy info provided below."
-        ),
-        Intent.DISCOUNT_QUERY: (
-            "The user is asking about discounts or promo codes. "
-            "Share the available discount codes and their conditions from the data below."
+            "The user is asking about store policy or promotions. "
+            "Answer using only the store info and discount data provided below."
         ),
     }
     intent_instruction = intent_instruction_map.get(
         intent,
-        "The user is asking about products. Answer using only the provided product data.",
+        "The user is asking about products. Answer using only the provided product data. "
+        "If comparing products, highlight differences in price, material, sizes, and colors.",
     )
 
+    if _is_thai(request.message):
+        lang_instruction = "IMPORTANT: The user is writing in Thai. You MUST respond entirely in Thai (ภาษาไทย). Do not use any English words except brand names, size labels (S/M/L/XL), and currency (THB/บาท)."
+    else:
+        lang_instruction = "Respond in English."
+
     prompt = f"""You are a helpful assistant for an online Thai clothing store.
-Answer in English unless the user writes in Thai.
+{lang_instruction}
 
 The store sells: {_CATALOG_SUMMARY}
 

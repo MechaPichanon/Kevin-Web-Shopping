@@ -292,6 +292,31 @@ WHERE u.username = 'nattamon'
 ON CONFLICT DO NOTHING;
 
 -- ════════════════════════════════════════
+-- STORE POLICIES
+-- ════════════════════════════════════════
+
+INSERT INTO store_policies (policy_type, content_en, content_th) VALUES
+(
+  'SHIPPING',
+  E'Shipping:\n- Standard shipping: 2–5 business days, flat rate 50 THB\n- Free shipping on orders over 999 THB\n- Bangkok same-day delivery available for orders placed before 12:00 PM',
+  E'การจัดส่ง:\n- จัดส่งมาตรฐาน: 2–5 วันทำการ ค่าจัดส่งคงที่ 50 บาท\n- จัดส่งฟรีสำหรับคำสั่งซื้อที่มีมูลค่าตั้งแต่ 999 บาทขึ้นไป\n- บริการส่งด่วนภายในวันเดียวสำหรับกรุงเทพฯ (สำหรับคำสั่งซื้อก่อน 12:00 น.)'
+),
+(
+  'RETURN',
+  E'Returns & Exchanges:\n- Return or exchange within 7 days of receipt\n- Item must be unworn, unwashed, with original tags\n- Contact us via chat to initiate a return',
+  E'การคืนและแลกเปลี่ยนสินค้า:\n- สามารถคืนหรือแลกเปลี่ยนสินค้าได้ภายใน 7 วันหลังจากได้รับสินค้า\n- สินค้าต้องอยู่ในสภาพที่ยังไม่ได้สวมใส่ ยังไม่ได้ซัก และมีป้ายครบ\n- ติดต่อเราผ่านแชทเพื่อเริ่มกระบวนการคืนสินค้า'
+),
+(
+  'PAYMENT',
+  E'Payment Methods:\n- Credit / debit card (Visa, Mastercard)\n- PromptPay QR code\n- Cash on delivery (COD)',
+  E'วิธีการชำระเงิน:\n- บัตรเครดิต / บัตรเดบิต (Visa, Mastercard)\n- พร้อมเพย์ QR code\n- เก็บเงินปลายทาง (COD)'
+)
+ON CONFLICT (policy_type) DO UPDATE SET
+  content_en = EXCLUDED.content_en,
+  content_th = EXCLUDED.content_th,
+  updated_at = NOW();
+
+-- ════════════════════════════════════════
 -- DISCOUNT CODES
 -- ════════════════════════════════════════
 
@@ -318,14 +343,15 @@ COMMIT;
 -- Quick sanity check
 -- ════════════════════════════════════════
 SELECT
-  (SELECT COUNT(*) FROM users)          AS users,
-  (SELECT COUNT(*) FROM products)       AS products,
-  (SELECT COUNT(*) FROM variants)       AS variants,
-  (SELECT COUNT(*) FROM product_images) AS images,
-  (SELECT COUNT(*) FROM addresses)      AS addresses,
-  (SELECT COUNT(*) FROM orders)         AS orders,
-  (SELECT COUNT(*) FROM order_items)    AS order_items,
-  (SELECT COUNT(*) FROM payments)       AS payments,
-  (SELECT COUNT(*) FROM reviews)        AS reviews,
-  (SELECT COUNT(*) FROM discount_codes) AS discount_codes,
-  (SELECT COUNT(*) FROM product_chunks) AS product_chunks;
+  (SELECT COUNT(*) FROM users)           AS users,
+  (SELECT COUNT(*) FROM products)        AS products,
+  (SELECT COUNT(*) FROM variants)        AS variants,
+  (SELECT COUNT(*) FROM product_images)  AS images,
+  (SELECT COUNT(*) FROM addresses)       AS addresses,
+  (SELECT COUNT(*) FROM orders)          AS orders,
+  (SELECT COUNT(*) FROM order_items)     AS order_items,
+  (SELECT COUNT(*) FROM payments)        AS payments,
+  (SELECT COUNT(*) FROM reviews)         AS reviews,
+  (SELECT COUNT(*) FROM discount_codes)  AS discount_codes,
+  (SELECT COUNT(*) FROM store_policies)  AS store_policies,
+  (SELECT COUNT(*) FROM product_chunks)  AS product_chunks;

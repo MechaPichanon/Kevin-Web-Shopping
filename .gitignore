@@ -20,3 +20,5 @@ node_modules/
 
 # npm (local cache/logs)
 .npm-cache/
+
+tests
