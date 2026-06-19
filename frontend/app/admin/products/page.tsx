@@ -15,18 +15,21 @@ import {
   X,
   Plus,
   Search,
+  Edit,
+  Trash2,
+  Save,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
-  { href: "/admin/orders", label: "คำสั่งซื้อ", icon: ShoppingCart },
+  { href: "/admin", label: "คำสั่งซื้อ", icon: ShoppingCart },
   { href: "/admin/users", label: "จัดการผู้ใช้", icon: Users },
-  { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
+  { href: "/admin", label: "ตั้งค่า", icon: Settings },
 ]
 
 type ProductRow = {
@@ -44,6 +47,10 @@ type ProductRow = {
 
   image_url?: string
 
+}
+
+type EditingProduct = ProductRow & {
+  image: File | null
 }
 
 
@@ -75,6 +82,8 @@ export default function AdminProductsPage() {
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [isAddingProduct, setIsAddingProduct] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<EditingProduct | null>(null)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   const [newProduct, setNewProduct] = useState({
     product_name: "",
@@ -239,6 +248,108 @@ export default function AdminProductsPage() {
     }
   }
 
+  const handleEditProduct = (product: ProductRow) => {
+    setShowAddForm(false)
+    setEditingProduct({
+      ...product,
+      product_name: product.product_name || "",
+      category: product.category || "",
+      sub_category: product.sub_category || "",
+      description: product.description || "",
+      size: product.size || "",
+      color: product.color || "",
+      pattern: product.pattern || "",
+      price: product.price || "",
+      stock: product.stock || "",
+      image: null,
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingProduct || isSavingEdit) {
+      return
+    }
+
+    const formData = new FormData()
+
+    formData.append("product_name", editingProduct.product_name)
+    formData.append("category", editingProduct.category)
+    formData.append("sub_category", editingProduct.sub_category || "")
+    formData.append("description", editingProduct.description || "")
+    formData.append("size", editingProduct.size)
+    formData.append("color", editingProduct.color)
+    formData.append("pattern", editingProduct.pattern || "")
+    formData.append("price", String(editingProduct.price))
+    formData.append("stock", String(editingProduct.stock))
+
+    if (editingProduct.image) {
+      formData.append("image", editingProduct.image)
+    }
+
+    try {
+      setIsSavingEdit(true)
+
+      const res = await fetch(
+        `http://localhost:5000/products/${encodeURIComponent(
+          editingProduct.product_id
+        )}/${encodeURIComponent(editingProduct.variant_id)}`,
+        {
+          method: "PUT",
+          body: formData,
+        }
+      )
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || "Unable to update product")
+        return
+      }
+
+      alert("แก้ไขสินค้าสำเร็จ")
+      setEditingProduct(null)
+      fetchProducts()
+    } catch (err) {
+      console.log(err)
+      alert("Unable to update product")
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  const handleDeleteProduct = async (product: ProductRow) => {
+    if (!confirm("คุณต้องการลบสินค้านี้หรือไม่?")) {
+      return
+    }
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/products/${encodeURIComponent(product.product_id)}`,
+        {
+          method: "DELETE",
+        }
+      )
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || "Unable to delete product")
+        return
+      }
+
+      setProducts((currentProducts) =>
+        currentProducts.filter((p) => p.product_id !== product.product_id)
+      )
+
+      if (editingProduct?.product_id === product.product_id) {
+        setEditingProduct(null)
+      }
+    } catch (err) {
+      console.log(err)
+      alert("Unable to delete product")
+    }
+  }
+
   const filteredProducts = products.filter((p) =>
     p.product_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -255,14 +366,14 @@ export default function AdminProductsPage() {
     <div className="flex min-h-screen bg-[#f5f1ed]">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-white/10 bg-[#6b4423] transition-transform duration-300 lg:static lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
       >
         <div className="flex h-full flex-col">
-          <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
-            <Link href="/admin" className="flex items-center gap-2 text-white">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#8b5e3c]">
-                <span className="text-sm font-bold text-white">
+          <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
+            <Link href="/admin" className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#8b5e3c]">
+                <span className="font-bold text-white">
                   L
                 </span>
               </div>
@@ -288,9 +399,9 @@ export default function AdminProductsPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${item.href === "/admin/product"
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${item.href === "/admin/products"
+                  ? "bg-[#8b5e3c] text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
                   }`}
               >
                 <item.icon className="h-5 w-5" />
@@ -312,10 +423,9 @@ export default function AdminProductsPage() {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* Main Content */}
       <div className="flex flex-1 flex-col">
-        {/* Header */}
-        <header className="flex h-16 items-center gap-4 border-b bg-card px-4">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card px-4 lg:px-6">
           <Button
             variant="ghost"
             size="icon"
@@ -324,11 +434,9 @@ export default function AdminProductsPage() {
           >
             <Menu className="h-5 w-5" />
           </Button>
-
           <div className="flex-1">
-            <h1 className="text-lg font-semibold">จัดการสินค้า</h1>
+            <h1 className="text-lg font-semibold text-foreground">จัดการสินค้า</h1>
           </div>
-
           <Button onClick={() => setShowAddForm(true)} className="gap-2">
             <Plus className="h-4 w-4" />
             เพิ่มสินค้า
@@ -472,6 +580,162 @@ export default function AdminProductsPage() {
             </Card>
           )}
 
+          {/* Edit Form */}
+          {editingProduct && (
+            <Card className="mb-6">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <Edit className="h-5 w-5" />
+                    แก้ไขสินค้า
+                  </CardTitle>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setEditingProduct(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4 p-6 pt-0">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input
+                    placeholder="ชื่อสินค้า"
+                    value={editingProduct.product_name}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        product_name: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    placeholder="หมวดหมู่"
+                    value={editingProduct.category}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        category: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    placeholder="หมวดหมู่ย่อย"
+                    value={editingProduct.sub_category || ""}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        sub_category: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    placeholder="รายละเอียดสินค้า"
+                    value={editingProduct.description || ""}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        description: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    placeholder="ไซส์"
+                    value={editingProduct.size}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        size: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    placeholder="สี"
+                    value={editingProduct.color}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        color: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    placeholder="ลาย"
+                    value={editingProduct.pattern || ""}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        pattern: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    type="number"
+                    placeholder="ราคา"
+                    value={editingProduct.price}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        price: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    type="number"
+                    placeholder="Stock"
+                    value={editingProduct.stock}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        stock: e.target.value,
+                      })
+                    }
+                  />
+
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        image: e.target.files?.[0] || null,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingProduct(null)}
+                  >
+                    ยกเลิก
+                  </Button>
+
+                  <Button
+                    onClick={handleSaveEdit}
+                    disabled={isSavingEdit}
+                    className="gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    {isSavingEdit ? "Saving..." : "บันทึกการแก้ไข"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Search */}
           <div className="mb-6 flex items-center gap-4">
             <div className="relative w-full max-w-sm">
@@ -500,6 +764,7 @@ export default function AdminProductsPage() {
                       <th className="px-4 py-3 text-left">สี</th>
                       <th className="px-4 py-3 text-left">ราคา</th>
                       <th className="px-4 py-3 text-left">Stock</th>
+                      <th className="px-4 py-3 text-left">จัดการ</th>
                     </tr>
                   </thead>
 
@@ -540,6 +805,27 @@ export default function AdminProductsPage() {
 
                         <td className="px-4 py-3">
                           {product.stock}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditProduct(product)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleDeleteProduct(product)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}

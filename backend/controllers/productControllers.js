@@ -213,7 +213,206 @@ const addProduct = async (req, res) => {
   }
 }
 
+const updateProduct = async (req, res) => {
+  let client
+
+  try {
+    const { productId, variantId } = req.params
+    const {
+      product_name,
+      category,
+      sub_category,
+      description,
+      size,
+      color,
+      pattern,
+      price,
+      stock,
+    } = req.body
+
+    let image_url = null
+
+    if (req.file) {
+      image_url =
+        `http://localhost:5000/uploads/${req.file.filename}`
+    }
+
+    const chunkContent = buildChunkText({ product_name, category, sub_category, description, price, size, color })
+
+    client = await db.connect()
+    await client.query("BEGIN")
+
+    const productResult = await client.query(
+      `
+      UPDATE products
+      SET
+        product_name = $1,
+        category = $2,
+        sub_category = $3,
+        description = $4,
+        updated_at = NOW()
+      WHERE product_id = $5
+      RETURNING product_id
+      `,
+      [
+        product_name,
+        category,
+        sub_category,
+        description,
+        productId,
+      ]
+    )
+
+    if (productResult.rowCount === 0) {
+      await client.query("ROLLBACK")
+      return res.status(404).json({
+        error: "Product not found",
+      })
+    }
+
+    const variantResult = await client.query(
+      `
+      UPDATE variants
+      SET
+        size = $1,
+        color = $2,
+        pattern = $3,
+        price = $4,
+        stock = $5
+      WHERE variant_id = $6
+      AND product_id = $7
+      RETURNING variant_id
+      `,
+      [
+        size,
+        color,
+        pattern,
+        price,
+        stock,
+        variantId,
+        productId,
+      ]
+    )
+
+    if (variantResult.rowCount === 0) {
+      await client.query("ROLLBACK")
+      return res.status(404).json({
+        error: "Variant not found",
+      })
+    }
+
+    if (image_url) {
+      const imageResult = await client.query(
+        `
+        UPDATE product_images
+        SET
+          variant_id = $1,
+          image_url = $2,
+          is_primary = true,
+          sort_order = 0
+        WHERE product_id = $3
+        AND is_primary = true
+        RETURNING image_id
+        `,
+        [
+          variantId,
+          image_url,
+          productId,
+        ]
+      )
+
+      if (imageResult.rowCount === 0) {
+        await client.query(
+          `
+          INSERT INTO product_images
+          (
+            product_id,
+            variant_id,
+            image_url,
+            is_primary,
+            sort_order
+          )
+          VALUES ($1, $2, $3, true, 0)
+          `,
+          [
+            productId,
+            variantId,
+            image_url,
+          ]
+        )
+      }
+    }
+
+    await client.query(
+      `INSERT INTO product_chunks (product_id, chunk_index, content)
+       VALUES ($1, 0, $2)
+       ON CONFLICT (product_id, chunk_index) DO UPDATE SET
+         content      = EXCLUDED.content,
+         content_hash = '',
+         embedded_at  = NULL`,
+      [productId, chunkContent]
+    )
+
+    await client.query("COMMIT")
+
+    res.json({
+      message: "Product updated successfully",
+    })
+
+    generateAndStoreEmbedding(productId, chunkContent).catch((err) =>
+      console.error("[embed] failed for", productId, err.message)
+    )
+  } catch (err) {
+    if (client) {
+      await client.query("ROLLBACK")
+    }
+
+    console.log(err)
+
+    res.status(500).json({
+      error: "Server error",
+    })
+  } finally {
+    if (client) {
+      client.release()
+    }
+  }
+}
+
+const deleteProduct = async (req, res) => {
+  try {
+    const { productId } = req.params
+
+    const result = await db.query(
+      `
+      DELETE FROM products
+      WHERE product_id = $1
+      RETURNING product_id
+      `,
+      [productId]
+    )
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: "Product not found",
+      })
+    }
+
+    res.json({
+      message: "Product deleted successfully",
+    })
+  } catch (err) {
+    console.log(err)
+
+    res.status(500).json({
+      error: "Server error",
+    })
+  }
+}
+
 module.exports = {
   getProducts,
   addProduct,
+  updateProduct,
+  deleteProduct,
 }

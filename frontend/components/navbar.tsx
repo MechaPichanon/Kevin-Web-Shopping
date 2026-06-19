@@ -8,6 +8,11 @@ type User = {
   id: number;
   username: string;
   email: string;
+  role?: string;
+};
+
+type CartItem = {
+  quantity: number;
 };
 
 export default function Navbar() {
@@ -26,7 +31,7 @@ export default function Navbar() {
       const data = await res.json();
 
       const total = data.reduce(
-        (sum: number, item: any) =>
+        (sum: number, item: CartItem) =>
           sum + item.quantity,
         0
       );
@@ -48,6 +53,17 @@ export default function Navbar() {
       }
 
       try {
+        const storedUser = localStorage.getItem("user");
+        let storedRole: string | undefined;
+
+        if (storedUser) {
+          try {
+            storedRole = JSON.parse(storedUser)?.role;
+          } catch {
+            storedRole = undefined;
+          }
+        }
+
         const res = await fetch(
           "http://localhost:5000/profile",
           {
@@ -60,7 +76,10 @@ export default function Navbar() {
         const data = await res.json();
 
         if (!data.error) {
-          setUser(data);
+          setUser({
+            ...data,
+            role: data.role ?? storedRole,
+          });
 
           fetchCartCount(data.id);
         }
@@ -96,6 +115,7 @@ export default function Navbar() {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
 
     setUser(null);
     setCartCount(0);
@@ -231,7 +251,7 @@ export default function Navbar() {
               <div className="flex items-center space-x-3">
 
                 <Link
-                  href="/profile"
+                  href={user.role === "admin" ? "/admin" : "/profile"}
                   className="text-white"
                 >
                   {user.username}

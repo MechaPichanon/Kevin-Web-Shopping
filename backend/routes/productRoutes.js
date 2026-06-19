@@ -3,6 +3,8 @@ const express = require("express")
 const {
   getProducts,
   addProduct,
+  updateProduct,
+  deleteProduct,
 } = require("../controllers/productControllers")
 
 const router = express.Router()
@@ -32,6 +34,17 @@ router.post(
   "/",
   upload.single("image"),
   addProduct
+)
+
+router.put(
+  "/:productId/:variantId",
+  upload.single("image"),
+  updateProduct
+)
+
+router.delete(
+  "/:productId",
+  deleteProduct
 )
 
 module.exports = router

@@ -5,7 +5,7 @@ import Image from "next/image";
 
 type Product = {
   id: number;
-  variant_id: string;
+  variant_id?: string;
   name: string;
   price: number;
   stock: number;
@@ -24,6 +24,7 @@ export default function ProductCard({ product }: { product: Product }) {
     }).format(price);
   };
   const handleAddToCart = async () => {
+    const variantId = product.variant_id ?? String(product.id);
     const token = localStorage.getItem("token");
     const user = JSON.parse(
       localStorage.getItem("user") || "{}"
@@ -46,7 +47,7 @@ export default function ProductCard({ product }: { product: Product }) {
           },
           body: JSON.stringify({
             user_id: user.id,
-            variant_id: product.variant_id,
+            variant_id: variantId,
             quantity: 1,
           }),
         }

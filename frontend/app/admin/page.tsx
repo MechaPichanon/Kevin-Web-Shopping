@@ -21,9 +21,9 @@ import {
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
-  { href: "/admin/orders", label: "คำสั่งซื้อ", icon: ShoppingCart },
+  { href: "/admin", label: "คำสั่งซื้อ", icon: ShoppingCart },
   { href: "/admin/users", label: "จัดการผู้ใช้", icon: Users },
-  { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
+  { href: "/admin", label: "ตั้งค่า", icon: Settings },
 ]
 
 const getStatusColor = (status: string) => {
@@ -338,7 +338,7 @@ export default function AdminDashboard() {
                 </div>
               </Link>
 
-              <Link href="/admin/orders">
+              <Link href="/admin">
                 <div className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
                   <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
                     <ShoppingCart className="h-6 w-6 text-blue-600" />
