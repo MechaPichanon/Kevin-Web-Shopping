@@ -10,6 +10,10 @@ Thai clothing e-commerce platform (thesis project) with an AI product chatbot. F
 
 this is duo work project amd I'm take care of chatbot, image search and database structure while my friend care of frontend and web system if can, try not to change the part that didn't in my side.
 
+## Frontend change rule
+
+**Before making any change to frontend files** (anything under `frontend/` — components, pages, styles, layout, UI), always stop and tell the user first. Describe what you plan to change and why, then wait for their approval before touching any frontend code. This applies to both Claude Code and Claude Design. The user needs to check with their friend (who owns the frontend) before any frontend change goes in.
+
 ## Running the project
 
 ### Full stack (recommended)

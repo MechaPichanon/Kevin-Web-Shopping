@@ -13,7 +13,6 @@ export default function Navbarsub() {
             <div style={{ display: "flex", gap: 12,  alignItems: "center" }}>
                 <Link href="/">Home</Link>
                 <Link href="/products">Products</Link>
-                <Link href="/chat">chat with bot</Link>
                 <input placeholder="Search..." />
                 <button>📷</button>
                 <button>🛒</button>

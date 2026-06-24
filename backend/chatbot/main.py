@@ -11,6 +11,7 @@ except ImportError:
     from db import get_conn, release_conn
 from typing import Dict, Any, List, Optional
 import uuid
+import time
 import requests
 import logging
 import re
@@ -214,10 +215,20 @@ def _fetch_active_discounts() -> str:
     return "\n".join(lines)
 
 
+QUICK_REPLIES_BY_INTENT = {
+    "PRODUCT_INFO":  ["หาไซส์ / Find my size", "เช็คสต็อก / Check stock", "นโยบายร้าน / Store policy"],
+    "SIZE_GUIDE":    ["ดูสินค้า / Show products", "เช็คสต็อก / Check stock"],
+    "STOCK_CHECK":   ["หาไซส์ / Find my size", "ดูสินค้า / View products"],
+    "STORE_POLICY":  ["ดูสินค้า / Show products", "หาไซส์ / Find my size"],
+    "OUT_OF_SCOPE":  ["ดูเสื้อ / Show shirts", "ดูกางเกง / Show pants", "นโยบายร้าน / Policy"],
+}
+_DEFAULT_QUICK_REPLIES = ["ดูเสื้อ / Show shirts", "ดูกางเกง / Show pants", "หาไซส์ / Find my size"]
+
 # Lightweight in-memory conversation state for demos (not persistent).
 # Keyed by conversation_id generated/returned by this API.
 _CONVERSATIONS: Dict[str, Dict[str, Any]] = {}
 _MAX_CONVERSATIONS = 500
+_SESSION_TTL = 30 * 60  # 30 minutes — wipe last_products after this much inactivity
 
 def _get_or_create_conversation_id(conversation_id: Optional[str]) -> str:
     cid = (conversation_id or "").strip()
@@ -227,7 +238,7 @@ def _get_or_create_conversation_id(conversation_id: Optional[str]) -> str:
         if len(_CONVERSATIONS) >= _MAX_CONVERSATIONS:
             # Drop an arbitrary item to keep memory bounded.
             _CONVERSATIONS.pop(next(iter(_CONVERSATIONS)))
-        _CONVERSATIONS[cid] = {}
+        _CONVERSATIONS[cid] = {"last_active": time.time()}
     return cid
 
 def _is_followup_reference(message: str) -> bool:
@@ -496,11 +507,24 @@ def chat(request: ChatRequest):
     conversation_id = _get_or_create_conversation_id(request.conversation_id)
     logger.info(f"Incoming message: {request.message}")
 
+    # Auto-expire stale context
+    _session = _CONVERSATIONS[conversation_id]
+    _now = time.time()
+    if _now - _session.get("last_active", _now) > _SESSION_TTL:
+        _session.pop("last_products", None)
+    _session["last_active"] = _now
+
     if is_smalltalk_strict(request.message):
         logger.info("Smalltalk detected; returning a friendly greeting.")
+        smalltalk_reply = (
+            "สวัสดีค่ะ! ฉันช่วยแนะนำเสื้อผ้าของร้านได้ค่ะ คุณกำลังมองหาอะไรอยู่คะ?"
+            if _is_thai(request.message)
+            else "Hi! I can help you find and compare our shirts and pants. What are you looking for today?"
+        )
         return {
-            "reply": "Hi! I can help you find and compare our shirts and pants. What are you looking for today?",
+            "reply": smalltalk_reply,
             "intent": Intent.OUT_OF_SCOPE,
+            "quick_replies": _DEFAULT_QUICK_REPLIES,
             "conversation_id": conversation_id,
         }
 
@@ -529,7 +553,7 @@ def chat(request: ChatRequest):
                 if _is_thai(request.message)
                 else OUT_OF_SCOPE_RESPONSE
             )
-            return {"reply": out_msg, "intent": intent, "conversation_id": conversation_id}
+            return {"reply": out_msg, "intent": intent, "quick_replies": QUICK_REPLIES_BY_INTENT["OUT_OF_SCOPE"], "conversation_id": conversation_id}
 
     products = retrieve_products(request.message)
     logger.info(f"Retrieved products count: {len(products)}")
@@ -545,14 +569,24 @@ def chat(request: ChatRequest):
             pass  # this intent doesn't require product context — continue to LLM
         elif intent == Intent.OUT_OF_SCOPE:
             logger.warning("Out of scope detected (no retrieval results, no product signal).")
+            out_msg = (
+                "ขอโทษค่ะ ฉันช่วยได้แค่เรื่องสินค้า ขนาด ราคา และนโยบายร้านค้าเท่านั้นค่ะ 😊"
+                if _is_thai(request.message)
+                else OUT_OF_SCOPE_RESPONSE
+            )
             return {
-                "reply": OUT_OF_SCOPE_RESPONSE,
+                "reply": out_msg,
                 "intent": intent,
                 "conversation_id": conversation_id,
             }
         else:
+            no_product_msg = (
+                "ขอโทษค่ะ ไม่พบสินค้าที่ตรงกับที่คุณค้นหา ลองค้นหาด้วยคำอื่นได้เลยค่ะ"
+                if _is_thai(request.message)
+                else "Sorry, I couldn't find any products related to your query."
+            )
             return {
-                "reply": "Sorry, I couldn't find any products related to your query.",
+                "reply": no_product_msg,
                 "intent": intent,
                 "conversation_id": conversation_id,
             }
@@ -605,11 +639,19 @@ def chat(request: ChatRequest):
     )
 
     if _is_thai(request.message):
-        lang_instruction = "IMPORTANT: The user is writing in Thai. You MUST respond entirely in Thai (ภาษาไทย). Do not use any English words except brand names, size labels (S/M/L/XL), and currency (THB/บาท)."
+        lang_instruction = (
+            "CRITICAL LANGUAGE RULE: Respond ONLY in Thai (ภาษาไทย). "
+            "NEVER use Chinese (中文), Japanese, Korean, or any other language. "
+            "You may use English ONLY for brand names, size labels (S/M/L/XL/XXL), and currency (THB/บาท)."
+        )
     else:
-        lang_instruction = "Respond in English."
+        lang_instruction = (
+            "CRITICAL LANGUAGE RULE: Respond ONLY in English. "
+            "NEVER use Chinese (中文), Japanese, Korean, Thai, or any other language."
+        )
 
     prompt = f"""You are a helpful assistant for an online Thai clothing store.
+ABSOLUTE RULE: You must ONLY respond in Thai or English. NEVER use Chinese (中文), Japanese, Korean, or any other language under any circumstances.
 {lang_instruction}
 
 The store sells: {_CATALOG_SUMMARY}
@@ -653,10 +695,24 @@ User Question: {request.message}"""
         reply = OUT_OF_SCOPE_RESPONSE
         intent = Intent.OUT_OF_SCOPE
         products = []
+    # Build product cards for frontend rendering
+    product_cards = []
+    for p in products:
+        name = p.get("product_name") or p.get("name", "Product")
+        prices = [float(v["price"]) for v in p.get("variants", []) if v.get("price") is not None]
+        product_cards.append({
+            "id": p.get("id", ""),
+            "name": name,
+            "min_price": min(prices) if prices else 0,
+        })
+
+    intent_key = intent.name if hasattr(intent, "name") else str(intent)
     logger.info("LLM response received")
-    return{
+    return {
         "reply": reply,
         "intent": intent,
         "products_used": [p["id"] for p in products],
+        "product_cards": product_cards,
+        "quick_replies": QUICK_REPLIES_BY_INTENT.get(intent_key, _DEFAULT_QUICK_REPLIES),
         "conversation_id": conversation_id,
     }

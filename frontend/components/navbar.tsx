@@ -155,9 +155,6 @@ export default function Navbar() {
               Products
             </Link>
 
-            <Link href="/chat">
-              Chat with Bot
-            </Link>
           </div>
 
           {/* Search */}

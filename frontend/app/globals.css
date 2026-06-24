@@ -2,6 +2,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@keyframes blink {
+  0%, 80%, 100% { opacity: .25; transform: translateY(0); }
+  40%           { opacity: 1;   transform: translateY(-2px); }
+}
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(14px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);   }
+}
+@keyframes tipIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
 :root {
   /* Cream / Light Brown Theme */
   --background: oklch(0.96 0.015 75);
