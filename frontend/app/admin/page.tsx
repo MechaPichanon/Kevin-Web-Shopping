@@ -21,9 +21,9 @@ import {
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
-  { href: "/admin", label: "คำสั่งซื้อ", icon: ShoppingCart },
+  { href: "/admin/orders", label: "คำสั่งซื้อ", icon: ShoppingCart },
   { href: "/admin/users", label: "จัดการผู้ใช้", icon: Users },
-  { href: "/admin", label: "ตั้งค่า", icon: Settings },
+  { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
 ]
 
 const getStatusColor = (status: string) => {
@@ -85,7 +85,7 @@ export default function AdminDashboard() {
     const parsed = JSON.parse(user)
 
     // ✅ check role
-    if (parsed.role !== "admin") {
+    if (parsed.role !== "admin" && parsed.role !== "staff") {
       router.push("/")
       return
     }
