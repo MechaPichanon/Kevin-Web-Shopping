@@ -92,20 +92,30 @@ def _product_to_text(product: Dict) -> str:
             lo, hi = min(prices), max(prices)
             price_str = f"{lo:.0f} THB" if lo == hi else f"{lo:.0f}–{hi:.0f} THB"
 
-        name_th = product.get("product_name_th", "") or ""
-        desc_th = product.get("description_th",  "") or ""
+        name_th      = product.get("product_name_th",  "") or ""
+        desc_th      = product.get("description_th",   "") or ""
+        category_th  = product.get("category_th",      "") or ""
+        sub_cat_th   = product.get("sub_category_th",  "") or ""
+        patterns_th  = sorted(set(v.get("pattern_th", "") for v in variants if v.get("pattern_th")))
+        sleeves_th   = sorted(set(v.get("sleeve_th",  "") for v in variants if v.get("sleeve_th")))
+        collars_th   = sorted(set(v.get("collar_th",  "") for v in variants if v.get("collar_th")))
 
         lines = [f"Name: {name}", f"Category: {category}"]
-        if sub_cat:    lines.append(f"Sub-category: {sub_cat}")
-        if price_str:  lines.append(f"Price: {price_str}")
-        if sizes:      lines.append(f"Sizes: {', '.join(sizes)}")
-        if colors:     lines.append(f"Colors: {', '.join(colors)}")
-        if sleeves:    lines.append(f"Sleeve: {', '.join(sleeves)}")
-        if collars:    lines.append(f"Collar: {', '.join(collars)}")
-        if desc:       lines.append(f"Description: {desc}")
-        if name_th:    lines.append(f"ชื่อ: {name_th}")
-        if colors_th:  lines.append(f"สี: {', '.join(colors_th)}")
-        if desc_th:    lines.append(f"คำอธิบาย: {desc_th}")
+        if sub_cat:       lines.append(f"Sub-category: {sub_cat}")
+        if price_str:     lines.append(f"Price: {price_str}")
+        if sizes:         lines.append(f"Sizes: {', '.join(sizes)}")
+        if colors:        lines.append(f"Colors: {', '.join(colors)}")
+        if sleeves:       lines.append(f"Sleeve: {', '.join(sleeves)}")
+        if collars:       lines.append(f"Collar: {', '.join(collars)}")
+        if desc:          lines.append(f"Description: {desc}")
+        if name_th:       lines.append(f"ชื่อ: {name_th}")
+        if category_th:   lines.append(f"หมวดหมู่: {category_th}")
+        if sub_cat_th:    lines.append(f"ประเภท: {sub_cat_th}")
+        if colors_th:     lines.append(f"สี: {', '.join(colors_th)}")
+        if patterns_th:   lines.append(f"ลาย: {', '.join(patterns_th)}")
+        if sleeves_th:    lines.append(f"แขน: {', '.join(sleeves_th)}")
+        if collars_th:    lines.append(f"คอเสื้อ: {', '.join(collars_th)}")
+        if desc_th:       lines.append(f"คำอธิบาย: {desc_th}")
         return "\n".join(lines).strip()
 
     # ── Legacy flat format ──────────────────────────────────────
@@ -318,7 +328,9 @@ def load_products() -> List[Dict]:
                 p.sub_category,
                 p.description,
                 p.product_name_th,
-                p.description_th
+                p.description_th,
+                p.category_th,
+                p.sub_category_th
             FROM products p
             WHERE p.is_active = TRUE
             ORDER BY p.product_id
@@ -348,7 +360,10 @@ def load_products() -> List[Dict]:
                 v.collar,
                 v.price,
                 v.cost_price,
-                v.stock
+                v.stock,
+                v.pattern_th,
+                v.sleeve_th,
+                v.collar_th
             FROM variants v
             WHERE v.product_id = ANY(%s)
               AND v.is_active = TRUE
@@ -377,6 +392,9 @@ def load_products() -> List[Dict]:
                 "price":      float(row[12]) if row[12] is not None else None,
                 "cost_price": float(row[13]) if row[13] is not None else None,
                 "stock":      row[14],
+                "pattern_th": row[15],
+                "sleeve_th":  row[16],
+                "collar_th":  row[17],
             })
 
         # ── Assemble product dicts ─────────────────────────────────────────────
@@ -392,6 +410,8 @@ def load_products() -> List[Dict]:
                 "description":     row[4],
                 "product_name_th": row[5],
                 "description_th":  row[6],
+                "category_th":     row[7],
+                "sub_category_th": row[8],
                 "variants":        variants_by_product.get(pid, []),
             })
 

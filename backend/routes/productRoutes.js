@@ -2,6 +2,7 @@ const express = require("express")
 
 const {
   getProducts,
+  searchProducts,
   addProduct,
   updateProduct,
   deleteProduct,
@@ -9,6 +10,7 @@ const {
 
 const router = express.Router()
 
+router.get("/search", searchProducts)
 router.get("/", getProducts)
 
 const multer = require("multer")

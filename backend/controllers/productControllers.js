@@ -1,7 +1,7 @@
 const crypto = require("crypto")
 const db = require("../db")
 
-function buildChunkText({ product_name, category, sub_category, description, price, size, color }) {
+function buildChunkText({ product_name, category, sub_category, description, price, size, color, sleeve, collar }) {
   const lines = [
     `Name: ${product_name || ""}`,
     `Category: ${category || ""}`,
@@ -9,6 +9,8 @@ function buildChunkText({ product_name, category, sub_category, description, pri
     price != null ? `Price: ${price} THB`               : null,
     size          ? `Sizes: ${size}`                    : null,
     color         ? `Colors: ${color}`                  : null,
+    sleeve        ? `Sleeve: ${sleeve}`                 : null,
+    collar        ? `Collar: ${collar}`                 : null,
     description   ? `Description: ${description}`       : null,
   ].filter(Boolean)
   return lines.join("\n").trim()
@@ -70,6 +72,8 @@ LEFT JOIN product_images pi
 ON p.product_id = pi.product_id
 AND pi.is_primary = true
 
+WHERE p.is_active = TRUE
+
 ORDER BY p.created_at DESC
 `)
 
@@ -83,20 +87,112 @@ ORDER BY p.created_at DESC
   }
 }
 
+const searchProducts = async (req, res) => {
+  const { q } = req.query
+  if (!q || !q.trim()) {
+    return res.status(400).json({ error: "Missing search query" })
+  }
+
+  try {
+    const term = `%${q.trim()}%`
+    const result = await db.query(
+      `
+SELECT
+  p.product_id,
+  p.product_name,
+  p.product_name_th,
+  p.category,
+  p.sub_category,
+  p.description,
+  pi.image_url,
+  pv_rep.variant_id,
+  pv_rep.price,
+  pv_rep.stock
+
+FROM products p
+
+LEFT JOIN product_images pi
+  ON p.product_id = pi.product_id
+  AND pi.is_primary = TRUE
+
+LEFT JOIN LATERAL (
+  SELECT variant_id, price, stock
+  FROM variants
+  WHERE product_id = p.product_id
+    AND is_active = TRUE
+  ORDER BY price ASC
+  LIMIT 1
+) pv_rep ON TRUE
+
+WHERE p.is_active = TRUE
+  AND (
+      p.product_name    ILIKE $1
+   OR p.product_name_th ILIKE $1
+   OR p.category        ILIKE $1
+   OR p.category_th     ILIKE $1
+   OR p.sub_category    ILIKE $1
+   OR p.sub_category_th ILIKE $1
+   OR p.description     ILIKE $1
+   OR p.description_th  ILIKE $1
+   OR EXISTS (
+        SELECT 1 FROM variants pv
+        WHERE pv.product_id = p.product_id
+          AND pv.is_active = TRUE
+          AND (
+               pv.color      ILIKE $1
+            OR pv.color_th   ILIKE $1
+            OR pv.pattern    ILIKE $1
+            OR pv.pattern_th ILIKE $1
+            OR pv.sleeve     ILIKE $1
+            OR pv.sleeve_th  ILIKE $1
+            OR pv.collar     ILIKE $1
+            OR pv.collar_th  ILIKE $1
+          )
+      )
+  )
+
+ORDER BY p.created_at DESC
+      `,
+      [term]
+    )
+
+    res.json(result.rows)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({ error: "Server error" })
+  }
+}
+
 const addProduct = async (req, res) => {
   let client
 
   try {
     const {
       product_name,
+      product_name_th,
       category,
+      category_th,
       sub_category,
+      sub_category_th,
       description,
+      description_th,
       size,
       color,
       pattern,
+      pattern_th,
       price,
       stock,
+      color_th,
+      chest_min,
+      chest_max,
+      waist_min,
+      waist_max,
+      sleeve,
+      sleeve_th,
+      collar,
+      collar_th,
+      cost_price,
+      is_active,
     } = req.body
     let image_url = null
 
@@ -107,7 +203,7 @@ const addProduct = async (req, res) => {
     const now = Date.now()
     const productId = "P" + now
     const variantId = "V" + now
-    const chunkContent = buildChunkText({ product_name, category, sub_category, description, price, size, color })
+    const chunkContent = buildChunkText({ product_name, category, sub_category, description, price, size, color, sleeve, collar })
 
     client = await db.connect()
     await client.query("BEGIN")
@@ -117,18 +213,26 @@ const addProduct = async (req, res) => {
       (
         product_id,
         product_name,
+        product_name_th,
         category,
+        category_th,
         sub_category,
-        description
+        sub_category_th,
+        description,
+        description_th
       )
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `,
       [
         productId,
         product_name,
+        product_name_th || null,
         category,
+        category_th || null,
         sub_category,
+        sub_category_th || null,
         description,
+        description_th || null,
       ]
     )
 
@@ -140,20 +244,44 @@ const addProduct = async (req, res) => {
         product_id,
         size,
         color,
+        color_th,
         pattern,
+        pattern_th,
+        chest_min,
+        chest_max,
+        waist_min,
+        waist_max,
+        sleeve,
+        sleeve_th,
+        collar,
+        collar_th,
         price,
-        stock
+        cost_price,
+        stock,
+        is_active
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       `,
       [
         variantId,
         productId,
         size,
         color,
+        color_th || null,
         pattern,
+        pattern_th || null,
+        chest_min || null,
+        chest_max || null,
+        waist_min || null,
+        waist_max || null,
+        sleeve || null,
+        sleeve_th || null,
+        collar || null,
+        collar_th || null,
         price,
+        cost_price || null,
         stock,
+        is_active !== "false",
       ]
     )
     if (image_url) {
@@ -220,14 +348,30 @@ const updateProduct = async (req, res) => {
     const { productId, variantId } = req.params
     const {
       product_name,
+      product_name_th,
       category,
+      category_th,
       sub_category,
+      sub_category_th,
       description,
+      description_th,
       size,
       color,
       pattern,
+      pattern_th,
       price,
       stock,
+      color_th,
+      chest_min,
+      chest_max,
+      waist_min,
+      waist_max,
+      sleeve,
+      sleeve_th,
+      collar,
+      collar_th,
+      cost_price,
+      is_active,
     } = req.body
 
     let image_url = null
@@ -237,7 +381,7 @@ const updateProduct = async (req, res) => {
         `http://localhost:5000/uploads/${req.file.filename}`
     }
 
-    const chunkContent = buildChunkText({ product_name, category, sub_category, description, price, size, color })
+    const chunkContent = buildChunkText({ product_name, category, sub_category, description, price, size, color, sleeve, collar })
 
     client = await db.connect()
     await client.query("BEGIN")
@@ -246,19 +390,27 @@ const updateProduct = async (req, res) => {
       `
       UPDATE products
       SET
-        product_name = $1,
-        category = $2,
-        sub_category = $3,
-        description = $4,
-        updated_at = NOW()
-      WHERE product_id = $5
+        product_name    = $1,
+        product_name_th = $2,
+        category        = $3,
+        category_th     = $4,
+        sub_category    = $5,
+        sub_category_th = $6,
+        description     = $7,
+        description_th  = $8,
+        updated_at      = NOW()
+      WHERE product_id = $9
       RETURNING product_id
       `,
       [
         product_name,
+        product_name_th || null,
         category,
+        category_th || null,
         sub_category,
+        sub_category_th || null,
         description,
+        description_th || null,
         productId,
       ]
     )
@@ -274,21 +426,45 @@ const updateProduct = async (req, res) => {
       `
       UPDATE variants
       SET
-        size = $1,
-        color = $2,
-        pattern = $3,
-        price = $4,
-        stock = $5
-      WHERE variant_id = $6
-      AND product_id = $7
+        size       = $1,
+        color      = $2,
+        color_th   = $3,
+        pattern    = $4,
+        pattern_th = $5,
+        chest_min  = $6,
+        chest_max  = $7,
+        waist_min  = $8,
+        waist_max  = $9,
+        sleeve     = $10,
+        sleeve_th  = $11,
+        collar     = $12,
+        collar_th  = $13,
+        price      = $14,
+        cost_price = $15,
+        stock      = $16,
+        is_active  = $17
+      WHERE variant_id = $18
+      AND product_id   = $19
       RETURNING variant_id
       `,
       [
         size,
         color,
+        color_th || null,
         pattern,
+        pattern_th || null,
+        chest_min || null,
+        chest_max || null,
+        waist_min || null,
+        waist_max || null,
+        sleeve || null,
+        sleeve_th || null,
+        collar || null,
+        collar_th || null,
         price,
+        cost_price || null,
         stock,
+        is_active !== "false",
         variantId,
         productId,
       ]
@@ -385,7 +561,8 @@ const deleteProduct = async (req, res) => {
 
     const result = await db.query(
       `
-      DELETE FROM products
+      UPDATE products
+      SET is_active = FALSE, updated_at = NOW()
       WHERE product_id = $1
       RETURNING product_id
       `,
@@ -412,6 +589,7 @@ const deleteProduct = async (req, res) => {
 
 module.exports = {
   getProducts,
+  searchProducts,
   addProduct,
   updateProduct,
   deleteProduct,

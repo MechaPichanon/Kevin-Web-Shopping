@@ -32,37 +32,51 @@ const NAV_ITEMS = [
 ]
 
 const CATEGORIES = [
-  { value: "shirt", label: "Shirt" },
-  { value: "polo", label: "Polo" },
-  { value: "pant", label: "Pant" },
+  { value: "shirt", label: "Shirt", labelTh: "เชิ้ต" },
+  { value: "polo",  label: "Polo",  labelTh: "โปโล" },
+  { value: "pant",  label: "Pant",  labelTh: "กางเกง" },
 ]
 
-const SUBCATS: Record<string, { value: string; label: string }[]> = {
+const SUBCATS: Record<string, { value: string; label: string; labelTh: string }[]> = {
   shirt: [
-    { value: "cotton-shirt", label: "Cotton Shirt" },
-    { value: "oxford", label: "Oxford" },
-    { value: "casual-shirt", label: "Casual Shirt" },
-    { value: "linen-shirt", label: "Linen Shirt" },
+    { value: "cotton-shirt",  label: "Cotton Shirt",  labelTh: "เสื้อผ้าฝ้าย" },
+    { value: "oxford",        label: "Oxford",        labelTh: "ออกซ์ฟอร์ด" },
+    { value: "casual-shirt",  label: "Casual Shirt",  labelTh: "เสื้อเชิ้ตลำลอง" },
+    { value: "linen-shirt",   label: "Linen Shirt",   labelTh: "เสื้อลินิน" },
   ],
   polo: [
-    { value: "classic-polo", label: "Classic Polo" },
-    { value: "pique-polo", label: "Piqué Polo" },
-    { value: "zip-polo", label: "Zip Polo" },
+    { value: "classic-polo",  label: "Classic Polo",  labelTh: "โปโลคลาสสิก" },
+    { value: "pique-polo",    label: "Piqué Polo",    labelTh: "โปโลพีเก้" },
+    { value: "zip-polo",      label: "Zip Polo",      labelTh: "โปโลซิป" },
   ],
   pant: [
-    { value: "slim-pant", label: "Slim Pant" },
-    { value: "straight-pant", label: "Straight Pant" },
-    { value: "chino", label: "Chino" },
-    { value: "shorts", label: "Shorts" },
+    { value: "slim-pant",     label: "Slim Pant",     labelTh: "กางเกงสลิม" },
+    { value: "straight-pant", label: "Straight Pant", labelTh: "กางเกงตรง" },
+    { value: "chino",         label: "Chino",         labelTh: "ชิโน่" },
+    { value: "shorts",        label: "Shorts",        labelTh: "กางเกงขาสั้น" },
   ],
 }
 
 const PATTERNS = [
-  { value: "solid", label: "Solid" },
-  { value: "striped", label: "Striped" },
-  { value: "checked", label: "Checked" },
-  { value: "printed", label: "Printed" },
-  { value: "herringbone", label: "Herringbone" },
+  { value: "solid",       label: "Solid",       labelTh: "เรียบ" },
+  { value: "striped",     label: "Striped",     labelTh: "ลายทาง" },
+  { value: "checked",     label: "Checked",     labelTh: "ลายตาราง" },
+  { value: "printed",     label: "Printed",     labelTh: "ลายพิมพ์" },
+  { value: "herringbone", label: "Herringbone", labelTh: "ลายก้างปลา" },
+]
+
+const SLEEVE_OPTIONS = [
+  { value: "long",  label: "Long sleeve",  labelTh: "แขนยาว" },
+  { value: "short", label: "Short sleeve", labelTh: "แขนสั้น" },
+  { value: "3/4",   label: "3/4 sleeve",   labelTh: "แขนสามส่วน" },
+]
+
+const COLLAR_OPTIONS = [
+  { value: "spread",      label: "Spread",      labelTh: "คอปก" },
+  { value: "button-down", label: "Button-down", labelTh: "คอกระดุม" },
+  { value: "band",        label: "Band",        labelTh: "คอตั้ง" },
+  { value: "point",       label: "Point",       labelTh: "คอแหลม" },
+  { value: "cutaway",     label: "Cutaway",     labelTh: "คอตัด" },
 ]
 
 const UPPER_SIZES = ["M", "L", "XL", "XXL"]
@@ -104,8 +118,11 @@ type FormState = {
   desc: string
   descTh: string
   category: string
+  categoryTh: string
   subcategory: string
+  subcategoryTh: string
   pattern: string
+  patternTh: string
   size: string
   colorHex: string
   colorName: string
@@ -113,7 +130,9 @@ type FormState = {
   chestMin: string
   chestMax: string
   sleeve: string
+  sleeveTh: string
   collar: string
+  collarTh: string
   waistMin: string
   waistMax: string
   price: string
@@ -158,16 +177,21 @@ const BLANK_FORM: FormState = {
   desc: "",
   descTh: "",
   category: "shirt",
+  categoryTh: "เชิ้ต",
   subcategory: "oxford",
+  subcategoryTh: "ออกซ์ฟอร์ด",
   pattern: "solid",
+  patternTh: "เรียบ",
   size: "M",
   colorHex: "#1f2a44",
   colorName: "Navy",
   colorNameTh: "กรมท่า",
   chestMin: "",
   chestMax: "",
-  sleeve: "",
-  collar: "",
+  sleeve: "long",
+  sleeveTh: "แขนยาว",
+  collar: "spread",
+  collarTh: "คอปก",
   waistMin: "",
   waistMax: "",
   price: "",
@@ -252,14 +276,22 @@ export default function AdminProductsPage() {
     const matched = PRESET_COLORS.find(
       (c) => c.name.toLowerCase() === (p.color || "").toLowerCase()
     )
+    const catObj  = CATEGORIES.find((c) => c.value === cat)
+    const subVal  = p.sub_category || (SUBCATS[cat]?.[0]?.value ?? "")
+    const subObj  = (SUBCATS[cat] ?? []).find((s) => s.value === subVal)
+    const patVal  = p.pattern || "solid"
+    const patObj  = PATTERNS.find((pt) => pt.value === patVal)
     setForm({
       name: p.product_name || "",
       nameTh: "",
       desc: p.description || "",
       descTh: "",
       category: cat,
-      subcategory: p.sub_category || (SUBCATS[cat]?.[0]?.value ?? ""),
-      pattern: p.pattern || "solid",
+      categoryTh: catObj?.labelTh ?? "",
+      subcategory: subVal,
+      subcategoryTh: subObj?.labelTh ?? "",
+      pattern: patVal,
+      patternTh: patObj?.labelTh ?? "",
       size: sizes.includes(p.size) ? p.size : sizes[0],
       colorHex: matched?.hex ?? "#1f2a44",
       colorName: matched?.name ?? p.color ?? "",
@@ -267,7 +299,9 @@ export default function AdminProductsPage() {
       chestMin: "",
       chestMax: "",
       sleeve: "",
+      sleeveTh: "",
       collar: "",
+      collarTh: "",
       waistMin: "",
       waistMax: "",
       price: String(p.price ?? ""),
@@ -303,12 +337,40 @@ export default function AdminProductsPage() {
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const cat = e.target.value
     const isUpper = isUpperCat(cat)
+    const catObj = CATEGORIES.find((c) => c.value === cat)
+    const firstSub = SUBCATS[cat]?.[0]
     setForm((f) => ({
       ...f,
       category: cat,
-      subcategory: SUBCATS[cat]?.[0]?.value ?? "",
+      categoryTh: catObj?.labelTh ?? "",
+      subcategory: firstSub?.value ?? "",
+      subcategoryTh: firstSub?.labelTh ?? "",
       size: (isUpper ? UPPER_SIZES : PANT_SIZES)[0],
     }))
+  }
+
+  const handleSubcatChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    const obj = (SUBCATS[form.category] ?? []).find((s) => s.value === val)
+    setForm((f) => ({ ...f, subcategory: val, subcategoryTh: obj?.labelTh ?? "" }))
+  }
+
+  const handlePatternChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    const obj = PATTERNS.find((p) => p.value === val)
+    setForm((f) => ({ ...f, pattern: val, patternTh: obj?.labelTh ?? "" }))
+  }
+
+  const handleSleeveChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    const obj = SLEEVE_OPTIONS.find((s) => s.value === val)
+    setForm((f) => ({ ...f, sleeve: val, sleeveTh: obj?.labelTh ?? "" }))
+  }
+
+  const handleCollarChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    const obj = COLLAR_OPTIONS.find((c) => c.value === val)
+    setForm((f) => ({ ...f, collar: val, collarTh: obj?.labelTh ?? "" }))
   }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,15 +396,34 @@ export default function AdminProductsPage() {
     if (isSubmitting) return
     const fd = new FormData()
     fd.append("product_name", form.name)
+    fd.append("product_name_th", form.nameTh)
     fd.append("category", form.category)
     fd.append("sub_category", form.subcategory)
     fd.append("description", form.desc)
+    fd.append("description_th", form.descTh)
     fd.append("size", form.size)
     fd.append("color", form.colorName)
     fd.append("pattern", form.pattern)
     fd.append("price", form.price)
     fd.append("stock", form.stock)
     if (form.imageFile) fd.append("image", form.imageFile)
+    if (form.colorNameTh)    fd.append("color_th",        form.colorNameTh)
+    if (form.costPrice)      fd.append("cost_price",      form.costPrice)
+    if (form.categoryTh)     fd.append("category_th",     form.categoryTh)
+    if (form.subcategoryTh)  fd.append("sub_category_th", form.subcategoryTh)
+    if (form.patternTh)      fd.append("pattern_th",      form.patternTh)
+    fd.append("is_active", form.status === "active" ? "true" : "false")
+    if (isUpper) {
+      if (form.chestMin) fd.append("chest_min", form.chestMin)
+      if (form.chestMax) fd.append("chest_max", form.chestMax)
+      fd.append("sleeve", form.sleeve)
+      fd.append("collar", form.collar)
+      if (form.sleeveTh) fd.append("sleeve_th", form.sleeveTh)
+      if (form.collarTh) fd.append("collar_th", form.collarTh)
+    } else {
+      if (form.waistMin) fd.append("waist_min", form.waistMin)
+      if (form.waistMax) fd.append("waist_max", form.waistMax)
+    }
 
     try {
       setIsSubmitting(true)
@@ -1111,7 +1192,7 @@ export default function AdminProductsPage() {
                         >
                           {CATEGORIES.map((c) => (
                             <option key={c.value} value={c.value}>
-                              {c.label}
+                              {c.label} / {c.labelTh}
                             </option>
                           ))}
                         </select>
@@ -1120,12 +1201,12 @@ export default function AdminProductsPage() {
                         <label style={labelStyle}>Sub-category</label>
                         <select
                           value={form.subcategory}
-                          onChange={upd("subcategory")}
+                          onChange={handleSubcatChange}
                           style={selectStyle}
                         >
                           {(SUBCATS[form.category] ?? []).map((s) => (
                             <option key={s.value} value={s.value}>
-                              {s.label}
+                              {s.label} / {s.labelTh}
                             </option>
                           ))}
                         </select>
@@ -1134,12 +1215,12 @@ export default function AdminProductsPage() {
                         <label style={labelStyle}>Pattern</label>
                         <select
                           value={form.pattern}
-                          onChange={upd("pattern")}
+                          onChange={handlePatternChange}
                           style={selectStyle}
                         >
                           {PATTERNS.map((p) => (
                             <option key={p.value} value={p.value}>
-                              {p.label}
+                              {p.label} / {p.labelTh}
                             </option>
                           ))}
                         </select>
@@ -1420,7 +1501,7 @@ export default function AdminProductsPage() {
                         </h2>
                         <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
                           {isUpper
-                            ? "Upper-body garment — chest, sleeve and collar."
+                            ? "Upper-body garment — chest, sleeve type and collar type."
                             : "Lower-body garment — waist range."}
                         </p>
                       </div>
@@ -1474,34 +1555,28 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                         <div>
-                          <label style={labelStyle}>
-                            Sleeve{" "}
-                            <span style={{ color: "#9aa0ac", fontWeight: 500 }}>
-                              (inch)
-                            </span>
-                          </label>
-                          <input
-                            type="number"
+                          <label style={labelStyle}>Sleeve</label>
+                          <select
                             value={form.sleeve}
-                            onChange={upd("sleeve")}
-                            placeholder="24"
-                            style={inputStyle}
-                          />
+                            onChange={handleSleeveChange}
+                            style={selectStyle}
+                          >
+                            {SLEEVE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label} / {o.labelTh}</option>
+                            ))}
+                          </select>
                         </div>
                         <div>
-                          <label style={labelStyle}>
-                            Collar{" "}
-                            <span style={{ color: "#9aa0ac", fontWeight: 500 }}>
-                              (inch)
-                            </span>
-                          </label>
-                          <input
-                            type="number"
+                          <label style={labelStyle}>Collar</label>
+                          <select
                             value={form.collar}
-                            onChange={upd("collar")}
-                            placeholder="15.5"
-                            style={inputStyle}
-                          />
+                            onChange={handleCollarChange}
+                            style={selectStyle}
+                          >
+                            {COLLAR_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label} / {o.labelTh}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
                     ) : (

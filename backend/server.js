@@ -336,7 +336,7 @@ app.delete("/users/:id", auth, requireAdmin, async (req, res) => {
     }
 
     const result = await pool.query(
-      "DELETE FROM users WHERE id = $1 RETURNING id",
+      "UPDATE users SET is_active = FALSE WHERE id = $1 RETURNING id",
       [req.params.id]
     );
 
