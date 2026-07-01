@@ -78,6 +78,8 @@
   CREATE INDEX IF NOT EXISTS variants_active_idx     ON variants (is_active);
 
   -- product_images — gallery / thumbnails
+  -- color: matches variants.color; NULL = applies to all colors / generic photo
+  -- is_primary: strictly one per product (enforced by partial unique index below)
   CREATE TABLE IF NOT EXISTS product_images (
     image_id   SERIAL       PRIMARY KEY,
     product_id VARCHAR(20)  NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
@@ -85,11 +87,15 @@
     image_url  VARCHAR(500) NOT NULL,
     alt_text   VARCHAR(200) DEFAULT NULL,
     is_primary BOOLEAN      NOT NULL DEFAULT FALSE,
-    sort_order SMALLINT     NOT NULL DEFAULT 0
+    sort_order SMALLINT     NOT NULL DEFAULT 0,
+    color      TEXT         DEFAULT NULL
   );
 
   CREATE INDEX IF NOT EXISTS product_images_product_idx ON product_images (product_id);
   CREATE INDEX IF NOT EXISTS product_images_primary_idx ON product_images (product_id, is_primary);
+  CREATE INDEX IF NOT EXISTS product_images_color_idx   ON product_images (product_id, color);
+  CREATE UNIQUE INDEX IF NOT EXISTS product_images_one_primary_idx
+    ON product_images (product_id) WHERE is_primary = TRUE;
 
   -- ════════════════════════════════════════
   -- USERS & ADDRESSES

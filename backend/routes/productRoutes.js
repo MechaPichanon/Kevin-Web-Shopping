@@ -3,14 +3,25 @@ const express = require("express")
 const {
   getProducts,
   searchProducts,
+  getCategories,
+  filterProducts,
   addProduct,
   updateProduct,
   deleteProduct,
 } = require("../controllers/productControllers")
 
+const {
+  getProductImages,
+  addProductImage,
+  deleteProductImage,
+  setPrimaryImage,
+} = require("../controllers/productImageControllers")
+
 const router = express.Router()
 
 router.get("/search", searchProducts)
+router.get("/categories", getCategories)
+router.get("/filter", filterProducts)
 router.get("/", getProducts)
 
 const multer = require("multer")
@@ -39,7 +50,7 @@ router.post(
 )
 
 router.put(
-  "/:productId/:variantId",
+  "/:productId",
   upload.single("image"),
   updateProduct
 )
@@ -48,5 +59,11 @@ router.delete(
   "/:productId",
   deleteProduct
 )
+
+// Product image endpoints (color-keyed, H&M-style)
+router.get("/:productId/images", getProductImages)
+router.post("/:productId/images", upload.single("image"), addProductImage)
+router.delete("/:productId/images/:imageId", deleteProductImage)
+router.put("/:productId/images/:imageId/primary", setPrimaryImage)
 
 module.exports = router

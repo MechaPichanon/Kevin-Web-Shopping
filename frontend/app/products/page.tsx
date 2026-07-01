@@ -7,25 +7,6 @@ import ProductCard from "@/components/productcard";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 
-const categories = [
-  { id: "all", name: "ทั้งหมด" },
-  { id: "shirt", name: "เสื้อแขนสั้น" },
-  { id: "hoodie", name: "ฮู้ด" },
-  { id: "jeans", name: "ยีนส์" },
-  { id: "short", name: "กางเกงขาสั้น" },
-  { id: "long", name: "กางเกงขายาว" },
-  { id: "dress", name: "เดรส" },
-];
-
-const categoryAliases: Record<string, string[]> = {
-  shirt: ["shirt", "tshirt", "เสื้อแขนสั้น"],
-  hoodie: ["hoodie", "ฮู้ด"],
-  jeans: ["jeans", "ยีนส์"],
-  short: ["short", "shorts", "กางเกงขาสั้น"],
-  long: ["long", "pants", "กางเกงขายาว"],
-  dress: ["dress", "เดรส"],
-};
-
 const DEFAULT_MAX_PRICE = 5000;
 
 const priceRanges = [
@@ -36,10 +17,22 @@ const priceRanges = [
   { id: "over-3000", name: "มากกว่า 3,000", min: 3000, max: 999999 },
 ];
 
+type SubCategoryItem = {
+  sub_category: string;
+  sub_category_th: string;
+};
+
+type CategoryItem = {
+  category: string;
+  category_th: string;
+  sub_categories: SubCategoryItem[];
+};
+
 type ProductApi = {
   product_id: string;
   product_name: string;
   category: string;
+  sub_category?: string;
   variant_id: string;
   price: number;
   stock: number;
@@ -48,7 +41,9 @@ type ProductApi = {
 
 export default function ProductPage() {
   const [products, setProducts] = useState<ProductApi[]>([]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedSubCategory, setSelectedSubCategory] = useState("all");
 
   const [gridCols, setGridCols] = useState<3 | 4>(4);
 
@@ -60,14 +55,31 @@ export default function ProductPage() {
     DEFAULT_MAX_PRICE,
   ]);
 
+  // Fetch categories from DB on mount
   useEffect(() => {
-    fetch("http://localhost:5000/products")
+    fetch("http://localhost:5000/products/categories")
       .then((res) => res.json())
-      .then((data: ProductApi[]) => {
-        setProducts(data);
-      })
+      .then((data: CategoryItem[]) => setCategories(data))
       .catch(console.error);
   }, []);
+
+  // Fetch products whenever category or sub-category filter changes
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedCategory !== "all") params.set("category", selectedCategory);
+    if (selectedSubCategory !== "all") params.set("sub_category", selectedSubCategory);
+    const qs = params.toString();
+
+    fetch(`http://localhost:5000/products/filter${qs ? `?${qs}` : ""}`)
+      .then((res) => res.json())
+      .then((data: ProductApi[]) => setProducts(data))
+      .catch(console.error);
+  }, [selectedCategory, selectedSubCategory]);
+
+  const handleCategorySelect = (catId: string) => {
+    setSelectedCategory(catId);
+    setSelectedSubCategory("all");
+  };
 
   const priceLimit = useMemo(() => {
     const maxPrice = products.reduce(
@@ -83,22 +95,15 @@ export default function ProductPage() {
     setPriceRange([0, priceLimit]);
   }, [priceLimit]);
 
-  const filteredProducts = products.filter((p) => {
-    const normalizedCategory =
-      p.category?.trim().toLowerCase();
+  // Price filter stays client-side (slider UX)
+  const filteredProducts = products.filter((p) =>
+    Number(p.price) >= priceRange[0] &&
+    Number(p.price) <= priceRange[1]
+  );
 
-    const categoryMatch =
-      selectedCategory === "all" ||
-      categoryAliases[selectedCategory]?.includes(
-        normalizedCategory
-      );
-
-    const priceMatch =
-      Number(p.price) >= priceRange[0] &&
-      Number(p.price) <= priceRange[1];
-
-    return categoryMatch && priceMatch;
-  });
+  const activeCategoryData = categories.find(
+    (c) => c.category === selectedCategory
+  );
 
   return (
     <div className="min-h-screen bg-[#b89f8d] px-6 py-8">
@@ -117,25 +122,61 @@ export default function ProductPage() {
       {/* Filters */}
 
       <div className="mb-6 flex flex-col gap-4">
+        {/* Category row */}
         <div className="flex flex-wrap items-center gap-2">
           <Filter size={18} />
 
+          <Button
+            onClick={() => handleCategorySelect("all")}
+            variant={selectedCategory === "all" ? "default" : "outline"}
+          >
+            ทั้งหมด
+          </Button>
+
           {categories.map((cat) => (
             <Button
-              key={cat.id}
-              onClick={() =>
-                setSelectedCategory(cat.id)
-              }
+              key={cat.category}
+              onClick={() => handleCategorySelect(cat.category)}
               variant={
-                selectedCategory === cat.id
+                selectedCategory === cat.category
                   ? "default"
                   : "outline"
               }
             >
-              {cat.name}
+              {cat.category_th}
             </Button>
           ))}
         </div>
+
+        {/* Sub-category row — only when a category is selected and has sub-categories */}
+        {selectedCategory !== "all" &&
+          activeCategoryData &&
+          activeCategoryData.sub_categories.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pl-7">
+              <Button
+                onClick={() => setSelectedSubCategory("all")}
+                variant={selectedSubCategory === "all" ? "default" : "outline"}
+                size="sm"
+              >
+                ทั้งหมด
+              </Button>
+
+              {activeCategoryData.sub_categories.map((sub) => (
+                <Button
+                  key={sub.sub_category}
+                  onClick={() => setSelectedSubCategory(sub.sub_category)}
+                  variant={
+                    selectedSubCategory === sub.sub_category
+                      ? "default"
+                      : "outline"
+                  }
+                  size="sm"
+                >
+                  {sub.sub_category_th}
+                </Button>
+              ))}
+            </div>
+          )}
 
         <div className="flex flex-wrap gap-2">
           <Button
@@ -255,7 +296,7 @@ export default function ProductPage() {
             key={p.variant_id}
             product={{
               id: Number(
-                p.variant_id.replace(/\D/g, "")
+                p.variant_id?.replace(/\D/g, "") || "0"
               ),
               variant_id: p.variant_id,
               name: p.product_name,

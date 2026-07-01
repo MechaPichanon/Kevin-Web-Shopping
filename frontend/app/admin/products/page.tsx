@@ -95,19 +95,70 @@ const PRESET_COLORS = [
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
-type ProductRow = {
-  product_id: string
-  product_name: string
-  category: string
-  sub_category?: string
-  description?: string
+type VariantDetail = {
   variant_id: string
   size: string
   color: string
+  color_th?: string
   pattern?: string
-  price: string | number
-  stock: string | number
+  pattern_th?: string
+  chest_min?: number
+  chest_max?: number
+  waist_min?: number
+  waist_max?: number
+  sleeve?: string
+  sleeve_th?: string
+  collar?: string
+  collar_th?: string
+  price: number
+  cost_price?: number
+  stock: number
+  is_active: boolean
+}
+
+type ProductRow = {
+  product_id: string
+  product_name: string
+  product_name_th?: string
+  category: string
+  sub_category?: string
+  description?: string
+  description_th?: string
+  variants: VariantDetail[]
   image_url?: string
+}
+
+type VariantDraft = {
+  _key: string
+  variantId: string | null
+  size: string
+  colorHex: string
+  colorName: string
+  colorNameTh: string
+  pattern: string
+  patternTh: string
+  chestMin: string
+  chestMax: string
+  waistMin: string
+  waistMax: string
+  sleeve: string
+  sleeveTh: string
+  collar: string
+  collarTh: string
+  price: string
+  costPrice: string
+  stock: string
+  isActive: boolean
+}
+
+type ProductImage = {
+  image_id: number
+  product_id: string
+  color: string | null
+  image_url: string
+  alt_text: string | null
+  is_primary: boolean
+  sort_order: number
 }
 
 type ViewMode = "list" | "form"
@@ -121,6 +172,7 @@ type FormState = {
   categoryTh: string
   subcategory: string
   subcategoryTh: string
+  // variant editor fields (act as editor for selected row)
   pattern: string
   patternTh: string
   size: string
@@ -139,6 +191,9 @@ type FormState = {
   costPrice: string
   stock: string
   status: "active" | "draft"
+  // variant list
+  variants: VariantDraft[]
+  editingVariantKey: string | null
   imageFile: File | null
   imagePreview: string
 }
@@ -171,15 +226,7 @@ function luminance(hex: string): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255
 }
 
-const BLANK_FORM: FormState = {
-  name: "",
-  nameTh: "",
-  desc: "",
-  descTh: "",
-  category: "shirt",
-  categoryTh: "เชิ้ต",
-  subcategory: "oxford",
-  subcategoryTh: "ออกซ์ฟอร์ด",
+const BLANK_VARIANT_EDITOR = {
   pattern: "solid",
   patternTh: "เรียบ",
   size: "M",
@@ -197,7 +244,21 @@ const BLANK_FORM: FormState = {
   price: "",
   costPrice: "",
   stock: "",
-  status: "active",
+  status: "active" as const,
+}
+
+const BLANK_FORM: FormState = {
+  name: "",
+  nameTh: "",
+  desc: "",
+  descTh: "",
+  category: "shirt",
+  categoryTh: "เชิ้ต",
+  subcategory: "oxford",
+  subcategoryTh: "ออกซ์ฟอร์ด",
+  ...BLANK_VARIANT_EDITOR,
+  variants: [],
+  editingVariantKey: null,
   imageFile: null,
   imagePreview: "",
 }
@@ -235,6 +296,11 @@ export default function AdminProductsPage() {
 
   const [toast, setToast] = useState(false)
 
+  const [productImages, setProductImages] = useState<ProductImage[]>([])
+  const [imgUploadColor, setImgUploadColor] = useState("")
+  const [imgUploadFile, setImgUploadFile] = useState<File | null>(null)
+  const [isUploadingImg, setIsUploadingImg] = useState(false)
+
   useEffect(() => {
     if (!isAdmin) router.push("/login")
   }, [isAdmin, router])
@@ -255,6 +321,13 @@ export default function AdminProductsPage() {
       .catch(console.error)
   }
 
+  const fetchProductImages = (productId: string) => {
+    fetch(`http://localhost:5000/products/${encodeURIComponent(productId)}/images`)
+      .then((r) => r.json())
+      .then((data: ProductImage[]) => setProductImages(data))
+      .catch(console.error)
+  }
+
   const handleLogout = () => {
     localStorage.removeItem("user")
     router.push("/login")
@@ -271,48 +344,60 @@ export default function AdminProductsPage() {
 
   const openEdit = (p: ProductRow) => {
     const cat = normCategory(p.category)
-    const isUpper = isUpperCat(cat)
-    const sizes = isUpper ? UPPER_SIZES : PANT_SIZES
-    const matched = PRESET_COLORS.find(
-      (c) => c.name.toLowerCase() === (p.color || "").toLowerCase()
-    )
-    const catObj  = CATEGORIES.find((c) => c.value === cat)
-    const subVal  = p.sub_category || (SUBCATS[cat]?.[0]?.value ?? "")
-    const subObj  = (SUBCATS[cat] ?? []).find((s) => s.value === subVal)
-    const patVal  = p.pattern || "solid"
-    const patObj  = PATTERNS.find((pt) => pt.value === patVal)
+    const catObj = CATEGORIES.find((c) => c.value === cat)
+    const subVal = p.sub_category || (SUBCATS[cat]?.[0]?.value ?? "")
+    const subObj = (SUBCATS[cat] ?? []).find((s) => s.value === subVal)
+
+    const variantDrafts: VariantDraft[] = (p.variants ?? []).map((v) => {
+      const matched   = PRESET_COLORS.find((c) => c.name.toLowerCase() === (v.color || "").toLowerCase())
+      const patObj    = PATTERNS.find((pt) => pt.value === (v.pattern || "solid"))
+      const sleeveObj = SLEEVE_OPTIONS.find((s) => s.value === (v.sleeve || "long"))
+      const collarObj = COLLAR_OPTIONS.find((c) => c.value === (v.collar || "spread"))
+      return {
+        _key: v.variant_id,
+        variantId: v.variant_id,
+        size: v.size || "M",
+        colorHex: matched?.hex ?? "#1f2a44",
+        colorName: v.color || "",
+        colorNameTh: v.color_th || "",
+        pattern: v.pattern || "solid",
+        patternTh: patObj?.labelTh ?? "",
+        chestMin: String(v.chest_min ?? ""),
+        chestMax: String(v.chest_max ?? ""),
+        waistMin: String(v.waist_min ?? ""),
+        waistMax: String(v.waist_max ?? ""),
+        sleeve: v.sleeve || "long",
+        sleeveTh: sleeveObj?.labelTh ?? "",
+        collar: v.collar || "spread",
+        collarTh: collarObj?.labelTh ?? "",
+        price: String(v.price ?? ""),
+        costPrice: String(v.cost_price ?? ""),
+        stock: String(v.stock ?? ""),
+        isActive: v.is_active !== false,
+      }
+    })
+
     setForm({
+      ...BLANK_FORM,
       name: p.product_name || "",
-      nameTh: "",
+      nameTh: p.product_name_th || "",
       desc: p.description || "",
-      descTh: "",
+      descTh: p.description_th || "",
       category: cat,
       categoryTh: catObj?.labelTh ?? "",
       subcategory: subVal,
       subcategoryTh: subObj?.labelTh ?? "",
-      pattern: patVal,
-      patternTh: patObj?.labelTh ?? "",
-      size: sizes.includes(p.size) ? p.size : sizes[0],
-      colorHex: matched?.hex ?? "#1f2a44",
-      colorName: matched?.name ?? p.color ?? "",
-      colorNameTh: matched?.nameTh ?? "",
-      chestMin: "",
-      chestMax: "",
-      sleeve: "",
-      sleeveTh: "",
-      collar: "",
-      collarTh: "",
-      waistMin: "",
-      waistMax: "",
-      price: String(p.price ?? ""),
-      costPrice: "",
-      stock: String(p.stock ?? ""),
-      status: "active",
       imageFile: null,
       imagePreview: p.image_url ?? "",
+      variants: variantDrafts,
+      editingVariantKey: null,
     })
     setEditingProduct(p)
     setDeleteTarget(null)
+    setProductImages([])
+    setImgUploadFile(null)
+    setImgUploadColor("")
+    fetchProductImages(p.product_id)
     setView("form")
   }
 
@@ -320,6 +405,9 @@ export default function AdminProductsPage() {
     setView("list")
     setEditingProduct(null)
     setDeleteTarget(null)
+    setProductImages([])
+    setImgUploadFile(null)
+    setImgUploadColor("")
   }
 
   // ── form helpers ──────────────────────────────────────────────────────────
@@ -373,6 +461,79 @@ export default function AdminProductsPage() {
     setForm((f) => ({ ...f, collar: val, collarTh: obj?.labelTh ?? "" }))
   }
 
+  // ── variant draft handlers ────────────────────────────────────────────────
+
+  const handleSaveVariantRow = () => {
+    const key = form.editingVariantKey ?? String(Date.now() + Math.random())
+    const draft: VariantDraft = {
+      _key: key,
+      variantId: form.editingVariantKey
+        ? (form.variants.find((v) => v._key === form.editingVariantKey)?.variantId ?? null)
+        : null,
+      size: form.size,
+      colorHex: form.colorHex,
+      colorName: form.colorName,
+      colorNameTh: form.colorNameTh,
+      pattern: form.pattern,
+      patternTh: form.patternTh,
+      chestMin: form.chestMin,
+      chestMax: form.chestMax,
+      waistMin: form.waistMin,
+      waistMax: form.waistMax,
+      sleeve: form.sleeve,
+      sleeveTh: form.sleeveTh,
+      collar: form.collar,
+      collarTh: form.collarTh,
+      price: form.price,
+      costPrice: form.costPrice,
+      stock: form.stock,
+      isActive: form.status === "active",
+    }
+    setForm((f) => ({
+      ...f,
+      variants: f.editingVariantKey
+        ? f.variants.map((v) => (v._key === f.editingVariantKey ? draft : v))
+        : [...f.variants, draft],
+      editingVariantKey: null,
+      ...BLANK_VARIANT_EDITOR,
+    }))
+  }
+
+  const handleEditVariantRow = (key: string) => {
+    const v = form.variants.find((r) => r._key === key)
+    if (!v) return
+    setForm((f) => ({
+      ...f,
+      editingVariantKey: key,
+      size: v.size,
+      colorHex: v.colorHex,
+      colorName: v.colorName,
+      colorNameTh: v.colorNameTh,
+      pattern: v.pattern,
+      patternTh: v.patternTh,
+      chestMin: v.chestMin,
+      chestMax: v.chestMax,
+      waistMin: v.waistMin,
+      waistMax: v.waistMax,
+      sleeve: v.sleeve,
+      sleeveTh: v.sleeveTh,
+      collar: v.collar,
+      collarTh: v.collarTh,
+      price: v.price,
+      costPrice: v.costPrice,
+      stock: v.stock,
+      status: v.isActive ? "active" : "draft",
+    }))
+  }
+
+  const handleRemoveVariantRow = (key: string) => {
+    setForm((f) => ({ ...f, variants: f.variants.filter((v) => v._key !== key) }))
+  }
+
+  const handleAddVariantRow = () => {
+    setForm((f) => ({ ...f, editingVariantKey: null, ...BLANK_VARIANT_EDITOR }))
+  }
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -390,47 +551,124 @@ export default function AdminProductsPage() {
     setForm((f) => ({ ...f, colorHex: c.hex, colorName: c.name, colorNameTh: c.nameTh }))
   }
 
+  // ── product image handlers ────────────────────────────────────────────────
+
+  const handleImageUpload = async () => {
+    if (!editingProduct || !imgUploadFile || isUploadingImg) return
+    setIsUploadingImg(true)
+    const fd = new FormData()
+    fd.append("image", imgUploadFile)
+    if (imgUploadColor) fd.append("color", imgUploadColor)
+    try {
+      const res = await fetch(
+        `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images`,
+        { method: "POST", body: fd }
+      )
+      if (!res.ok) { alert("อัพโหลดไม่สำเร็จ"); return }
+      setImgUploadFile(null)
+      setImgUploadColor("")
+      fetchProductImages(editingProduct.product_id)
+    } catch {
+      alert("อัพโหลดไม่สำเร็จ")
+    } finally {
+      setIsUploadingImg(false)
+    }
+  }
+
+  const handleDeleteImage = async (imageId: number) => {
+    if (!editingProduct) return
+    if (!confirm("ลบรูปนี้?")) return
+    await fetch(
+      `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}`,
+      { method: "DELETE" }
+    )
+    fetchProductImages(editingProduct.product_id)
+  }
+
+  const handleSetPrimaryImage = async (imageId: number) => {
+    if (!editingProduct) return
+    await fetch(
+      `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}/primary`,
+      { method: "PUT" }
+    )
+    fetchProductImages(editingProduct.product_id)
+  }
+
   // ── save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     if (isSubmitting) return
+
+    // Auto-commit the editor if price is filled but user forgot to click "เพิ่มไซส์นี้ลงรายการ"
+    let variantsToSave = [...form.variants]
+    if (form.price !== "") {
+      const key = form.editingVariantKey ?? String(Date.now() + Math.random())
+      const pending: VariantDraft = {
+        _key: key,
+        variantId: form.editingVariantKey
+          ? (form.variants.find((v) => v._key === form.editingVariantKey)?.variantId ?? null)
+          : null,
+        size: form.size, colorHex: form.colorHex, colorName: form.colorName,
+        colorNameTh: form.colorNameTh, pattern: form.pattern, patternTh: form.patternTh,
+        chestMin: form.chestMin, chestMax: form.chestMax,
+        waistMin: form.waistMin, waistMax: form.waistMax,
+        sleeve: form.sleeve, sleeveTh: form.sleeveTh,
+        collar: form.collar, collarTh: form.collarTh,
+        price: form.price, costPrice: form.costPrice, stock: form.stock,
+        isActive: form.status === "active",
+      }
+      if (form.editingVariantKey) {
+        variantsToSave = variantsToSave.map((v) =>
+          v._key === form.editingVariantKey ? pending : v
+        )
+      } else {
+        variantsToSave = [...variantsToSave, pending]
+      }
+    }
+
+    if (variantsToSave.length === 0) {
+      alert("กรุณาเพิ่มอย่างน้อย 1 ไซส์/สี ก่อนบันทึก")
+      return
+    }
     const fd = new FormData()
     fd.append("product_name", form.name)
     fd.append("product_name_th", form.nameTh)
     fd.append("category", form.category)
+    fd.append("category_th", form.categoryTh)
     fd.append("sub_category", form.subcategory)
+    fd.append("sub_category_th", form.subcategoryTh)
     fd.append("description", form.desc)
     fd.append("description_th", form.descTh)
-    fd.append("size", form.size)
-    fd.append("color", form.colorName)
-    fd.append("pattern", form.pattern)
-    fd.append("price", form.price)
-    fd.append("stock", form.stock)
     if (form.imageFile) fd.append("image", form.imageFile)
-    if (form.colorNameTh)    fd.append("color_th",        form.colorNameTh)
-    if (form.costPrice)      fd.append("cost_price",      form.costPrice)
-    if (form.categoryTh)     fd.append("category_th",     form.categoryTh)
-    if (form.subcategoryTh)  fd.append("sub_category_th", form.subcategoryTh)
-    if (form.patternTh)      fd.append("pattern_th",      form.patternTh)
-    fd.append("is_active", form.status === "active" ? "true" : "false")
-    if (isUpper) {
-      if (form.chestMin) fd.append("chest_min", form.chestMin)
-      if (form.chestMax) fd.append("chest_max", form.chestMax)
-      fd.append("sleeve", form.sleeve)
-      fd.append("collar", form.collar)
-      if (form.sleeveTh) fd.append("sleeve_th", form.sleeveTh)
-      if (form.collarTh) fd.append("collar_th", form.collarTh)
-    } else {
-      if (form.waistMin) fd.append("waist_min", form.waistMin)
-      if (form.waistMax) fd.append("waist_max", form.waistMax)
-    }
+    fd.append("variants", JSON.stringify(
+      variantsToSave.map((v) => ({
+        variant_id: v.variantId ?? undefined,
+        size: v.size,
+        color: v.colorName,
+        color_th: v.colorNameTh || null,
+        pattern: v.pattern || null,
+        pattern_th: v.patternTh || null,
+        chest_min: v.chestMin || null,
+        chest_max: v.chestMax || null,
+        waist_min: v.waistMin || null,
+        waist_max: v.waistMax || null,
+        sleeve: v.sleeve || null,
+        sleeve_th: v.sleeveTh || null,
+        collar: v.collar || null,
+        collar_th: v.collarTh || null,
+        price: v.price,
+        cost_price: v.costPrice || null,
+        stock: v.stock,
+        is_active: v.isActive,
+      }))
+    ))
 
     try {
       setIsSubmitting(true)
       let res: Response
       if (editingProduct) {
         res = await fetch(
-          `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/${encodeURIComponent(editingProduct.variant_id)}`,
+          `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}`,
           { method: "PUT", body: fd }
         )
       } else {
@@ -743,9 +981,13 @@ export default function AdminProductsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredProducts.map((product) => (
+                      {filteredProducts.map((product) => {
+                        const firstV = product.variants?.[0]
+                        const totalStock = (product.variants ?? []).reduce((s, v) => s + Number(v.stock), 0)
+                        const variantCount = product.variants?.length ?? 0
+                        return (
                         <tr
-                          key={product.variant_id}
+                          key={product.product_id}
                           className="border-b hover:bg-muted/30"
                         >
                           <td className="px-4 py-3">
@@ -767,24 +1009,28 @@ export default function AdminProductsPage() {
                           <td className="px-4 py-3 text-sm capitalize">
                             {product.category}
                           </td>
-                          <td className="px-4 py-3 text-sm">{product.size}</td>
-                          <td className="px-4 py-3 text-sm">{product.color}</td>
                           <td className="px-4 py-3 text-sm">
-                            ฿{Number(product.price).toLocaleString()}
+                            {variantCount} ไซส์/สี
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {firstV?.color ?? "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {firstV ? `฿${Number(firstV.price).toLocaleString()}` : "—"}
                           </td>
                           <td className="px-4 py-3 text-sm">
                             <span
                               style={{
                                 fontWeight: 600,
                                 color:
-                                  Number(product.stock) === 0
+                                  totalStock === 0
                                     ? "#dc2626"
-                                    : Number(product.stock) <= 10
+                                    : totalStock <= 10
                                     ? "#d97706"
                                     : "#16a34a",
                               }}
                             >
-                              {product.stock}
+                              {totalStock}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -809,7 +1055,8 @@ export default function AdminProductsPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                       {filteredProducts.length === 0 && (
                         <tr>
                           <td
@@ -1313,11 +1560,97 @@ export default function AdminProductsPage() {
                     </div>
                   </section>
 
-                  {/* Variant attributes */}
+                  {/* Variant list */}
+                  <section style={sectionStyle}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>
+                          ไซส์ / สี ({form.variants.length} รายการ)
+                        </h2>
+                        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
+                          กำหนดราคาและสต็อกแยกต่อไซส์/สี
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddVariantRow}
+                        style={{
+                          height: 36, padding: "0 14px", borderRadius: 8,
+                          border: "1px solid #8b5e3c", background: "#fff",
+                          color: "#8b5e3c", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        + เพิ่มไซส์/สี
+                      </button>
+                    </div>
+
+                    {form.variants.length > 0 && (
+                      <div style={{ border: "1px solid #eceef2", borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                          <thead>
+                            <tr style={{ background: "#f9fafb", borderBottom: "1px solid #eceef2" }}>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>ไซส์</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สี</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>ราคา</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สต็อก</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สถานะ</th>
+                              <th style={{ padding: "8px 12px" }}></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {form.variants.map((v) => (
+                              <tr
+                                key={v._key}
+                                style={{
+                                  borderBottom: "1px solid #f1f2f5",
+                                  background: form.editingVariantKey === v._key ? "#fdf8f5" : "transparent",
+                                }}
+                              >
+                                <td style={{ padding: "8px 12px", fontWeight: 600 }}>{v.size}</td>
+                                <td style={{ padding: "8px 12px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span style={{ width: 14, height: 14, borderRadius: "50%", background: v.colorHex, border: "1px solid #dfe3ea", display: "inline-block", flexShrink: 0 }} />
+                                    {v.colorName}
+                                  </div>
+                                </td>
+                                <td style={{ padding: "8px 12px" }}>฿{Number(v.price || 0).toLocaleString()}</td>
+                                <td style={{ padding: "8px 12px" }}>{v.stock}</td>
+                                <td style={{ padding: "8px 12px" }}>
+                                  <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: v.isActive ? "#dcfce7" : "#f3f4f6", color: v.isActive ? "#16a34a" : "#6b7280" }}>
+                                    {v.isActive ? "Active" : "Draft"}
+                                  </span>
+                                </td>
+                                <td style={{ padding: "8px 12px" }}>
+                                  <div style={{ display: "flex", gap: 4 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditVariantRow(v._key)}
+                                      style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #dfe3ea", background: "#fff", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                                    >
+                                      แก้ไข
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveVariantRow(v._key)}
+                                      style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Variant editor */}
                   <section style={sectionStyle}>
                     <div style={{ marginBottom: 20 }}>
                       <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>
-                        This variant
+                        {form.editingVariantKey ? "แก้ไขไซส์/สี" : "เพิ่มไซส์/สี ใหม่"}
                       </h2>
                       <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
                         Size and color define this individual row. Each variant has its own stock.
@@ -1723,7 +2056,149 @@ export default function AdminProductsPage() {
                         </strong>
                       </span>
                     </div>
+
+                    {/* Save variant row button */}
+                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #f1f2f5" }}>
+                      <button
+                        type="button"
+                        onClick={handleSaveVariantRow}
+                        style={{
+                          height: 40, padding: "0 20px", borderRadius: 10,
+                          border: "none", background: "#8b5e3c", color: "#fff",
+                          fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        {form.editingVariantKey ? "อัพเดทไซส์นี้" : "เพิ่มไซส์นี้ลงรายการ"}
+                      </button>
+                      {form.editingVariantKey && (
+                        <button
+                          type="button"
+                          onClick={() => setForm((f) => ({ ...f, editingVariantKey: null, ...BLANK_VARIANT_EDITOR }))}
+                          style={{
+                            height: 40, padding: "0 16px", borderRadius: 10, marginLeft: 8,
+                            border: "1px solid #dfe3ea", background: "#fff",
+                            color: "#374151", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          ยกเลิก
+                        </button>
+                      )}
+                    </div>
                   </section>
+                  {/* Product images — edit mode only */}
+                  {editingProduct && (
+                    <section style={sectionStyle}>
+                      <div style={{ marginBottom: 20 }}>
+                        <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>รูปภาพสินค้า</h2>
+                        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
+                          รูปแยกตามสี — ลูกค้าเลือกสีแล้วรูปเปลี่ยน (★ = รูปหน้าปก)
+                        </p>
+                      </div>
+
+                      {/* Images grouped by color */}
+                      {(() => {
+                        const groups = productImages.reduce<Record<string, ProductImage[]>>((acc, img) => {
+                          const key = img.color ?? ""
+                          if (!acc[key]) acc[key] = []
+                          acc[key].push(img)
+                          return acc
+                        }, {})
+                        const entries = Object.entries(groups)
+                        if (entries.length === 0) {
+                          return <p style={{ fontSize: 12.5, color: "#9aa0ac", margin: "0 0 16px" }}>ยังไม่มีรูปภาพ</p>
+                        }
+                        return entries.map(([color, imgs]) => (
+                          <div key={color} style={{ marginBottom: 18 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#525a68", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                              {color ? (
+                                <>
+                                  <span style={{
+                                    width: 12, height: 12, borderRadius: "50%",
+                                    background: PRESET_COLORS.find((c) => c.name.toLowerCase() === color.toLowerCase())?.hex ?? "#ccc",
+                                    border: "1px solid #dfe3ea", display: "inline-block", flexShrink: 0,
+                                  }} />
+                                  {color}
+                                </>
+                              ) : "ไม่มีสี (ทั่วไป)"}
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                              {imgs.map((img) => (
+                                <div key={img.image_id} style={{ position: "relative", width: 90, height: 90 }}>
+                                  <img
+                                    src={img.image_url}
+                                    alt={img.alt_text ?? ""}
+                                    style={{
+                                      width: 90, height: 90, objectFit: "cover", borderRadius: 8,
+                                      border: img.is_primary ? "2.5px solid #8b5e3c" : "1.5px solid #eceef2",
+                                    }}
+                                  />
+                                  <div style={{ position: "absolute", top: 3, right: 3, display: "flex", gap: 3 }}>
+                                    {!img.is_primary && (
+                                      <button
+                                        type="button"
+                                        title="ตั้งเป็นรูปหน้าปก"
+                                        onClick={() => handleSetPrimaryImage(img.image_id)}
+                                        style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(255,255,255,.92)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                      >★</button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteImage(img.image_id)}
+                                      style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(255,255,255,.92)", color: "#dc2626", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                    >×</button>
+                                  </div>
+                                  {img.is_primary && (
+                                    <div style={{ position: "absolute", bottom: 3, left: 3, fontSize: 9, fontWeight: 700, background: "#8b5e3c", color: "#fff", padding: "1px 5px", borderRadius: 3, letterSpacing: "0.03em" }}>
+                                      PRIMARY
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      })()}
+
+                      {/* Upload row */}
+                      <div style={{ paddingTop: 16, borderTop: "1px solid #f1f2f5", display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+                        <div>
+                          <label style={labelStyle}>สีที่ต้องการ</label>
+                          <select
+                            value={imgUploadColor}
+                            onChange={(e) => setImgUploadColor(e.target.value)}
+                            style={{ ...selectStyle, width: 160, height: 38 }}
+                          >
+                            <option value="">ไม่มีสี (ทั่วไป)</option>
+                            {Array.from(new Set(form.variants.map((v) => v.colorName).filter(Boolean))).map((color) => (
+                              <option key={color} value={color}>{color}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>เลือกรูป</label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => setImgUploadFile(e.target.files?.[0] ?? null)}
+                            style={{ ...inputStyle, height: 38, paddingTop: 9, fontSize: 13 }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleImageUpload}
+                          disabled={!imgUploadFile || isUploadingImg}
+                          style={{
+                            height: 38, padding: "0 18px", borderRadius: 10, border: "none",
+                            background: (!imgUploadFile || isUploadingImg) ? "#c4a882" : "#8b5e3c",
+                            color: "#fff", fontSize: 13, fontWeight: 600,
+                            cursor: (!imgUploadFile || isUploadingImg) ? "default" : "pointer",
+                          }}
+                        >
+                          {isUploadingImg ? "กำลังอัพโหลด…" : "อัพโหลด"}
+                        </button>
+                      </div>
+                    </section>
+                  )}
                 </div>
 
                 {/* ── RIGHT RAIL ── */}
