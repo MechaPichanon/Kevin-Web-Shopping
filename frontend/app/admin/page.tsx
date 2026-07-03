@@ -179,7 +179,7 @@ export default function AdminDashboard() {
 
       {/* SIDEBAR */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${
+        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -264,7 +264,7 @@ export default function AdminDashboard() {
       {/* MAIN */}
       <div className="flex flex-1 flex-col">
         {/* HEADER */}
-        <header className="sticky top-0 z-30 flex h-16 items-center border-b border-[#e6ddd4] bg-white px-4 lg:px-6">
+        <header className="sticky top-20 z-30 flex h-16 border-b border-[#e6ddd4] bg-white px-4 lg:px-6">
           <button
             className="mr-4 lg:hidden"
             onClick={() => setIsSidebarOpen(true)}

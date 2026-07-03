@@ -1,7 +1,12 @@
 "use client";
 import { useState } from "react";
 import Navbarsub from "@/components/navbarsub"
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff} from "lucide-react"
+
 export default function SignupPage() {
+    const router = useRouter();
+    const [showPassword, setShowPassword] = useState(false)
     const [form, setForm] = useState({
         username: "",
         email: "",
@@ -13,18 +18,35 @@ export default function SignupPage() {
     };
 
     const handleSubmit = async () => {
-        const res = await fetch("http://localhost:5000/auth/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(form),
-        });
+        try {
+            const res = await fetch("http://localhost:5000/auth/register", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(form),
+            });
 
-        const data = await res.json();
-        alert(data.message || data.error);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.error || "สมัครสมาชิกไม่สำเร็จ");
+                return;
+            }
+
+            alert("สมัครสมาชิกสำเร็จ");
+
+            // ไปหน้า Login
+            router.push("/login");
+
+        } catch (err) {
+            console.error(err);
+            alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์");
+        }
     };
 
     return (
-      <div style={styles.page}>
+        <div style={styles.page}>
             <div style={styles.card}>
                 <h1 style={styles.title}>Sign Up</h1>
 
@@ -49,14 +71,27 @@ export default function SignupPage() {
                             style={styles.input} />
                     </div>
 
-                    <div>
+                    <div className="relative">
                         <label style={styles.label}>Password</label>
                         <input
                             name="password"
-                            type="password"
+                            type={showPassword ? "text" : "password"}
                             placeholder="Enter your password"
+                            value={form.password}
                             onChange={handleChange}
-                            style={styles.input} />
+                            style={styles.input}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 bottom-3 text-muted-foreground hover:text-foreground"
+                        >
+                            {showPassword ? (
+                                <EyeOff className="h-5 w-5" />
+                            ) : (
+                                <Eye className="h-5 w-5" />
+                            )}
+                        </button>
                     </div>
 
                     <button onClick={handleSubmit} style={styles.button}>
