@@ -4,11 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Thai clothing e-commerce platform (thesis project) with an AI product chatbot. Four services run together via Docker Compose: a Next.js storefront, a Node.js/Express auth API, a Python/FastAPI chatbot, and PostgreSQL 15 with the pgvector extension. Ollama runs on the **host machine** (not in Docker) and serves both the chat LLM (`qwen2.5:7b`) and the embedding model (`bge-m3`).
+Thai clothing e-commerce platform (thesis project) with an AI product chatbot and image search. Four services run together via Docker Compose: a Next.js storefront, a Node.js/Express auth API, a Python/FastAPI chatbot, and PostgreSQL 15 with the pgvector extension. Ollama runs on the **host machine** (not in Docker) and serves the embedding model (`bge-m3`). Chat LLM is planned to migrate from Ollama `qwen2.5:7b` → **OpenRouter API** (better Thai language quality, no local GPU required).
 
 ## project duty
 
 this is duo work project amd I'm take care of chatbot, image search and database structure while my friend care of frontend and web system if can, try not to change the part that didn't in my side.
+
+## project scale
+this is thesis bachelor level and have to full deploy demo to show. and has to make a paper for thesis so make in mind that not too over than bachelor level if over tell me i'll check first.
 
 ## Frontend change rule
 
@@ -90,8 +93,11 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
 ### Schema files
 
 - `postgres/init/01_schema.sql` — auto-runs on fresh volume (complete schema, all 14 tables)
-- `postgres/migrations/` — numbered incremental migrations (`002_` through `005_`)
+- `postgres/migrations/` — numbered incremental migrations (`002_` through `008_`)
   - `005_new_ecommerce_schema.sql` — migrates an existing DB from old schema → new schema
+  - `006_add_thai_fields.sql` — Thai name/description columns + store_policies table
+  - `007_add_thai_variant_fields.sql` — Thai columns for pattern, sleeve, collar
+  - `008_color_images.sql` — color field on product_images + unique primary index
 
 ### users table — backward-compat note
 
@@ -103,9 +109,9 @@ The new `users` table keeps those exact names:
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/006_description.sql` (next number is `006`).
+1. Create `postgres/migrations/009_description.sql` (next number is `009`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/006_description.sql`
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/009_description.sql`
 4. Mirror the change in `postgres/init/01_schema.sql`.
 
 ### Full seed (fresh Docker volume)
@@ -128,6 +134,9 @@ psql "$DATABASE_URL" -f backend/scripts/seed_database.sql
 
 ```bash
 psql "$DATABASE_URL" -f postgres/migrations/005_new_ecommerce_schema.sql
+psql "$DATABASE_URL" -f postgres/migrations/006_add_thai_fields.sql
+psql "$DATABASE_URL" -f postgres/migrations/007_add_thai_variant_fields.sql
+psql "$DATABASE_URL" -f postgres/migrations/008_color_images.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -196,21 +205,35 @@ Vector/lexical weights and the clothing-type penalty are hardcoded in `backend/c
 
 ## Image search
 
-**DB table exists; ingest pipeline not yet implemented.**
+**DB table exists; backend pipeline in progress.**
 The `product_image_embeddings` table (vector(512)) is ready in the schema.
 
-To complete implementation:
-- Add a FastAPI multipart upload endpoint that embeds query image with CLIP → queries `product_image_embeddings` via `<=>` cosine distance
-- Populate `product_images` rows (real URLs) and run CLIP ingest to fill `product_image_embeddings`
-- `frontend/app/api/image-search/route.ts` proxying to FastAPI (mirror `app/api/chat/route.ts`)
+### Implementation plan
+- **Model:** `clip-ViT-B-32` via `sentence-transformers` (512-dim, matches schema)
+- **New file:** `backend/chatbot/image_search.py` — lazy-loads CLIP model, `embed_image()`, `search_by_image()`
+- **New endpoints in `main.py`:**
+  - `POST /image-search` — multipart image upload → returns ranked product matches
+  - `GET /image-search/status` — reports model_loaded + embeddings_in_db count
+- **Backfill script:** `backend/scripts/backfill_image_embeddings.py` — downloads each `product_images.image_url`, computes CLIP embedding, writes to `product_image_embeddings`
+- **Frontend API route:** `frontend/app/api/image-search/route.ts` (friend's side — mirrors `app/api/chat/route.ts`)
 
-Query pattern (once embeddings are filled):
+### Query pattern
 ```sql
-SELECT pi.product_id, pi.image_url, pie.embedding <=> $1 AS distance
+SELECT pie.product_id, p.product_name, pi.image_url,
+       1 - (pie.embedding <=> $1::vector(512)) AS similarity
 FROM product_image_embeddings pie
-JOIN product_images pi ON pi.image_id = pie.image_id
-ORDER BY distance
+JOIN product_images pi ON pie.image_id = pi.image_id
+JOIN products p        ON pie.product_id = p.product_id
+WHERE pie.embedding IS NOT NULL AND p.is_active = TRUE
+ORDER BY pie.embedding <=> $1::vector(512)
 LIMIT 10;
+```
+
+### Dependencies to add to `requirements.txt`
+```
+sentence-transformers
+Pillow
+python-multipart
 ```
 
 ## Key env vars
@@ -218,8 +241,9 @@ LIMIT 10;
 ```
 DATABASE_URL=postgresql://<user>:<pass>@localhost:5432/<db>
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_CHAT_MODEL=qwen2.5:7b
-OLLAMA_EMBED_MODEL=bge-m3
+OLLAMA_CHAT_MODEL=qwen2.5:7b        # will be replaced by OpenRouter — keep for local dev
+OLLAMA_EMBED_MODEL=bge-m3           # stays on Ollama — do not change without regenerating embeddings
+OPENROUTER_API_KEY=...              # planned: replaces OLLAMA_CHAT_MODEL for production chat
 RAG_TOP_K=3
 RAG_MIN_SCORE=0.20
 JWT_SECRET=...
@@ -228,7 +252,7 @@ FASTAPI_BASE_URL=http://localhost:8000
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `006_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `009_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`
