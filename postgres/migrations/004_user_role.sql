@@ -4,7 +4,15 @@
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'customer';
 
-ALTER TABLE users
-  ADD CONSTRAINT IF NOT EXISTS users_role_check
-  CHECK (role IN ('admin', 'staff', 'customer'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check'
+  ) THEN
+    ALTER TABLE users
+      ADD CONSTRAINT users_role_check
+      CHECK (role IN ('admin', 'staff', 'customer'));
+  END IF;
+END
+$$;
 
