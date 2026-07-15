@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { CheckCircle2, ArrowLeft, CreditCard, Truck, ShoppingBag } from "lucide-react"
+import { CheckCircle2, ArrowLeft, CreditCard, Truck, ShoppingBag, QrCode } from "lucide-react"
 import Footer from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,18 +12,20 @@ import { useCart } from "@/lib/cart-context"
 import { useRouter } from "next/navigation"
 import { getToken } from "@/lib/auth"
 
+
 const paymentMethods = [
-  { id: "cod", name: "เก็บเงินปลายทาง", icon: Truck },
-  { id: "card", name: "บัตรเครดิต/เดบิต", icon: CreditCard },
-  { id: "transfer", name: "โอนผ่านธนาคาร", icon: ShoppingBag },
+  { id: "promptpay", name: "พร้อมเพย์ (PromptPay)", icon: QrCode },
+
 ]
 
 export default function CheckoutPage() {
   const { items, totalItems, totalPrice, clearCart } = useCart()
   const router = useRouter()
+  const [slip, setSlip] = useState<string | null>(null)
+  const [slipError, setSlipError] = useState("")
   const [isComplete, setIsComplete] = useState(false)
   const [orderId, setOrderId] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState("cod")
+  const [paymentMethod, setPaymentMethod] = useState("promptpay")
   const [isLoading, setIsLoading] = useState(false)
   const [userId, setUserId] = useState<number | null>(null)
   const [form, setForm] = useState({
@@ -73,7 +75,22 @@ export default function CheckoutPage() {
 
   const shippingFee = totalPrice >= 1500 || totalPrice === 0 ? 0 : 50
   const grandTotal = totalPrice + shippingFee
-
+  const handleSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      setSlipError("กรุณาอัปโหลดไฟล์รูปภาพเท่านั้น")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSlipError("ขนาดไฟล์ต้องไม่เกิน 5MB")
+      return
+    }
+    setSlipError("")
+    const reader = new FileReader()
+    reader.onload = () => setSlip(reader.result as string)
+    reader.readAsDataURL(file)
+  }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -84,7 +101,6 @@ export default function CheckoutPage() {
     }
 
     setIsLoading(true)
-
     try {
       const payload = {
         user_id: userId,
@@ -125,7 +141,7 @@ export default function CheckoutPage() {
   if (isComplete) {
     return (
       <div className="flex min-h-screen flex-col">
-        
+
         <main className="flex flex-1 items-center justify-center px-4 py-16">
           <div className="flex max-w-md flex-col items-center text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
@@ -174,7 +190,7 @@ export default function CheckoutPage() {
   if (items.length === 0) {
     return (
       <div className="flex min-h-screen flex-col">
-        
+
         <main className="flex flex-1 items-center justify-center px-4 py-16">
           <div className="flex flex-col items-center text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
@@ -196,7 +212,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      
+
       <main className="flex-1">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <Link
@@ -287,18 +303,16 @@ export default function CheckoutPage() {
                         key={method.id}
                         type="button"
                         onClick={() => setPaymentMethod(method.id)}
-                        className={`flex items-center gap-3 rounded-lg border p-4 text-left transition-colors ${
-                          paymentMethod === method.id
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-muted"
-                        }`}
+                        className={`flex items-center gap-3 rounded-lg border p-4 text-left transition-colors ${paymentMethod === method.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted"
+                          }`}
                       >
                         <method.icon className="h-5 w-5 text-foreground" />
                         <span className="font-medium text-foreground">{method.name}</span>
                         <span
-                          className={`ml-auto flex h-5 w-5 items-center justify-center rounded-full border ${
-                            paymentMethod === method.id ? "border-primary" : "border-border"
-                          }`}
+                          className={`ml-auto flex h-5 w-5 items-center justify-center rounded-full border ${paymentMethod === method.id ? "border-primary" : "border-border"
+                            }`}
                         >
                           {paymentMethod === method.id && (
                             <span className="h-2.5 w-2.5 rounded-full bg-primary" />

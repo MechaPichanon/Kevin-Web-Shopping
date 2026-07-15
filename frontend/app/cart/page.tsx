@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { useCart } from "@/lib/cart-context"
 type CartItem = {
     cart_item_id: number;
     quantity: number;
@@ -40,11 +43,46 @@ export default function CartPage() {
         } catch (err) {
             console.error("Load cart error:", err);
         }
-    };
 
+    };
     useEffect(() => {
         loadCart();
     }, []);
+    const removeItem = async (
+        cart_item_id: number
+    ) => {
+        try {
+            const res = await fetch(
+                `http://localhost:5000/cart/${cart_item_id}`,
+                {
+                    method: "DELETE",
+                }
+            )
+
+            if (res.ok) {
+                loadCart()
+            }
+        } catch (err) {
+            console.error(err)
+        }
+    }
+    const updateQuantity = async (
+        cart_item_id: number,
+        quantity: number
+    ) => {
+        await fetch(
+            `http://localhost:5000/cart/${cart_item_id}`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ quantity }),
+            }
+        );
+
+        loadCart();
+    };
 
     const totalPrice = items.reduce(
         (sum, item) =>
@@ -108,15 +146,43 @@ export default function CartPage() {
                                     <h3 className="font-bold">
                                         {item.product_name}
                                     </h3>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        onClick={() => removeItem(item.cart_item_id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <div className="mt-3 flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => updateQuantity(item.cart_item_id,
+                                                item.quantity - 1)}
+                                        >
+                                            <Minus className="h-3 w-3" />
+                                        </Button>
+                                        <span className="w-8 text-center font-medium">{item.quantity}</span>
 
-                                    <p>
-                                        จำนวน :
-                                        {item.quantity}
-                                    </p>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => updateQuantity(item.cart_item_id,
+                                                item.quantity + 1)}
+                                        >
+                                            <Plus className="h-3 w-3" />
+                                        </Button>
+
+                                    </div>
 
                                     <p>
                                         {formatPrice(
-                                            Number(item.price)
+                                            Number(item.price * item.quantity)
                                         )}
                                     </p>
                                 </div>

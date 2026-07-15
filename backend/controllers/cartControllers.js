@@ -101,8 +101,114 @@ const getCart = async (req, res) => {
     console.log(err);
   }
 };
+const updateCartQuantity = async (req, res) => {
+  try {
+    const { cart_item_id } = req.params;
+    const { quantity } = req.body;
 
+    if (quantity <= 0) {
+      await db.query(
+        `
+        DELETE FROM cart_items
+        WHERE cart_item_id = $1
+        `,
+        [cart_item_id]
+      );
+
+      return res.json({
+        message: "ลบสินค้าออกจากตะกร้าแล้ว",
+      });
+    }
+
+    await db.query(
+      `
+      UPDATE cart_items
+      SET quantity = $1
+      WHERE cart_item_id = $2
+      `,
+      [quantity, cart_item_id]
+    );
+
+    res.json({
+      message: "อัปเดตจำนวนสินค้าแล้ว",
+    });
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  }
+};
+const removeCartItem = async (req, res) => {
+  try {
+    const { cart_item_id } = req.params;
+
+    await db.query(
+      `
+      DELETE FROM cart_items
+      WHERE cart_item_id = $1
+      `,
+      [cart_item_id]
+    );
+
+    res.json({
+      message: "ลบสินค้าแล้ว",
+    });
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  }
+};
+const clearCart = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    // หา cart_id ของผู้ใช้
+    const cart = await db.query(
+      `
+      SELECT cart_id
+      FROM carts
+      WHERE user_id = $1
+      `,
+      [user_id]
+    );
+
+    if (cart.rows.length === 0) {
+      return res.status(404).json({
+        error: "ไม่พบตะกร้า",
+      });
+    }
+
+    const cartId = cart.rows[0].cart_id;
+
+    // ลบสินค้าทั้งหมดในตะกร้า
+    await db.query(
+      `
+      DELETE FROM cart_items
+      WHERE cart_id = $1
+      `,
+      [cartId]
+    );
+
+    res.json({
+      message: "ล้างตะกร้าเรียบร้อย",
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  }
+};
 module.exports = {
   addToCart,
   getCart,
+  updateCartQuantity,
+  removeCartItem,
+  clearCart,
 };
