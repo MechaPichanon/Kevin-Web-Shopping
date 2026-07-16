@@ -229,6 +229,8 @@ _DEFAULT_QUICK_REPLIES = ["ดูเสื้อ / Show shirts", "ดูกา�
 _CONVERSATIONS: Dict[str, Dict[str, Any]] = {}
 _MAX_CONVERSATIONS = 500
 _SESSION_TTL = 30 * 60  # 30 minutes — wipe last_products after this much inactivity
+_MAX_HISTORY_TURNS = 6       # keep last N user/assistant exchanges per conversation
+_MAX_HISTORY_CHARS = 300     # truncate each stored message to this many chars
 
 def _get_or_create_conversation_id(conversation_id: Optional[str]) -> str:
     cid = (conversation_id or "").strip()
@@ -264,6 +266,14 @@ def _is_followup_reference(message: str) -> bool:
 
     # Short follow-ups like "what about size?" often omit a product name.
     return len(tokens) <= 5
+
+def _append_history(session: Dict[str, Any], user_msg: str, assistant_msg: str) -> None:
+    def _clip(text: str) -> str:
+        text = (text or "").strip()
+        return text if len(text) <= _MAX_HISTORY_CHARS else text[:_MAX_HISTORY_CHARS].rstrip() + "…"
+    history = session.setdefault("history", [])
+    history.append({"user": _clip(user_msg), "assistant": _clip(assistant_msg)})
+    session["history"] = history[-_MAX_HISTORY_TURNS:]
 
 def format_products_for_prompt(products):
     """
@@ -512,6 +522,7 @@ def chat(request: ChatRequest):
     _now = time.time()
     if _now - _session.get("last_active", _now) > _SESSION_TTL:
         _session.pop("last_products", None)
+        _session.pop("history", None)
     _session["last_active"] = _now
 
     if is_smalltalk_strict(request.message):
@@ -650,6 +661,18 @@ def chat(request: ChatRequest):
             "NEVER use Chinese (中文), Japanese, Korean, Thai, or any other language."
         )
 
+    history_block = ""
+    _history = _CONVERSATIONS[conversation_id].get("history", [])
+    if _history:
+        _lines = []
+        for turn in _history:
+            _lines.append(f"User: {turn['user']}")
+            _lines.append(f"Assistant: {turn['assistant']}")
+        history_block = (
+            "Previous conversation (context only — do not repeat unless relevant "
+            "to resolving what the user is referring to):\n" + "\n".join(_lines) + "\n"
+        )
+
     prompt = f"""You are a helpful assistant for an online Thai clothing store.
 ABSOLUTE RULE: You must ONLY respond in Thai or English. NEVER use Chinese (中文), Japanese, Korean, or any other language under any circumstances.
 {lang_instruction}
@@ -674,6 +697,7 @@ Task:
 Product Data:
 {products_context}
 {extra_context}
+{history_block}
 User Question: {request.message}"""
     
     logger.info("sending prompt to LLM")
@@ -695,6 +719,9 @@ User Question: {request.message}"""
         reply = OUT_OF_SCOPE_RESPONSE
         intent = Intent.OUT_OF_SCOPE
         products = []
+
+    _append_history(_CONVERSATIONS[conversation_id], request.message, reply)
+
     # Build product cards for frontend rendering
     product_cards = []
     for p in products:

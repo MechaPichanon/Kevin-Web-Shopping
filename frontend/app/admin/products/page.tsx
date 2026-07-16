@@ -1560,92 +1560,6 @@ export default function AdminProductsPage() {
                     </div>
                   </section>
 
-                  {/* Variant list */}
-                  <section style={sectionStyle}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                      <div>
-                        <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>
-                          ไซส์ / สี ({form.variants.length} รายการ)
-                        </h2>
-                        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
-                          กำหนดราคาและสต็อกแยกต่อไซส์/สี
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleAddVariantRow}
-                        style={{
-                          height: 36, padding: "0 14px", borderRadius: 8,
-                          border: "1px solid #8b5e3c", background: "#fff",
-                          color: "#8b5e3c", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                        }}
-                      >
-                        + เพิ่มไซส์/สี
-                      </button>
-                    </div>
-
-                    {form.variants.length > 0 && (
-                      <div style={{ border: "1px solid #eceef2", borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                          <thead>
-                            <tr style={{ background: "#f9fafb", borderBottom: "1px solid #eceef2" }}>
-                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>ไซส์</th>
-                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สี</th>
-                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>ราคา</th>
-                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สต็อก</th>
-                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สถานะ</th>
-                              <th style={{ padding: "8px 12px" }}></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {form.variants.map((v) => (
-                              <tr
-                                key={v._key}
-                                style={{
-                                  borderBottom: "1px solid #f1f2f5",
-                                  background: form.editingVariantKey === v._key ? "#fdf8f5" : "transparent",
-                                }}
-                              >
-                                <td style={{ padding: "8px 12px", fontWeight: 600 }}>{v.size}</td>
-                                <td style={{ padding: "8px 12px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    <span style={{ width: 14, height: 14, borderRadius: "50%", background: v.colorHex, border: "1px solid #dfe3ea", display: "inline-block", flexShrink: 0 }} />
-                                    {v.colorName}
-                                  </div>
-                                </td>
-                                <td style={{ padding: "8px 12px" }}>฿{Number(v.price || 0).toLocaleString()}</td>
-                                <td style={{ padding: "8px 12px" }}>{v.stock}</td>
-                                <td style={{ padding: "8px 12px" }}>
-                                  <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: v.isActive ? "#dcfce7" : "#f3f4f6", color: v.isActive ? "#16a34a" : "#6b7280" }}>
-                                    {v.isActive ? "Active" : "Draft"}
-                                  </span>
-                                </td>
-                                <td style={{ padding: "8px 12px" }}>
-                                  <div style={{ display: "flex", gap: 4 }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleEditVariantRow(v._key)}
-                                      style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #dfe3ea", background: "#fff", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                                    >
-                                      แก้ไข
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveVariantRow(v._key)}
-                                      style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </section>
-
                   {/* Variant editor */}
                   <section style={sectionStyle}>
                     <div style={{ marginBottom: 20 }}>
@@ -2085,6 +1999,93 @@ export default function AdminProductsPage() {
                       )}
                     </div>
                   </section>
+
+                  {/* Variant list */}
+                  <section style={sectionStyle}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>
+                          ไซส์ / สี ({form.variants.length} รายการ)
+                        </h2>
+                        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
+                          กำหนดราคาและสต็อกแยกต่อไซส์/สี
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddVariantRow}
+                        style={{
+                          height: 36, padding: "0 14px", borderRadius: 8,
+                          border: "1px solid #8b5e3c", background: "#fff",
+                          color: "#8b5e3c", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        + เพิ่มไซส์/สี
+                      </button>
+                    </div>
+
+                    {form.variants.length > 0 && (
+                      <div style={{ border: "1px solid #eceef2", borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                          <thead>
+                            <tr style={{ background: "#f9fafb", borderBottom: "1px solid #eceef2" }}>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>ไซส์</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สี</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>ราคา</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สต็อก</th>
+                              <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#525a68" }}>สถานะ</th>
+                              <th style={{ padding: "8px 12px" }}></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {form.variants.map((v) => (
+                              <tr
+                                key={v._key}
+                                style={{
+                                  borderBottom: "1px solid #f1f2f5",
+                                  background: form.editingVariantKey === v._key ? "#fdf8f5" : "transparent",
+                                }}
+                              >
+                                <td style={{ padding: "8px 12px", fontWeight: 600 }}>{v.size}</td>
+                                <td style={{ padding: "8px 12px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span style={{ width: 14, height: 14, borderRadius: "50%", background: v.colorHex, border: "1px solid #dfe3ea", display: "inline-block", flexShrink: 0 }} />
+                                    {v.colorName}
+                                  </div>
+                                </td>
+                                <td style={{ padding: "8px 12px" }}>฿{Number(v.price || 0).toLocaleString()}</td>
+                                <td style={{ padding: "8px 12px" }}>{v.stock}</td>
+                                <td style={{ padding: "8px 12px" }}>
+                                  <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: v.isActive ? "#dcfce7" : "#f3f4f6", color: v.isActive ? "#16a34a" : "#6b7280" }}>
+                                    {v.isActive ? "Active" : "Draft"}
+                                  </span>
+                                </td>
+                                <td style={{ padding: "8px 12px" }}>
+                                  <div style={{ display: "flex", gap: 4 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditVariantRow(v._key)}
+                                      style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #dfe3ea", background: "#fff", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                                    >
+                                      แก้ไข
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveVariantRow(v._key)}
+                                      style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+
                   {/* Product images — edit mode only */}
                   {editingProduct && (
                     <section style={sectionStyle}>

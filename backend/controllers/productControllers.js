@@ -446,6 +446,70 @@ const deleteProduct = async (req, res) => {
   }
 }
 
+const getProductById = async (req, res) => {
+  try {
+    const { productId } = req.params
+
+    const result = await db.query(
+      `
+SELECT
+  p.product_id,
+  p.product_name,
+  p.product_name_th,
+  p.category,
+  p.category_th,
+  p.sub_category,
+  p.sub_category_th,
+  p.description,
+  p.description_th,
+  json_agg(
+    json_build_object(
+      'variant_id', v.variant_id,
+      'size',       v.size,
+      'color',      v.color,
+      'color_th',   v.color_th,
+      'pattern',    v.pattern,
+      'pattern_th', v.pattern_th,
+      'chest_min',  v.chest_min,
+      'chest_max',  v.chest_max,
+      'waist_min',  v.waist_min,
+      'waist_max',  v.waist_max,
+      'sleeve',     v.sleeve,
+      'sleeve_th',  v.sleeve_th,
+      'collar',     v.collar,
+      'collar_th',  v.collar_th,
+      'price',      v.price,
+      'stock',      v.stock
+    ) ORDER BY v.color, v.size
+  ) FILTER (WHERE v.variant_id IS NOT NULL) AS variants
+
+FROM products p
+
+LEFT JOIN variants v
+  ON v.product_id = p.product_id
+  AND v.is_active = TRUE
+
+WHERE p.product_id = $1
+  AND p.is_active = TRUE
+
+GROUP BY p.product_id
+      `,
+      [productId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" })
+    }
+
+    const row = result.rows[0]
+    row.variants = row.variants || []
+    res.json(row)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({ error: "Server error" })
+  }
+}
+
 const getCategories = async (req, res) => {
   try {
     const result = await db.query(`
@@ -490,8 +554,11 @@ const filterProducts = async (req, res) => {
 SELECT
   p.product_id,
   p.product_name,
+  p.product_name_th,
   p.category,
+  p.category_th,
   p.sub_category,
+  p.sub_category_th,
   pi.image_url,
   pv_rep.variant_id,
   pv_rep.price,
@@ -530,6 +597,7 @@ ORDER BY p.created_at DESC
 
 module.exports = {
   getProducts,
+  getProductById,
   searchProducts,
   getCategories,
   filterProducts,

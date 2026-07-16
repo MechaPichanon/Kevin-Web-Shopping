@@ -129,6 +129,7 @@ export default function CheckoutPage() {
       setOrderId(data.order_id || "")
       setIsComplete(true)
       clearCart()
+      window.dispatchEvent(new Event("cartUpdated"))
     } catch (err) {
       console.error("Order submit error:", err)
       alert("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้")

@@ -73,6 +73,10 @@ const getCart = async (req, res) => {
 
         v.variant_id,
         v.price,
+        v.size,
+        v.color,
+        v.color_th,
+        v.stock,
 
         pi.image_url
 

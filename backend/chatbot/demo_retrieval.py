@@ -53,7 +53,11 @@ def main() -> int:
             print()
             continue
         for p in products:
-            print(f"  - {p.get('id')} | {p.get('name')} | {p.get('price')} {p.get('currency')}")
+            name = p.get("product_name") or p.get("name", "")
+            variants = p.get("variants", []) or []
+            prices = [float(v["price"]) for v in variants if v.get("price") is not None]
+            price_str = f"{min(prices):.0f}–{max(prices):.0f}" if prices else "?"
+            print(f"  - {p.get('id')} | {name} | {price_str} THB")
         print()
 
     return 0

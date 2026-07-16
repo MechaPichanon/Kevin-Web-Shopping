@@ -2,6 +2,7 @@ const express = require("express")
 
 const {
   getProducts,
+  getProductById,
   searchProducts,
   getCategories,
   filterProducts,
@@ -17,12 +18,17 @@ const {
   setPrimaryImage,
 } = require("../controllers/productImageControllers")
 
+const { getProductReviews } = require("../controllers/reviewControllers")
+
 const router = express.Router()
 
+// Literal routes must stay above the "/:productId" wildcard below,
+// otherwise Express would match them as a productId instead.
 router.get("/search", searchProducts)
 router.get("/categories", getCategories)
 router.get("/filter", filterProducts)
 router.get("/", getProducts)
+router.get("/:productId", getProductById)
 
 const multer = require("multer")
 const path = require("path")
@@ -65,5 +71,7 @@ router.get("/:productId/images", getProductImages)
 router.post("/:productId/images", upload.single("image"), addProductImage)
 router.delete("/:productId/images/:imageId", deleteProductImage)
 router.put("/:productId/images/:imageId/primary", setPrimaryImage)
+
+router.get("/:productId/reviews", getProductReviews)
 
 module.exports = router

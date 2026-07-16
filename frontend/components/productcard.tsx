@@ -2,20 +2,34 @@
 
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 
 type Product = {
   id: number;
+  product_id?: string;
   variant_id?: string;
   name: string;
+  name_en?: string;
   price: number;
   stock: number;
   image: string;
   category: string;
 };
 
-export default function ProductCard({ product }: { product: Product }) {
+type AddedPayload = {
+  name: string;
+  name_en?: string;
+  price: number;
+};
+
+export default function ProductCard({
+  product,
+  onAdded,
+}: {
+  product: Product;
+  onAdded?: (item: AddedPayload) => void;
+}) {
   const router = useRouter();
-  console.log(product.image);
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("th-TH", {
       style: "currency",
@@ -23,7 +37,15 @@ export default function ProductCard({ product }: { product: Product }) {
       minimumFractionDigits: 0,
     }).format(price);
   };
-  const handleAddToCart = async () => {
+
+  const soldOut = product.stock <= 0;
+
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (soldOut) return;
+
     const variantId = product.variant_id ?? String(product.id);
     const token = localStorage.getItem("token");
     const user = JSON.parse(
@@ -60,8 +82,16 @@ export default function ProductCard({ product }: { product: Product }) {
         return;
       }
 
-      alert(data.message || "เพิ่มสินค้าสำเร็จ");
-      
+      if (onAdded) {
+        onAdded({
+          name: product.name,
+          name_en: product.name_en,
+          price: product.price,
+        });
+      } else {
+        alert(data.message || "เพิ่มสินค้าสำเร็จ");
+      }
+
       window.dispatchEvent(
         new Event("cartUpdated")
       );
@@ -71,9 +101,8 @@ export default function ProductCard({ product }: { product: Product }) {
     }
   };
 
-  return (
-    <div className="group overflow-hidden rounded-xl border bg-white transition hover:shadow-lg">
-
+  const cardInner = (
+    <>
       {/* IMAGE */}
       <div className="relative aspect-[3/4] overflow-hidden bg-gray-100">
         <img
@@ -82,13 +111,17 @@ export default function ProductCard({ product }: { product: Product }) {
           className="h-full w-full object-cover"
         />
 
-        🛒 Add to cart
         <div className="absolute bottom-3 left-3 right-3 translate-y-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <button
             onClick={handleAddToCart}
-            className="w-full rounded-lg bg-black py-2 text-white"
+            disabled={soldOut}
+            className={`w-full rounded-lg py-2 text-white ${
+              soldOut
+                ? "cursor-not-allowed bg-black/40"
+                : "bg-black"
+            }`}
           >
-            เพิ่มลงตะกร้า
+            {soldOut ? "สินค้าหมด · Sold out" : "เพิ่มลงตะกร้า · Add to cart"}
           </button>
         </div>
       </div>
@@ -98,14 +131,31 @@ export default function ProductCard({ product }: { product: Product }) {
         <h3 className="text-xs text-gray-500 uppercase">{product.category}</h3>
         <h3 className="line-clamp-2 font-medium">{product.name}</h3>
 
+        {product.name_en && (
+          <p className="line-clamp-1 text-xs text-gray-400">{product.name_en}</p>
+        )}
+
         <p className="mt-1 text-lg font-bold">
           {formatPrice(product.price)}
         </p>
 
-        <p className="text-sm text-gray-500">
-          {product.stock > 0 ? "มีสินค้า" : "สินค้าหมด"}
+        <p className={`text-sm ${soldOut ? "font-semibold text-red-600" : "text-gray-500"}`}>
+          {soldOut ? "สินค้าหมด" : "มีสินค้า"}
         </p>
       </div>
-    </div>
+    </>
   );
+
+  const className =
+    "group block overflow-hidden rounded-xl border bg-white transition hover:shadow-lg";
+
+  if (product.product_id) {
+    return (
+      <Link href={`/products/${product.product_id}`} className={className}>
+        {cardInner}
+      </Link>
+    );
+  }
+
+  return <div className={className}>{cardInner}</div>;
 }
