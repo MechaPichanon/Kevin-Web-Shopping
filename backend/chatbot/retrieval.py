@@ -270,13 +270,20 @@ def _get_db_watermark() -> Optional[str]:
     Returns MAX(products.updated_at) as an ISO string — the lightweight
     signal used to decide whether the in-memory index needs rebuilding.
     Returns None when the DB is not available (caller falls back to JSON hash).
+
+    Deliberately not filtered by is_active: a soft-delete (is_active=FALSE)
+    still bumps updated_at, and excluding it here would let that row's
+    timestamp fail to move the watermark, so a delete could go unnoticed
+    until an unrelated product changed. Every add/edit/delete advances
+    updated_at, so scanning all rows guarantees the watermark changes
+    after any of the three admin operations.
     """
     conn = get_conn()
     if conn is None:
         return None
     try:
         cur = conn.cursor()
-        cur.execute("SELECT MAX(updated_at) FROM products WHERE is_active = TRUE")
+        cur.execute("SELECT MAX(updated_at) FROM products")
         row = cur.fetchone()
         if row and row[0]:
             return row[0].isoformat()

@@ -197,7 +197,7 @@
     ordered_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_orders_status         CHECK (status         IN ('pending','confirmed','shipped','delivered','cancelled','refunded')),
-    CONSTRAINT chk_orders_payment_status CHECK (payment_status IN ('unpaid','paid','refunded'))
+    CONSTRAINT chk_orders_payment_status CHECK (payment_status IN ('unpaid','pending_verification','paid','rejected','refunded'))
   );
 
   CREATE INDEX IF NOT EXISTS orders_user_id_idx         ON orders (user_id);

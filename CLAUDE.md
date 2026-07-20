@@ -57,6 +57,36 @@ npm run start    # serve production build
 
 > **Important:** This project uses Next.js 16 (App Router). APIs and conventions may differ from your training data — check `node_modules/next/dist/docs/` before using unfamiliar Next.js APIs. See `frontend/AGENTS.md`.
 
+## Troubleshooting
+
+### Frontend pages 404 even though the source file exists
+
+**Symptom:** a page 404s in the browser (e.g. some `/admin/*` routes) even though its `page.tsx` clearly exists and is committed, while sibling routes still work fine.
+
+**Cause:** the frontend Docker service mounts `/app/.next` and `/app/node_modules` as **anonymous volumes** (`docker-compose.yml`) so `npm ci`/build output survive container restarts and rebuilds for speed. If that cache ever drifts stale relative to the current source (e.g. the dev container ran for a long time without a clean rebuild), routes added or changed after the cache went stale will 404 while older, unaffected routes keep resolving.
+
+**Fix:**
+```bash
+docker compose up --build -V     # -V = --renew-anon-volumes, discards stale .next/node_modules and rebuilds fresh
+```
+This is safe — it does **not** touch the named `postgres_data` volume, so the database is untouched. Do **not** reach for `docker compose down -v` (lowercase `-v`) to fix this — that removes *all* volumes, including `postgres_data`, and wipes the database.
+
+This is a one-off cleanup, not something to run routinely — normal `docker compose up` / `up --build` keeps the frontend cache in sync correctly during regular development.
+
+### Frontend edits don't show up even after saving the file
+
+**Symptom:** you edit a file under `frontend/`, refresh the browser, and the page still shows the old version — no error, no 404, it just looks unchanged.
+
+**Cause:** the frontend container runs Next.js 16 with **Turbopack** (`next dev`), not webpack. `WATCHPACK_POLLING=true` in `docker-compose.yml` is a **webpack-only** env var — Turbopack doesn't necessarily honor it, and native filesystem change events frequently don't propagate from a Windows host into the container over the `./frontend:/app` bind mount. The result: Turbopack's dev server can silently keep serving a stale in-memory compile of the old source indefinitely, even though the file on disk is correct.
+
+**Fix:**
+```bash
+docker restart kevin-web-shopping-frontend-1     # or: docker compose restart frontend
+```
+This forces Turbopack to recompile from the current source. Confirmed via `docker logs` and by diffing the served `/_next/static/chunks/...` JS output before/after — the stale chunk was byte-identical across an edit until the restart, then updated immediately.
+
+**Practical implication:** don't trust "I edited the file, it should be live" for this frontend container — after any edit, restart the container (or check the compiled chunk / container logs for a recompile) before concluding a change did or didn't take effect.
+
 ## Architecture
 
 ```
@@ -93,11 +123,12 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
 ### Schema files
 
 - `postgres/init/01_schema.sql` — auto-runs on fresh volume (complete schema, all 14 tables)
-- `postgres/migrations/` — numbered incremental migrations (`002_` through `008_`)
+- `postgres/migrations/` — numbered incremental migrations (`002_` through `009_`)
   - `005_new_ecommerce_schema.sql` — migrates an existing DB from old schema → new schema
   - `006_add_thai_fields.sql` — Thai name/description columns + store_policies table
   - `007_add_thai_variant_fields.sql` — Thai columns for pattern, sleeve, collar
   - `008_color_images.sql` — color field on product_images + unique primary index
+  - `009_expand_payment_status.sql` — widens `orders.payment_status` to `unpaid/pending_verification/paid/rejected/refunded`, matching what the admin orders UI already sends. Schema-only: no endpoint currently sets `pending_verification` — see `docs/payment_verification_recommendations.md` for the still-unbuilt slip-upload flow that would produce it.
 
 ### users table — backward-compat note
 
@@ -109,9 +140,9 @@ The new `users` table keeps those exact names:
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/009_description.sql` (next number is `009`).
+1. Create `postgres/migrations/010_description.sql` (next number is `010`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/009_description.sql`
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/010_description.sql`
 4. Mirror the change in `postgres/init/01_schema.sql`.
 
 ### Full seed (fresh Docker volume)
@@ -137,6 +168,7 @@ psql "$DATABASE_URL" -f postgres/migrations/005_new_ecommerce_schema.sql
 psql "$DATABASE_URL" -f postgres/migrations/006_add_thai_fields.sql
 psql "$DATABASE_URL" -f postgres/migrations/007_add_thai_variant_fields.sql
 psql "$DATABASE_URL" -f postgres/migrations/008_color_images.sql
+psql "$DATABASE_URL" -f postgres/migrations/009_expand_payment_status.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -252,7 +284,7 @@ FASTAPI_BASE_URL=http://localhost:8000
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `009_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `010_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`

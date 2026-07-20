@@ -709,7 +709,7 @@ User Question: {request.message}"""
             "prompt": prompt,
             "stream": False,
         },
-        timeout=60
+        timeout=300
     )
     
     data = response.json()

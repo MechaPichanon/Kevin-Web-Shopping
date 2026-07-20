@@ -18,6 +18,12 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  User,
+  MapPin,
+  Phone,
+  CreditCard,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -102,6 +108,30 @@ const getPaymentText = (status?: string) => {
       return "ไม่ระบุ"
   }
 }
+
+const customerInitial = (name: string) => (name || "?").trim().charAt(0).toUpperCase()
+
+const avatarPalette = [
+  "bg-blue-100 text-blue-600",
+  "bg-purple-100 text-purple-600",
+  "bg-green-100 text-green-600",
+  "bg-orange-100 text-orange-600",
+  "bg-red-100 text-red-600",
+  "bg-sky-100 text-sky-600",
+]
+
+const avatarColor = (seed: string) => {
+  let hash = 0
+  for (const char of seed || "") hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return avatarPalette[hash % avatarPalette.length]
+}
+
+const statusUpdateOptions = [
+  { value: "pending", label: "รอดำเนินการ", icon: Clock },
+  { value: "shipped", label: "กำลังจัดส่ง", icon: Truck },
+  { value: "confirmed", label: "สำเร็จ", icon: CheckCircle },
+  { value: "cancelled", label: "ยกเลิก", icon: XCircle },
+]
 
 export default function AdminOrdersPage() {
   const router = useRouter()
@@ -450,12 +480,17 @@ export default function AdminOrdersPage() {
                 </div>
 
                 {/* Order Details */}
-                <div>
+                <div className="lg:sticky lg:top-6 lg:self-start">
                   {selectedOrder ? (
                     <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                          <span>{selectedOrder.id}</span>
+                      <CardHeader className="border-b">
+                        <CardTitle className="flex items-start justify-between">
+                          <div>
+                            <span className="block">{selectedOrder.id}</span>
+                            <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                              {selectedOrder.date}
+                            </span>
+                          </div>
                           <span
                             className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusColor(
                               selectedOrder.status
@@ -465,67 +500,116 @@ export default function AdminOrdersPage() {
                           </span>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div>
-                          <h4 className="mb-2 text-sm font-medium text-foreground">ข้อมูลลูกค้า</h4>
-                          <div className="space-y-1 text-sm text-muted-foreground">
-                            <p>{selectedOrder.customer}</p>
-                            <p>{selectedOrder.phone}</p>
+                      <CardContent className="divide-y divide-border px-5">
+                        {/* customer */}
+                        <div className="py-5 first:pt-3 last:pb-5">
+                          <div className="mb-3 flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-blue-100">
+                              <User className="h-4 w-4 text-blue-600" />
+                            </div>
+                            <h4 className="text-sm font-semibold text-foreground">ข้อมูลลูกค้า</h4>
+                          </div>
+                          <div className="flex items-center gap-3 pl-1">
+                            <div
+                              className={`flex h-9 w-9 flex-none items-center justify-center rounded-full text-sm font-bold ${avatarColor(
+                                selectedOrder.customer
+                              )}`}
+                            >
+                              {customerInitial(selectedOrder.customer)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">{selectedOrder.customer}</p>
+                              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Phone className="h-3 w-3" />
+                                <span>{selectedOrder.phone}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
-                        <div>
-                          <h4 className="mb-2 text-sm font-medium text-foreground">ที่อยู่จัดส่ง</h4>
-                          <p className="text-sm text-muted-foreground">{selectedOrder.address}</p>
+                        {/* address */}
+                        <div className="py-5 first:pt-3 last:pb-5">
+                          <div className="mb-2.5 flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-purple-100">
+                              <MapPin className="h-4 w-4 text-purple-600" />
+                            </div>
+                            <h4 className="text-sm font-semibold text-foreground">ที่อยู่จัดส่ง</h4>
+                          </div>
+                          <p className="pl-1 text-sm leading-relaxed text-muted-foreground">
+                            {selectedOrder.address}
+                          </p>
                         </div>
 
-                        <div>
-                          <h4 className="mb-2 text-sm font-medium text-foreground">สินค้า</h4>
-                          <div className="space-y-2">
+                        {/* items */}
+                        <div className="py-5 first:pt-3 last:pb-5">
+                          <div className="mb-3 flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-orange-100">
+                              <Package className="h-4 w-4 text-orange-600" />
+                            </div>
+                            <h4 className="text-sm font-semibold text-foreground">สินค้า</h4>
+                          </div>
+                          <div className="rounded-lg border border-border bg-muted/50 px-3">
                             {selectedOrder.items.map((item, index) => (
-                              <div key={index} className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">
-                                  {item.name}
-                                  {item.variant && item.variant !== "-" ? ` (${item.variant})` : ""} x{item.qty}
-                                </span>
-                                <span className="text-foreground">
+                              <div
+                                key={index}
+                                className="flex items-center justify-between gap-3 border-b border-border/70 py-2.5 last:border-0"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.variant && item.variant !== "-" ? `${item.variant} · ` : ""}x{item.qty}
+                                  </p>
+                                </div>
+                                <span className="whitespace-nowrap text-sm text-foreground">
                                   ฿{(item.price * item.qty).toLocaleString()}
                                 </span>
                               </div>
                             ))}
-                            <div className="border-t border-border pt-2">
-                              <div className="flex items-center justify-between font-medium">
-                                <span>ยอดรวม</span>
-                                <span>฿{selectedOrder.total.toLocaleString()}</span>
-                              </div>
+                            <div className="flex items-center justify-between py-2 text-xs text-muted-foreground">
+                              <span>ยอดสินค้า</span>
+                              <span>฿{selectedOrder.subtotal.toLocaleString()}</span>
                             </div>
+                            <div className="flex items-center justify-between pb-2.5 text-xs text-muted-foreground">
+                              <span>ค่าจัดส่ง</span>
+                              <span>
+                                {selectedOrder.shippingFee ? `฿${selectedOrder.shippingFee.toLocaleString()}` : "ฟรี"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                            <span className="text-sm font-semibold text-muted-foreground">ยอดรวมทั้งสิ้น</span>
+                            <span className="text-xl font-bold text-primary">
+                              ฿{selectedOrder.total.toLocaleString()}
+                            </span>
                           </div>
                         </div>
 
-                        <div>
-                          <h4 className="mb-2 text-sm font-medium text-foreground">การชำระเงิน</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground">วิธีชำระเงิน</span>
-                              <span className="text-foreground">{selectedOrder.paymentMethod ?? "ไม่ระบุ"}</span>
+                        {/* payment */}
+                        <div className="py-5 first:pt-3 last:pb-5">
+                          <div className="mb-3 flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-green-100">
+                              <CreditCard className="h-4 w-4 text-green-600" />
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground">สถานะ</span>
-                              <span
-                                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getPaymentColor(
-                                  selectedOrder.paymentStatus
-                                )}`}
-                              >
-                                {getPaymentText(selectedOrder.paymentStatus)}
-                              </span>
-                            </div>
+                            <h4 className="text-sm font-semibold text-foreground">การชำระเงิน</h4>
+                          </div>
+                          <div className="flex items-center justify-between pl-1">
+                            <span className="text-sm text-muted-foreground">
+                              {selectedOrder.paymentMethod ?? "ไม่ระบุ"}
+                            </span>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getPaymentColor(
+                                selectedOrder.paymentStatus
+                              )}`}
+                            >
+                              {getPaymentText(selectedOrder.paymentStatus)}
+                            </span>
                           </div>
 
                           {selectedOrder.paymentStatus === "pending_verification" && (
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               <Button
                                 size="sm"
-                                className="gap-2"
+                                className="gap-2 bg-green-600 text-white hover:bg-green-700"
                                 onClick={() => updatePaymentStatus(selectedOrder.id, "paid")}
                               >
                                 <CheckCircle className="h-4 w-4" />
@@ -534,7 +618,7 @@ export default function AdminOrdersPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="gap-2 text-destructive hover:text-destructive"
+                                className="gap-2 border-red-200 text-destructive hover:text-destructive"
                                 onClick={() => updatePaymentStatus(selectedOrder.id, "rejected")}
                               >
                                 <XCircle className="h-4 w-4" />
@@ -544,46 +628,48 @@ export default function AdminOrdersPage() {
                           )}
                         </div>
 
-                        <div>
-                          <h4 className="mb-2 text-sm font-medium text-foreground">อัปเดตสถานะ</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-2"
-                              onClick={() => updateOrderStatus(selectedOrder.id, "pending")}
-                            >
-                              <Clock className="h-4 w-4" />
-                              รอดำเนินการ
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-2"
-                              onClick={() => updateOrderStatus(selectedOrder.id, "shipped")}
-                            >
-                              <Truck className="h-4 w-4" />
-                              กำลังจัดส่ง
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-2 text-green-600 hover:text-green-600"
-                              onClick={() => updateOrderStatus(selectedOrder.id, "confirmed")}
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                              สำเร็จ
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-2 text-destructive hover:text-destructive"
-                              onClick={() => updateOrderStatus(selectedOrder.id, "cancelled")}
-                            >
-                              <XCircle className="h-4 w-4" />
-                              ยกเลิก
-                            </Button>
+                        {/* status */}
+                        <div className="py-5 first:pt-3 last:pb-5">
+                          <div className="mb-3 flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-slate-100">
+                              <RefreshCw className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <h4 className="text-sm font-semibold text-foreground">อัปเดตสถานะ</h4>
                           </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {statusUpdateOptions.map((opt) => {
+                              const isActive = selectedOrder.status === opt.value
+                              return (
+                                <Button
+                                  key={opt.value}
+                                  variant={isActive ? "default" : "outline"}
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => updateOrderStatus(selectedOrder.id, opt.value)}
+                                >
+                                  <opt.icon className="h-4 w-4" />
+                                  {opt.label}
+                                </Button>
+                              )
+                            })}
+                          </div>
+
+                          {selectedOrder.trackingNumber && (
+                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2.5">
+                              <Truck className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">เลขพัสดุ</span>
+                              <span className="ml-auto text-xs font-semibold text-foreground">
+                                {selectedOrder.trackingNumber}
+                              </span>
+                            </div>
+                          )}
+
+                          {selectedOrder.notes && (
+                            <div className="mt-2 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-600" />
+                              <p className="text-xs leading-relaxed text-amber-800">{selectedOrder.notes}</p>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
