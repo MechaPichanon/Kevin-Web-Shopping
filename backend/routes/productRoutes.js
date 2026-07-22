@@ -6,6 +6,7 @@ const {
   searchProducts,
   getCategories,
   filterProducts,
+  getBestSellers,
   addProduct,
   updateProduct,
   deleteProduct,
@@ -27,6 +28,7 @@ const router = express.Router()
 router.get("/search", searchProducts)
 router.get("/categories", getCategories)
 router.get("/filter", filterProducts)
+router.get("/best-sellers", getBestSellers)
 router.get("/", getProducts)
 router.get("/:productId", getProductById)
 

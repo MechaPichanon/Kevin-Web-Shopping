@@ -104,7 +104,7 @@ export default function ProductCard({
   const cardInner = (
     <>
       {/* IMAGE */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-gray-100">
+      <div className="relative aspect-[3/4] overflow-hidden bg-[#f4ede3]">
         <img
           src={product.image}
           alt={product.name}
@@ -127,19 +127,19 @@ export default function ProductCard({
       </div>
 
       {/* CONTENT */}
-      <div className="p-4 text-black">
-        <h3 className="text-xs text-gray-500 uppercase">{product.category}</h3>
+      <div className="p-4 text-[#3d3025]">
+        <h3 className="text-xs text-[#9a8a7a] uppercase">{product.category}</h3>
         <h3 className="line-clamp-2 font-medium">{product.name}</h3>
 
         {product.name_en && (
-          <p className="line-clamp-1 text-xs text-gray-400">{product.name_en}</p>
+          <p className="line-clamp-1 text-xs text-[#b0a495]">{product.name_en}</p>
         )}
 
         <p className="mt-1 text-lg font-bold">
           {formatPrice(product.price)}
         </p>
 
-        <p className={`text-sm ${soldOut ? "font-semibold text-red-600" : "text-gray-500"}`}>
+        <p className={`text-sm ${soldOut ? "font-semibold text-red-600" : "text-[#9a8a7a]"}`}>
           {soldOut ? "สินค้าหมด" : "มีสินค้า"}
         </p>
       </div>
@@ -147,7 +147,7 @@ export default function ProductCard({
   );
 
   const className =
-    "group block overflow-hidden rounded-xl border bg-white transition hover:shadow-lg";
+    "group block overflow-hidden rounded-[14px] border border-black/10 bg-white transition duration-200 hover:shadow-[0_14px_30px_rgba(0,0,0,0.16)] hover:-translate-y-0.5";
 
   if (product.product_id) {
     return (

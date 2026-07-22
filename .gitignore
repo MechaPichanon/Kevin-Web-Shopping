@@ -21,4 +21,10 @@ node_modules/
 # npm (local cache/logs)
 .npm-cache/
 
+# DB export/import backups (large/binary, regenerable via export_db.js)
+backend/db_backups/
+
+backend/uploads/
+docs/
+
 tests

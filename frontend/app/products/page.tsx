@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Filter, Grid3X3, LayoutGrid } from "lucide-react";
 
 import ProductCard from "@/components/productcard";
@@ -54,9 +55,21 @@ const formatPrice = (price: number) =>
   }).format(price);
 
 export default function ProductPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProductPageContent />
+    </Suspense>
+  );
+}
+
+function ProductPageContent() {
+  const searchParams = useSearchParams();
+
   const [products, setProducts] = useState<ProductApi[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState(
+    () => searchParams.get("category") || "all"
+  );
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
 
   const [gridCols, setGridCols] = useState<3 | 4>(4);

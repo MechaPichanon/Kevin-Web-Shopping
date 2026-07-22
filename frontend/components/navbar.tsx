@@ -124,7 +124,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 w-full bg-[#8b6f5a] shadow-lg transition-all duration-300">
+    <nav className="sticky top-0 z-50 w-full bg-[#faf7f2] border-b border-[#e0d5c8] shadow-sm transition-all duration-300">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 gap-4">
 
@@ -133,20 +133,20 @@ export default function Navbar() {
             className="flex-shrink-0 flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 duration-300"
             onClick={() => router.push("/")}
           >
-            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#8b6f5a] font-bold text-2xl shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-[#8b5e3c] flex items-center justify-center text-white font-bold text-2xl shadow-sm">
               🛍️
             </div>
 
-            <span className="font-extrabold text-white text-xl tracking-tight hidden md:block">
+            <span className="font-extrabold text-[#8b5e3c] text-xl tracking-tight hidden md:block">
               Kevin
-              <span className="text-amber-100">
+              <span className="text-[#b89f8d]">
                 Store
               </span>
             </span>
           </div>
 
           {/* Menu */}
-          <div className="hidden lg:flex items-center space-x-6 text-sm font-medium text-white/95">
+          <div className="hidden lg:flex items-center space-x-6 text-sm font-medium text-[#5a4a3d]">
             <Link href="/">
               Home
             </Link>
@@ -178,7 +178,7 @@ export default function Navbar() {
                 }
               }}
               placeholder="Search products..."
-              className="w-full pl-5 pr-14 py-2.5 rounded-full bg-white/10 border border-white/20 text-white placeholder-white/70"
+              className="w-full pl-5 pr-14 py-2.5 rounded-full bg-white border border-[#e0d5c8] text-[#3d3025] placeholder-[#9a8a7a]"
             />
 
             <button
@@ -191,7 +191,7 @@ export default function Navbar() {
                   );
                 }
               }}
-              className="absolute right-2 bg-white text-[#8b6f5a] hover:bg-gray-100 p-2 rounded-full"
+              className="absolute right-2 bg-[#8b5e3c] text-white hover:bg-[#7a5233] p-2 rounded-full"
             >
               🔍
             </button>
@@ -202,7 +202,7 @@ export default function Navbar() {
 
             {/* Cart */}
             <Link href="/cart">
-              <button className="relative p-2 text-white hover:bg-white/10 rounded-full transition-colors">
+              <button className="relative p-2 text-[#8b6f5a] hover:bg-[#ece2d6] rounded-full transition-colors">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   className="h-6 w-6"
@@ -219,27 +219,27 @@ export default function Navbar() {
                 </svg>
 
                 {cartCount > 0 && (
-                  <span className="absolute top-0 right-0 inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[10px] font-bold text-[#8b6f5a] bg-amber-200 rounded-full">
+                  <span className="absolute top-0 right-0 inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-[10px] font-bold text-white bg-[#8b5e3c] rounded-full">
                     {cartCount}
                   </span>
                 )}
               </button>
             </Link>
 
-            <div className="h-6 w-px bg-white/30 hidden sm:block"></div>
+            <div className="h-6 w-px bg-[#e0d5c8] hidden sm:block"></div>
 
             {!user ? (
               <div className="flex items-center space-x-2">
                 <Link
                   href="/login"
-                  className="px-3 py-2 text-sm font-medium text-white"
+                  className="px-3 py-2 text-sm font-medium text-[#5a4a3d]"
                 >
                   Login
                 </Link>
 
                 <Link
                   href="/signup"
-                  className="px-5 py-2 text-sm font-semibold text-[#8b6f5a] bg-white rounded-full"
+                  className="px-5 py-2 text-sm font-semibold text-white bg-[#8b5e3c] rounded-full"
                 >
                   Sign up
                 </Link>
@@ -249,14 +249,14 @@ export default function Navbar() {
 
                 <Link
                   href={user.role === "admin" ? "/admin" : "/profile"}
-                  className="text-white"
+                  className="text-[#5a4a3d]"
                 >
                   {user.username}
                 </Link>
 
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2 text-sm font-semibold text-white border border-white/50 rounded-full"
+                  className="px-4 py-2 text-sm font-semibold text-[#8b5e3c] border border-[#e0d5c8] rounded-full hover:bg-[#ece2d6]"
                 >
                   Logout
                 </button>

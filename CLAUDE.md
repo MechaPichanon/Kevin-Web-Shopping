@@ -17,6 +17,59 @@ this is thesis bachelor level and have to full deploy demo to show. and has to m
 
 **Before making any change to frontend files** (anything under `frontend/` — components, pages, styles, layout, UI), always stop and tell the user first. Describe what you plan to change and why, then wait for their approval before touching any frontend code. This applies to both Claude Code and Claude Design. The user needs to check with their friend (who owns the frontend) before any frontend change goes in.
 
+## Website design rule
+### Thai Clothing E-commerce — Color Rules (apply to EVERY page)
+
+A warm, "quiet-luxury" tan palette. Never use pure white (`#fff`) as a full-page
+background. Build every page as a three-layer stack:
+**warm base → white cards → occasional tan / dark bands.**
+
+### Palette
+
+| Token            | Hex       | Role                                              |
+|------------------|-----------|---------------------------------------------------|
+| Page base        | `#ece2d6` | Default background of every page/body             |
+| Nav / top bar    | `#faf7f2` | Slightly lighter warm off-white, sits above base  |
+| Card surface     | `#ffffff` | Product cards, panels, any raised content surface |
+| Hero band        | tan gradient `linear-gradient(150deg,#f4ede3,#ece2d6,#e3d4c2)` | Hero / feature bands |
+| Footer / dark    | `#3d3025` | Footer, dark contrast sections                    |
+| Primary accent   | `#8b5e3c` | Buttons, prices, links, active/selected state     |
+| Accent tan (dark)| `#8b6f5a` | Secondary accents, icons, mono labels             |
+| Accent tan (light)| `#b89f8d`| Tertiary accents, category tiles, logo `.co`      |
+| Text primary     | `#3d3025` | Body & headings on light backgrounds              |
+| Text muted       | `#9a8a7a` | English secondary line, captions                  |
+| Border light     | `#e0d5c8` / `#ece2d6` | Hairlines, input borders, card outlines |
+
+### Where each color goes
+
+- **Page background** → `#ece2d6` (warm base). Never `#fff`.
+- **Top navbar** → `#faf7f2` with `#e0d5c8` bottom border.
+- **Cards / product tiles / raised panels** → `#fff`, radius ~14px,
+  border `rgba(0,0,0,.1)`, soft shadow. Cards must "pop" off the warm base.
+- **Hero / feature bands** → tan gradient, optional 135° diagonal texture stripes.
+- **Category tiles** → tan gradients (`#8b6f5a`–`#b89f8d` range), white text.
+- **Footer & dark contrast sections** → `#3d3025`, text `#e0d5c8`, muted `#b0a495`.
+- **Buttons / prices / links / active state** → `#8b5e3c`.
+- **Dead / not-yet-built links** (contact, terms, privacy) → render muted
+  (`#7a6d5f` on dark, `#c8b8a6` on light), NOT as normal links, so they read as
+  intentionally non-interactive.
+
+### Typography (bilingual — Thai primary, English secondary/smaller)
+
+- Thai display / headings → `Noto Serif Thai`
+- Thai body / UI → `Noto Sans Thai` (or `IBM Plex Sans Thai` for product cards)
+- English accents / italics → `Fraunces`
+- Labels, prices-in-mono, codes → `IBM Plex Mono` (letter-spacing for eyebrows)
+- Every heading pairs a large Thai line with a smaller English line underneath.
+
+### Do / Don't
+
+- ✅ Warm base, white cards, tan/dark bands, one primary accent (`#8b5e3c`).
+- ✅ Max 1–2 background tones per page besides the base.
+- ❌ No pure-white page backgrounds.
+- ❌ No all-brown pages — tan is for frames/bands, not walls of body text.
+- ❌ No new colors outside this palette; derive harmonious shades in OKLCH if needed.
+
 ## Running the project
 
 ### Full stack (recommended)
@@ -174,6 +227,34 @@ node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
 
 `backfill_chunk_embeddings.js` is hash-aware and skips rows that haven't changed.
+
+### Clearing product data (before entering real products)
+
+```bash
+node backend/scripts/clear_product_data.js         # dry run — prints row counts, no changes
+node backend/scripts/clear_product_data.js --yes    # TRUNCATEs products + everything dependent on it
+```
+
+Wipes `product_image_embeddings`, `product_chunks`, `reviews`, `payments`, `order_items`, `orders`, `cart_items`, `carts`, `product_images`, `variants`, `products` in one `TRUNCATE ... RESTART IDENTITY CASCADE`. This also clears orders/carts/reviews (not just products) because `order_items.variant_id` has no `ON DELETE` rule — any variant referenced by a past order blocks a plain product delete. `users`, `addresses`, `discount_codes`, `store_policies` are left untouched. Use this before entering a real catalogue through the admin UI so seeded sample data (`backend/scripts/seed_database.sql`) doesn't linger or conflict.
+
+### Moving the database (and uploaded images) to another machine
+
+The project isn't deployed yet — data only exists in the local `postgres` Docker volume plus files under `backend/uploads/`. `pg_dump`/`pg_restore` alone only move database rows (e.g. the `image_url` text), never the actual image files, so use these wrapper scripts instead of raw `pg_dump`:
+
+```bash
+# On the source machine (postgres service must be running):
+node backend/scripts/export_db.js
+# → writes backend/db_backups/<timestamp>/bos_butter.dump + .../uploads/
+
+# Copy the WHOLE backend/db_backups/<timestamp>/ folder to the other machine
+# (USB drive, cloud folder, etc.) — not just the .dump file.
+
+# On the target machine (postgres service running, e.g. fresh `docker compose up -d postgres`):
+node backend/scripts/import_db.js "backend/db_backups/<timestamp>/"
+docker compose restart backend auth-backend frontend   # rebuild in-memory caches (RAG index, etc.)
+```
+
+`backend/db_backups/` is gitignored — backups are meant to be carried over by hand, not committed.
 
 ## RAG pipeline
 

@@ -510,6 +510,90 @@ GROUP BY p.product_id
   }
 }
 
+const getBestSellers = async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 8, 50)
+
+    const bestSellers = await db.query(
+      `
+SELECT
+  p.product_id, p.product_name, p.product_name_th,
+  p.category, p.category_th,
+  pi.image_url,
+  pv_rep.variant_id, pv_rep.price, pv_rep.stock,
+  SUM(oi.quantity) AS total_sold
+
+FROM order_items oi
+JOIN orders   o ON o.order_id = oi.order_id AND o.status != 'cancelled'
+JOIN variants v ON v.variant_id = oi.variant_id
+JOIN products p ON p.product_id = v.product_id AND p.is_active = TRUE
+
+LEFT JOIN product_images pi
+  ON pi.product_id = p.product_id
+  AND pi.is_primary = TRUE
+
+LEFT JOIN LATERAL (
+  SELECT variant_id, price, stock
+  FROM variants
+  WHERE product_id = p.product_id
+    AND is_active = TRUE
+  ORDER BY price ASC
+  LIMIT 1
+) pv_rep ON TRUE
+
+GROUP BY p.product_id, p.product_name, p.product_name_th, p.category, p.category_th,
+         pi.image_url, pv_rep.variant_id, pv_rep.price, pv_rep.stock
+
+ORDER BY total_sold DESC
+LIMIT $1
+      `,
+      [limit]
+    )
+
+    if (bestSellers.rows.length > 0) {
+      return res.json(bestSellers.rows)
+    }
+
+    // No order history yet (fresh demo data) — fall back to newest products
+    // so the homepage "popular products" section is never empty.
+    const fallback = await db.query(
+      `
+SELECT
+  p.product_id, p.product_name, p.product_name_th,
+  p.category, p.category_th,
+  pi.image_url,
+  pv_rep.variant_id, pv_rep.price, pv_rep.stock
+
+FROM products p
+
+LEFT JOIN product_images pi
+  ON pi.product_id = p.product_id
+  AND pi.is_primary = TRUE
+
+LEFT JOIN LATERAL (
+  SELECT variant_id, price, stock
+  FROM variants
+  WHERE product_id = p.product_id
+    AND is_active = TRUE
+  ORDER BY price ASC
+  LIMIT 1
+) pv_rep ON TRUE
+
+WHERE p.is_active = TRUE
+
+ORDER BY p.created_at DESC
+LIMIT $1
+      `,
+      [limit]
+    )
+
+    res.json(fallback.rows)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({ error: "Server error" })
+  }
+}
+
 const getCategories = async (req, res) => {
   try {
     const result = await db.query(`
@@ -601,6 +685,7 @@ module.exports = {
   searchProducts,
   getCategories,
   filterProducts,
+  getBestSellers,
   addProduct,
   updateProduct,
   deleteProduct,
