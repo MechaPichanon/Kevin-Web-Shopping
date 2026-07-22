@@ -19,7 +19,13 @@ const paymentMethods = [
 ]
 
 export default function CheckoutPage() {
-  const { items, totalItems, totalPrice, clearCart } = useCart()
+  const [orderSummary, setOrderSummary] = useState({
+    subtotal: 0,
+    shippingFee: 0,
+    totalPrice: 0,
+  })
+  const [items, setItems] = useState<any[]>([])
+  const [totalPrice, setTotalPrice] = useState(0)
   const router = useRouter()
   const [slip, setSlip] = useState<string | null>(null)
   const [slipError, setSlipError] = useState("")
@@ -62,7 +68,29 @@ export default function CheckoutPage() {
         router.push("/login")
       }
     }
+    const loadCart = async () => {
+      const user = JSON.parse(localStorage.getItem("user") || "{}")
 
+      if (!user.id) return
+
+      const res = await fetch(
+        `http://localhost:5000/cart/${user.id}`
+      )
+
+      const data = await res.json()
+
+      setItems(data)
+
+      const total = data.reduce(
+        (sum: number, item: any) =>
+          sum + Number(item.price) * item.quantity,
+        0
+      )
+
+      setTotalPrice(total)
+    }
+
+    loadCart()
     fetchProfile()
   }, [router])
 
@@ -128,7 +156,13 @@ export default function CheckoutPage() {
 
       setOrderId(data.order_id || "")
       setIsComplete(true)
-      clearCart()
+      setItems([])
+      setTotalPrice(0)
+      setOrderSummary({
+        subtotal: data.subtotal,
+        shippingFee: data.shippingFee,
+        totalPrice: data.totalPrice,
+      })
       window.dispatchEvent(new Event("cartUpdated"))
     } catch (err) {
       console.error("Order submit error:", err)
@@ -162,7 +196,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="mt-2 flex justify-between text-sm">
                   <span className="text-muted-foreground">ยอดชำระ</span>
-                  <span className="font-medium text-foreground">{formatPrice(grandTotal)}</span>
+                  <span className="font-medium text-foreground">{formatPrice(orderSummary.totalPrice)}</span>
                 </div>
                 <div className="mt-2 flex justify-between text-sm">
                   <span className="text-muted-foreground">วิธีชำระเงิน</span>
@@ -331,23 +365,36 @@ export default function CheckoutPage() {
               <Card className="sticky top-20 border-border">
                 <CardContent className="p-6">
                   <h2 className="font-serif text-xl font-bold text-foreground">
-                    สรุปคำสั่งซื้อ ({totalItems})
+                    สรุปคำสั่งซื้อ ({items.length})
                   </h2>
                   <div className="mt-4 flex max-h-64 flex-col gap-3 overflow-y-auto">
                     {items.map((item: any) => (
-                      <div key={`${item.id}-${item.size}`} className="flex gap-3">
-                        <div className="flex h-14 w-12 shrink-0 items-center justify-center rounded-md bg-secondary text-2xl">
-                          {item.image}
+                      <div
+                        key={item.cart_item_id}
+                        className="flex gap-3"
+                      >
+                        <div className="h-14 w-12 shrink-0 overflow-hidden rounded-md bg-secondary">
+                          <img
+                            src={
+                              item.image_url ||
+                              "https://placehold.co/100x120"
+                            }
+                            alt={item.product_name}
+                            className="h-full w-full object-cover"
+                          />
                         </div>
+
                         <div className="flex flex-1 flex-col justify-center">
-                          <p className="line-clamp-1 text-sm font-medium text-foreground">
-                            {item.name}
+                          <p className="line-clamp-1 text-sm font-medium">
+                            {item.product_name}
                           </p>
+
                           <p className="text-xs text-muted-foreground">
-                            ไซส์ {item.size} x {item.quantity}
+                            จำนวน {item.quantity}
                           </p>
                         </div>
-                        <span className="self-center text-sm font-medium text-foreground">
+
+                        <span className="self-center text-sm font-medium">
                           {formatPrice(item.price * item.quantity)}
                         </span>
                       </div>

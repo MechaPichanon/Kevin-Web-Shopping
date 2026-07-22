@@ -159,6 +159,9 @@ const createOrder = async (req, res) => {
     res.json({
       success: true,
       order_id: orderId,
+      subtotal,
+      shippingFee,
+      totalPrice,
     });
 
   } catch (err) {
