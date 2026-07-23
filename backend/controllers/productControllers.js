@@ -16,6 +16,45 @@ function buildChunkText({ product_name, category, sub_category, description, pri
   return lines.join("\n").trim()
 }
 
+// Links a "set" variant to the real component variants it bundles
+// (products.category='set'). Always clears any prior mapping first so
+// edits (swapping/removing a component) take effect. Rejects when the
+// selected components don't share the same pattern — a set may never mix
+// patterns (e.g. a pattern-A shirt with a pattern-B short).
+async function attachSetComponents(client, variantId, v) {
+  const componentIds = Array.isArray(v.component_variant_ids)
+    ? v.component_variant_ids.filter(Boolean)
+    : []
+
+  await client.query(`DELETE FROM set_components WHERE set_variant_id = $1`, [variantId])
+  if (componentIds.length === 0) return
+
+  const { rows: components } = await client.query(
+    `SELECT variant_id, pattern FROM variants WHERE variant_id = ANY($1::text[])`,
+    [componentIds]
+  )
+  if (components.length !== componentIds.length) {
+    throw Object.assign(new Error("ไม่พบ variant ของสินค้าที่เลือกบางรายการ"), { status: 400 })
+  }
+
+  const patterns = new Set(components.map((c) => c.pattern || null))
+  if (patterns.size > 1) {
+    throw Object.assign(
+      new Error("ลายของสินค้าที่เลือกไม่ตรงกัน ไม่สามารถจับเป็นเซ็ตได้"),
+      { status: 400 }
+    )
+  }
+
+  const qtys = Array.isArray(v.component_quantities) ? v.component_quantities : []
+  for (let i = 0; i < componentIds.length; i++) {
+    const qty = Number(qtys[i]) > 0 ? Number(qtys[i]) : 1
+    await client.query(
+      `INSERT INTO set_components (set_variant_id, component_variant_id, quantity) VALUES ($1,$2,$3)`,
+      [variantId, componentIds[i], qty]
+    )
+  }
+}
+
 async function generateAndStoreEmbedding(productId, content) {
   const baseUrl = (process.env.OLLAMA_BASE_URL || "http://localhost:11434").replace(/\/$/, "")
   const model   = process.env.OLLAMA_EMBED_MODEL || "bge-m3"
@@ -244,6 +283,8 @@ const addProduct = async (req, res) => {
          v.price, v.cost_price || null, v.stock,
          v.is_active !== false && v.is_active !== "false"]
       )
+
+      await attachSetComponents(client, variantId, v)
     }
 
     if (image_url) {
@@ -274,6 +315,9 @@ const addProduct = async (req, res) => {
   } catch (err) {
     if (client) await client.query("ROLLBACK")
     console.log(err)
+    if (err.status === 400) {
+      return res.status(400).json({ error: err.message })
+    }
     res.status(500).json({ error: "Server error" })
   } finally {
     if (client) client.release()
@@ -347,6 +391,7 @@ const updateProduct = async (req, res) => {
            v.price, v.cost_price || null, v.stock, isActive, v.variant_id, productId]
         )
         submittedIds.push(v.variant_id)
+        await attachSetComponents(client, v.variant_id, v)
       } else {
         const newId = "V" + now + "_" + i
         await client.query(
@@ -362,6 +407,7 @@ const updateProduct = async (req, res) => {
            v.stock, isActive]
         )
         submittedIds.push(newId)
+        await attachSetComponents(client, newId, v)
       }
     }
 
@@ -408,6 +454,9 @@ const updateProduct = async (req, res) => {
   } catch (err) {
     if (client) await client.query("ROLLBACK")
     console.log(err)
+    if (err.status === 400) {
+      return res.status(400).json({ error: err.message })
+    }
     res.status(500).json({ error: "Server error" })
   } finally {
     if (client) client.release()
@@ -479,7 +528,12 @@ SELECT
       'collar',     v.collar,
       'collar_th',  v.collar_th,
       'price',      v.price,
-      'stock',      v.stock
+      'stock',      v.stock,
+      'component_variants', (
+        SELECT json_agg(json_build_object('variant_id', sc.component_variant_id, 'quantity', sc.quantity))
+        FROM set_components sc
+        WHERE sc.set_variant_id = v.variant_id
+      )
     ) ORDER BY v.color, v.size
   ) FILTER (WHERE v.variant_id IS NOT NULL) AS variants
 

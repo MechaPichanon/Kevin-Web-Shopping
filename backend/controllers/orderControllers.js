@@ -8,13 +8,16 @@ const createOrder = async (req, res) => {
 
     const {
       user_id,
-      name,
+      firstName,
+      lastName,
       phone,
       address,
-      city,
+      province,
       postalCode,
       payment_method,
     } = req.body;
+
+    const name = `${firstName || ""} ${lastName || ""}`.trim();
 
     const cartResult = await client.query(
       `
@@ -40,6 +43,55 @@ const createOrder = async (req, res) => {
       });
     }
 
+    // Check availability and decrement stock. A "set" item (variant_id
+    // present as set_variant_id in set_components) has no independent
+    // stock of its own — it draws from its real component variants, so
+    // decrementing here also keeps any other set sharing that component
+    // correct (recomputed automatically by the DB trigger).
+    for (const item of cartItems) {
+      const setComponentsResult = await client.query(
+        `SELECT component_variant_id, quantity FROM set_components WHERE set_variant_id = $1`,
+        [item.variant_id]
+      );
+
+      if (setComponentsResult.rows.length > 0) {
+        for (const comp of setComponentsResult.rows) {
+          const needed = comp.quantity * item.quantity;
+          const stockResult = await client.query(
+            `SELECT stock FROM variants WHERE variant_id = $1 FOR UPDATE`,
+            [comp.component_variant_id]
+          );
+          const available = stockResult.rows[0]?.stock ?? 0;
+          if (available < needed) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+              error: `สินค้าบางรายการในเซ็ต "${item.product_name}" มีไม่เพียงพอ`,
+            });
+          }
+          await client.query(
+            `UPDATE variants SET stock = stock - $1 WHERE variant_id = $2`,
+            [needed, comp.component_variant_id]
+          );
+        }
+      } else {
+        const stockResult = await client.query(
+          `SELECT stock FROM variants WHERE variant_id = $1 FOR UPDATE`,
+          [item.variant_id]
+        );
+        const available = stockResult.rows[0]?.stock ?? 0;
+        if (available < item.quantity) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            error: `สินค้า "${item.product_name}" มีไม่เพียงพอ`,
+          });
+        }
+        await client.query(
+          `UPDATE variants SET stock = stock - $1 WHERE variant_id = $2`,
+          [item.quantity, item.variant_id]
+        );
+      }
+    }
+
     let subtotal = 0;
 
     cartItems.forEach((item) => {
@@ -49,48 +101,86 @@ const createOrder = async (req, res) => {
     const shippingFee = subtotal >= 1500 ? 0 : 50;
     const totalPrice = subtotal + shippingFee;
 
-    const addressResult = await client.query(
-      `
-      INSERT INTO addresses (
-        user_id,
-        recipient_name,
-        phone,
-        address_line1,
-        city,
-        province,
-        postal_code
-      )
-      VALUES ($1,$2,$3,$4,$5,'-',$6)
-      RETURNING address_id
-      `,
-      [
-        user_id,
-        name,
-        phone,
-        address,
-        city,
-        postalCode,
-      ]
+    // Upsert into the user's one default address (shared with the profile
+    // page) instead of inserting a throwaway row every order. There's no
+    // separate district/city field in the UI, so "province" (จังหวัด) is
+    // stored in both the city and province columns until one exists.
+    const defaultAddressResult = await client.query(
+      `SELECT a.address_id
+       FROM user_addresses ua
+       JOIN addresses a ON a.address_id = ua.address_id
+       WHERE ua.user_id = $1 AND ua.is_default = TRUE`,
+      [user_id]
     );
 
-    const addressId =
-      addressResult.rows[0].address_id;
+    let addressId;
+    if (defaultAddressResult.rows.length > 0) {
+      addressId = defaultAddressResult.rows[0].address_id;
+      await client.query(
+        `
+        UPDATE addresses
+        SET recipient_name = $1,
+            phone = $2,
+            address_line1 = $3,
+            city = $4,
+            province = $4,
+            postal_code = $5
+        WHERE address_id = $6
+        `,
+        [name, phone, address, province, postalCode, addressId]
+      );
+    } else {
+      const addressResult = await client.query(
+        `
+        INSERT INTO addresses (
+          user_id,
+          recipient_name,
+          phone,
+          address_line1,
+          city,
+          province,
+          postal_code
+        )
+        VALUES ($1,$2,$3,$4,$5,$5,$6)
+        RETURNING address_id
+        `,
+        [user_id, name, phone, address, province, postalCode]
+      );
+
+      addressId = addressResult.rows[0].address_id;
+
+      await client.query(
+        `INSERT INTO user_addresses (user_id, address_id, is_default) VALUES ($1, $2, TRUE)`,
+        [user_id, addressId]
+      );
+    }
+
+    const shippingSnapshot = {
+      recipient_name: name,
+      phone,
+      address_line1: address,
+      city: province,
+      province,
+      postal_code: postalCode,
+    };
 
     const orderResult = await client.query(
       `
       INSERT INTO orders (
         user_id,
         address_id,
+        shipping_snapshot,
         subtotal,
         shipping_fee,
         total_price
       )
-      VALUES ($1,$2,$3,$4,$5)
+      VALUES ($1,$2,$3,$4,$5,$6)
       RETURNING order_id
       `,
       [
         user_id,
         addressId,
+        JSON.stringify(shippingSnapshot),
         subtotal,
         shippingFee,
         totalPrice,

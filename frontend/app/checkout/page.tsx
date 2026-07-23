@@ -35,10 +35,11 @@ export default function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [userId, setUserId] = useState<number | null>(null)
   const [form, setForm] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     phone: "",
     address: "",
-    city: "",
+    province: "",
     postalCode: "",
   })
 
@@ -63,6 +64,15 @@ export default function CheckoutPage() {
 
         const data = await res.json()
         setUserId(data.id)
+        setForm((prev) => ({
+          ...prev,
+          firstName: data.firstName || "",
+          lastName: data.lastName || "",
+          phone: data.phone || "",
+          address: data.addressLine1 || "",
+          province: data.province || "",
+          postalCode: data.postalCode || "",
+        }))
       } catch (err) {
         console.error("Profile fetch error:", err)
         router.push("/login")
@@ -132,10 +142,11 @@ export default function CheckoutPage() {
     try {
       const payload = {
         user_id: userId,
-        name: form.name,
+        firstName: form.firstName,
+        lastName: form.lastName,
         phone: form.phone,
         address: form.address,
-        city: form.city,
+        province: form.province,
         postalCode: form.postalCode,
         payment_method: paymentMethod,
       }
@@ -269,15 +280,26 @@ export default function CheckoutPage() {
                 <CardContent className="p-6">
                   <h2 className="font-serif text-xl font-bold text-foreground">ข้อมูลการจัดส่ง</h2>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <Label htmlFor="name">ชื่อ-นามสกุล</Label>
+                    <div>
+                      <Label htmlFor="firstName">ชื่อ</Label>
                       <Input
-                        id="name"
+                        id="firstName"
                         required
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        value={form.firstName}
+                        onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                         className="mt-1.5"
-                        placeholder="กรอกชื่อ-นามสกุล"
+                        placeholder="ชื่อ"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="lastName">นามสกุล</Label>
+                      <Input
+                        id="lastName"
+                        required
+                        value={form.lastName}
+                        onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                        className="mt-1.5"
+                        placeholder="นามสกุล"
                       />
                     </div>
                     <div className="sm:col-span-2">
@@ -303,12 +325,12 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="city">จังหวัด</Label>
+                      <Label htmlFor="province">จังหวัด</Label>
                       <Input
-                        id="city"
+                        id="province"
                         required
-                        value={form.city}
-                        onChange={(e) => setForm({ ...form, city: e.target.value })}
+                        value={form.province}
+                        onChange={(e) => setForm({ ...form, province: e.target.value })}
                         className="mt-1.5"
                         placeholder="จังหวัด"
                       />

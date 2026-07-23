@@ -212,10 +212,15 @@ app.get("/profile", auth, async (req, res) => {
     const userId = req.user.id;
 
     const result = await pool.query(
-      `SELECT id, username, email, first_name AS "firstName", last_name AS "lastName",
-              phone, address
-       FROM users
-       WHERE id = $1`,
+      `SELECT u.id, u.username, u.email, u.first_name AS "firstName", u.last_name AS "lastName",
+              u.phone, u.address,
+              a.address_line1 AS "addressLine1",
+              a.province,
+              a.postal_code AS "postalCode"
+       FROM users u
+       LEFT JOIN user_addresses ua ON ua.user_id = u.id AND ua.is_default = TRUE
+       LEFT JOIN addresses a ON a.address_id = ua.address_id
+       WHERE u.id = $1`,
       [userId]
     );
 
@@ -223,7 +228,13 @@ app.get("/profile", auth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json(result.rows[0]);
+    const row = result.rows[0];
+    res.json({
+      ...row,
+      addressLine1: row.addressLine1 || "",
+      province: row.province || "",
+      postalCode: row.postalCode || "",
+    });
   } catch (err) {
     console.error("PROFILE GET ERROR:", err.message);
     res.status(500).json({ error: "Server error" });
@@ -231,6 +242,7 @@ app.get("/profile", auth, async (req, res) => {
 });
 
 app.put("/profile", auth, async (req, res) => {
+  const client = await pool.connect();
   try {
     const userId = req.user.id;
     const {
@@ -238,14 +250,27 @@ app.put("/profile", auth, async (req, res) => {
       lastName = "",
       email = "",
       phone = "",
-      address = "",
+      addressLine1 = "",
+      province = "",
+      postalCode = "",
     } = req.body;
 
     if (!email.trim()) {
       return res.status(400).json({ error: "Email is required" });
     }
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    // No separate district/city field exists in the UI yet — "province"
+    // covers what checkout calls "จังหวัด" and is mirrored into both the
+    // addresses.city and addresses.province columns (same convention as
+    // orderControllers.js's createOrder).
+    const flatAddress = [addressLine1, province, postalCode]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(", ");
+
+    const userResult = await client.query(
       `UPDATE users
        SET email = $1,
            first_name = $2,
@@ -260,25 +285,105 @@ app.put("/profile", auth, async (req, res) => {
         firstName.trim(),
         lastName.trim(),
         phone.trim(),
-        address.trim(),
+        flatAddress,
         userId,
       ]
     );
 
-    if (result.rows.length === 0) {
+    if (userResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "User not found" });
     }
 
+    const recipientName = `${firstName.trim()} ${lastName.trim()}`.trim();
+
+    const defaultAddressResult = await client.query(
+      `SELECT a.address_id
+       FROM user_addresses ua
+       JOIN addresses a ON a.address_id = ua.address_id
+       WHERE ua.user_id = $1 AND ua.is_default = TRUE`,
+      [userId]
+    );
+
+    const hasAddressInput = [addressLine1, province, postalCode].some((s) =>
+      s.trim()
+    );
+
+    let addressRow = {
+      addressLine1: "",
+      province: "",
+      postalCode: "",
+    };
+
+    if (defaultAddressResult.rows.length > 0) {
+      const addressId = defaultAddressResult.rows[0].address_id;
+      const updated = await client.query(
+        `UPDATE addresses
+         SET recipient_name = $1,
+             phone = $2,
+             address_line1 = $3,
+             city = $4,
+             province = $4,
+             postal_code = $5
+         WHERE address_id = $6
+         RETURNING address_line1 AS "addressLine1", province, postal_code AS "postalCode"`,
+        [
+          recipientName,
+          phone.trim(),
+          addressLine1.trim(),
+          province.trim(),
+          postalCode.trim(),
+          addressId,
+        ]
+      );
+      addressRow = updated.rows[0];
+    } else if (hasAddressInput) {
+      // Only create the user's first address row once they've actually
+      // entered something — otherwise every profile save (e.g. just
+      // changing a phone number) would leave behind an empty default row.
+      const inserted = await client.query(
+        `INSERT INTO addresses (
+           user_id, recipient_name, phone, address_line1, city, province, postal_code
+         )
+         VALUES ($1,$2,$3,$4,$5,$5,$6)
+         RETURNING address_id, address_line1 AS "addressLine1", province, postal_code AS "postalCode"`,
+        [
+          userId,
+          recipientName,
+          phone.trim(),
+          addressLine1.trim(),
+          province.trim(),
+          postalCode.trim(),
+        ]
+      );
+      addressRow = inserted.rows[0];
+
+      await client.query(
+        `INSERT INTO user_addresses (user_id, address_id, is_default) VALUES ($1, $2, TRUE)`,
+        [userId, addressRow.address_id]
+      );
+    }
+
+    await client.query("COMMIT");
+
     res.json({
       message: "Profile updated",
-      user: result.rows[0],
+      user: {
+        ...userResult.rows[0],
+        addressLine1: addressRow.addressLine1 || "",
+        province: addressRow.province || "",
+        postalCode: addressRow.postalCode || "",
+      },
     });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error("PROFILE UPDATE ERROR:", err.message);
     if (err.code === "23505") {
       return res.status(400).json({ error: "Email already in use" });
     }
     res.status(500).json({ error: "Server error" });
+  } finally {
+    client.release();
   }
 });
 
@@ -356,14 +461,38 @@ app.get("/admin/stats", auth, async (req, res) => {
     const result = await pool.query(`
       SELECT
         COALESCE((SELECT SUM(total_price) FROM orders WHERE ordered_at::date = CURRENT_DATE), 0)::numeric AS sales,
+        COALESCE((SELECT SUM(total_price) FROM orders WHERE ordered_at::date = CURRENT_DATE - 1), 0)::numeric AS sales_yesterday,
         (SELECT COUNT(*) FROM orders WHERE ordered_at::date = CURRENT_DATE)::integer AS orders,
+        (SELECT COUNT(*) FROM orders WHERE ordered_at::date = CURRENT_DATE - 1)::integer AS orders_yesterday,
         (SELECT COUNT(*) FROM products)::integer AS products,
-        (SELECT COUNT(*) FROM users)::integer AS users
+        (SELECT COUNT(*) FROM products WHERE created_at::date = CURRENT_DATE)::integer AS products_new_today,
+        (SELECT COUNT(*) FROM users)::integer AS users,
+        (SELECT COUNT(*) FROM users WHERE created_at::date = CURRENT_DATE)::integer AS users_new_today
     `);
 
     res.json(result.rows[0]);
   } catch (err) {
     console.error("ADMIN STATS ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/admin/low-stock", auth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        v.variant_id, v.size, v.color, v.color_th, v.stock,
+        p.product_id, p.product_name, p.product_name_th
+      FROM variants v
+      JOIN products p ON p.product_id = v.product_id
+      WHERE v.is_active = TRUE AND p.is_active = TRUE AND v.stock < 5
+      ORDER BY v.stock ASC
+      LIMIT 10
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("ADMIN LOW STOCK ERROR:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 });

@@ -35,6 +35,7 @@ const CATEGORIES = [
   { value: "shirt", label: "Shirt", labelTh: "เชิ้ต" },
   { value: "polo",  label: "Polo",  labelTh: "โปโล" },
   { value: "pant",  label: "Pant",  labelTh: "กางเกง" },
+  { value: "set",   label: "Set",   labelTh: "ชุด" },
 ]
 
 const SUBCATS: Record<string, { value: string; label: string; labelTh: string }[]> = {
@@ -95,6 +96,8 @@ const PRESET_COLORS = [
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
+type SetComponentRef = { variant_id: string; quantity: number }
+
 type VariantDetail = {
   variant_id: string
   size: string
@@ -114,6 +117,7 @@ type VariantDetail = {
   cost_price?: number
   stock: number
   is_active: boolean
+  component_variants?: SetComponentRef[] | null
 }
 
 type ProductRow = {
@@ -149,7 +153,13 @@ type VariantDraft = {
   costPrice: string
   stock: string
   isActive: boolean
+  // Only set for category="set" rows: the real component variants this
+  // "set" option bundles, in place of the size/color/pattern fields above.
+  componentVariantIds?: string[]
+  componentQuantities?: string[]
 }
+
+type SetComponentPick = { productId: string; variantId: string; quantity: string }
 
 type ProductImage = {
   image_id: number
@@ -196,6 +206,8 @@ type FormState = {
   editingVariantKey: string | null
   imageFile: File | null
   imagePreview: string
+  // category="set" component picker (replaces size/color/pattern above)
+  setComponents: SetComponentPick[]
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -224,6 +236,58 @@ function luminance(hex: string): number {
   const g = parseInt(h.substring(2, 4), 16)
   const b = parseInt(h.substring(4, 6), 16)
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+}
+
+// Resolves the currently-picked set components into a VariantDraft, or
+// returns null if fewer than 2 components are picked, a pick's variant no
+// longer exists, or the picked components' patterns don't all match (a set
+// may never bundle mismatched patterns, e.g. a pattern-A shirt with a
+// pattern-B short).
+function resolveSetDraft(
+  picks: SetComponentPick[],
+  products: ProductRow[],
+  price: string,
+  costPrice: string,
+  stock: string,
+  isActive: boolean,
+  key: string,
+  existingVariantId: string | null
+): VariantDraft | null {
+  const filled = picks.filter((p) => p.productId && p.variantId)
+  if (filled.length < 2) return null
+
+  const resolved = filled.map((p) => {
+    const prod = products.find((pr) => pr.product_id === p.productId)
+    const variant = prod?.variants.find((v) => v.variant_id === p.variantId)
+    return { pick: p, prod, variant }
+  })
+  if (resolved.some((r) => !r.prod || !r.variant)) return null
+
+  const patterns = new Set(resolved.map((r) => r.variant!.pattern || null))
+  if (patterns.size > 1) return null
+
+  const label = resolved.map((r) => `${r.prod!.product_name} (${r.variant!.size})`).join(" + ")
+  const patternVal = resolved[0].variant!.pattern || ""
+  const patternObj = PATTERNS.find((p) => p.value === patternVal)
+
+  return {
+    _key: key,
+    variantId: existingVariantId,
+    size: label,
+    colorHex: "#8b6f5a",
+    colorName: patternObj?.label ?? (patternVal || "Set"),
+    colorNameTh: patternObj?.labelTh ?? "",
+    pattern: patternVal,
+    patternTh: patternObj?.labelTh ?? "",
+    chestMin: "", chestMax: "", waistMin: "", waistMax: "",
+    sleeve: "", sleeveTh: "", collar: "", collarTh: "",
+    price,
+    costPrice,
+    stock,
+    isActive,
+    componentVariantIds: resolved.map((r) => r.variant!.variant_id),
+    componentQuantities: filled.map((p) => p.quantity || "1"),
+  }
 }
 
 const BLANK_VARIANT_EDITOR = {
@@ -261,7 +325,13 @@ const BLANK_FORM: FormState = {
   editingVariantKey: null,
   imageFile: null,
   imagePreview: "",
+  setComponents: [],
 }
+
+const BLANK_SET_COMPONENTS: SetComponentPick[] = [
+  { productId: "", variantId: "", quantity: "1" },
+  { productId: "", variantId: "", quantity: "1" },
+]
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -374,6 +444,8 @@ export default function AdminProductsPage() {
         costPrice: String(v.cost_price ?? ""),
         stock: String(v.stock ?? ""),
         isActive: v.is_active !== false,
+        componentVariantIds: v.component_variants?.map((c) => c.variant_id),
+        componentQuantities: v.component_variants?.map((c) => String(c.quantity)),
       }
     })
 
@@ -434,7 +506,26 @@ export default function AdminProductsPage() {
       subcategory: firstSub?.value ?? "",
       subcategoryTh: firstSub?.labelTh ?? "",
       size: (isUpper ? UPPER_SIZES : PANT_SIZES)[0],
+      setComponents: cat === "set" && f.setComponents.length === 0 ? BLANK_SET_COMPONENTS : f.setComponents,
     }))
+  }
+
+  // ── set component picker handlers ────────────────────────────────────────
+
+  const updateSetComponentPick = (idx: number, patch: Partial<SetComponentPick>) => {
+    setForm((f) => {
+      const next = [...f.setComponents]
+      next[idx] = { ...next[idx], ...patch }
+      return { ...f, setComponents: next }
+    })
+  }
+
+  const addSetComponentPick = () => {
+    setForm((f) => ({ ...f, setComponents: [...f.setComponents, { productId: "", variantId: "", quantity: "1" }] }))
+  }
+
+  const removeSetComponentPick = (idx: number) => {
+    setForm((f) => ({ ...f, setComponents: f.setComponents.filter((_, i) => i !== idx) }))
   }
 
   const handleSubcatChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -465,6 +556,31 @@ export default function AdminProductsPage() {
 
   const handleSaveVariantRow = () => {
     const key = form.editingVariantKey ?? String(Date.now() + Math.random())
+
+    if (form.category === "set") {
+      const existingId = form.editingVariantKey
+        ? (form.variants.find((v) => v._key === form.editingVariantKey)?.variantId ?? null)
+        : null
+      const draft = resolveSetDraft(
+        form.setComponents, products, form.price, form.costPrice, form.stock,
+        form.status === "active", key, existingId
+      )
+      if (!draft) {
+        alert("กรุณาเลือกสินค้าอย่างน้อย 2 ชิ้นที่มีลายตรงกันสำหรับเซ็ต")
+        return
+      }
+      setForm((f) => ({
+        ...f,
+        variants: f.editingVariantKey
+          ? f.variants.map((v) => (v._key === f.editingVariantKey ? draft : v))
+          : [...f.variants, draft],
+        editingVariantKey: null,
+        setComponents: BLANK_SET_COMPONENTS,
+        price: "", costPrice: "", stock: "",
+      }))
+      return
+    }
+
     const draft: VariantDraft = {
       _key: key,
       variantId: form.editingVariantKey
@@ -502,6 +618,28 @@ export default function AdminProductsPage() {
   const handleEditVariantRow = (key: string) => {
     const v = form.variants.find((r) => r._key === key)
     if (!v) return
+
+    if (v.componentVariantIds && v.componentVariantIds.length > 0) {
+      const picks: SetComponentPick[] = v.componentVariantIds.map((vid, i) => {
+        const prod = products.find((pr) => pr.variants.some((pv) => pv.variant_id === vid))
+        return {
+          productId: prod?.product_id ?? "",
+          variantId: vid,
+          quantity: v.componentQuantities?.[i] ?? "1",
+        }
+      })
+      setForm((f) => ({
+        ...f,
+        editingVariantKey: key,
+        setComponents: picks,
+        price: v.price,
+        costPrice: v.costPrice,
+        stock: v.stock,
+        status: v.isActive ? "active" : "draft",
+      }))
+      return
+    }
+
     setForm((f) => ({
       ...f,
       editingVariantKey: key,
@@ -531,6 +669,15 @@ export default function AdminProductsPage() {
   }
 
   const handleAddVariantRow = () => {
+    if (form.category === "set") {
+      setForm((f) => ({
+        ...f,
+        editingVariantKey: null,
+        setComponents: BLANK_SET_COMPONENTS,
+        price: "", costPrice: "", stock: "",
+      }))
+      return
+    }
     setForm((f) => ({ ...f, editingVariantKey: null, ...BLANK_VARIANT_EDITOR }))
   }
 
@@ -601,7 +748,22 @@ export default function AdminProductsPage() {
 
     // Auto-commit the editor if price is filled but user forgot to click "เพิ่มไซส์นี้ลงรายการ"
     let variantsToSave = [...form.variants]
-    if (form.price !== "") {
+    if (form.category === "set") {
+      const existingId = form.editingVariantKey
+        ? (form.variants.find((v) => v._key === form.editingVariantKey)?.variantId ?? null)
+        : null
+      const pendingSet = resolveSetDraft(
+        form.setComponents, products, form.price, form.costPrice, form.stock,
+        form.status === "active",
+        form.editingVariantKey ?? String(Date.now() + Math.random()),
+        existingId
+      )
+      if (pendingSet) {
+        variantsToSave = form.editingVariantKey
+          ? variantsToSave.map((v) => (v._key === form.editingVariantKey ? pendingSet : v))
+          : [...variantsToSave, pendingSet]
+      }
+    } else if (form.price !== "") {
       const key = form.editingVariantKey ?? String(Date.now() + Math.random())
       const pending: VariantDraft = {
         _key: key,
@@ -660,6 +822,12 @@ export default function AdminProductsPage() {
         cost_price: v.costPrice || null,
         stock: v.stock,
         is_active: v.isActive,
+        ...(v.componentVariantIds && v.componentVariantIds.length > 0
+          ? {
+              component_variant_ids: v.componentVariantIds,
+              component_quantities: (v.componentQuantities ?? []).map((q) => Number(q) || 1),
+            }
+          : {}),
       }))
     ))
 
@@ -738,6 +906,24 @@ export default function AdminProductsPage() {
     stockN === 0 ? "Out of stock" : stockN <= 10 ? "Low stock" : "In stock"
   const stockColor =
     stockN === 0 ? "#dc2626" : stockN <= 10 ? "#d97706" : "#16a34a"
+
+  const isSet = form.category === "set"
+  const setComponentsResolved = isSet
+    ? form.setComponents
+        .filter((p) => p.productId && p.variantId)
+        .map((p) => {
+          const prod = products.find((pr) => pr.product_id === p.productId)
+          const variant = prod?.variants.find((v) => v.variant_id === p.variantId)
+          return { pick: p, prod, variant }
+        })
+    : []
+  const setComponentsSum = setComponentsResolved.reduce(
+    (sum, r) => sum + (r.variant ? Number(r.variant.price) * (Number(r.pick.quantity) || 1) : 0),
+    0
+  )
+  const setPatternMismatch =
+    setComponentsResolved.length >= 2 &&
+    new Set(setComponentsResolved.map((r) => r.variant?.pattern || null)).size > 1
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -1425,7 +1611,7 @@ export default function AdminProductsPage() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr",
+                        gridTemplateColumns: isSet ? "1fr" : "1fr 1fr 1fr",
                         gap: 16,
                         marginBottom: 18,
                       }}
@@ -1443,35 +1629,45 @@ export default function AdminProductsPage() {
                             </option>
                           ))}
                         </select>
+                        {isSet && (
+                          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#9aa0ac" }}>
+                            A set has no sub-category or pattern of its own — its pattern is
+                            whatever its linked items share.
+                          </p>
+                        )}
                       </div>
-                      <div>
-                        <label style={labelStyle}>Sub-category</label>
-                        <select
-                          value={form.subcategory}
-                          onChange={handleSubcatChange}
-                          style={selectStyle}
-                        >
-                          {(SUBCATS[form.category] ?? []).map((s) => (
-                            <option key={s.value} value={s.value}>
-                              {s.label} / {s.labelTh}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Pattern</label>
-                        <select
-                          value={form.pattern}
-                          onChange={handlePatternChange}
-                          style={selectStyle}
-                        >
-                          {PATTERNS.map((p) => (
-                            <option key={p.value} value={p.value}>
-                              {p.label} / {p.labelTh}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {!isSet && (
+                        <div>
+                          <label style={labelStyle}>Sub-category</label>
+                          <select
+                            value={form.subcategory}
+                            onChange={handleSubcatChange}
+                            style={selectStyle}
+                          >
+                            {(SUBCATS[form.category] ?? []).map((s) => (
+                              <option key={s.value} value={s.value}>
+                                {s.label} / {s.labelTh}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      {!isSet && (
+                        <div>
+                          <label style={labelStyle}>Pattern</label>
+                          <select
+                            value={form.pattern}
+                            onChange={handlePatternChange}
+                            style={selectStyle}
+                          >
+                            {PATTERNS.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label} / {p.labelTh}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
 
                     <div
@@ -1564,13 +1760,118 @@ export default function AdminProductsPage() {
                   <section style={sectionStyle}>
                     <div style={{ marginBottom: 20 }}>
                       <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>
-                        {form.editingVariantKey ? "แก้ไขไซส์/สี" : "เพิ่มไซส์/สี ใหม่"}
+                        {isSet
+                          ? (form.editingVariantKey ? "แก้ไขตัวเลือกเซ็ต" : "เพิ่มตัวเลือกเซ็ตใหม่")
+                          : (form.editingVariantKey ? "แก้ไขไซส์/สี" : "เพิ่มไซส์/สี ใหม่")}
                       </h2>
                       <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
-                        Size and color define this individual row. Each variant has its own stock.
+                        {isSet
+                          ? "Pick 2 or more items sharing the same pattern to bundle as one set option. Sizes stay independent per item; only the pattern must match."
+                          : "Size and color define this individual row. Each variant has its own stock."}
                       </p>
                     </div>
 
+                    {isSet ? (
+                      <div>
+                        {form.setComponents.map((pick, idx) => {
+                          const prod = products.find((p) => p.product_id === pick.productId)
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1.4fr 80px 36px",
+                                gap: 10,
+                                marginBottom: 12,
+                                alignItems: "end",
+                              }}
+                            >
+                              <div>
+                                <label style={labelStyle}>Item {idx + 1} — Product</label>
+                                <select
+                                  value={pick.productId}
+                                  onChange={(e) => updateSetComponentPick(idx, { productId: e.target.value, variantId: "" })}
+                                  style={selectStyle}
+                                >
+                                  <option value="">— select product —</option>
+                                  {products.filter((p) => p.category !== "set").map((p) => (
+                                    <option key={p.product_id} value={p.product_id}>
+                                      {p.product_name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={labelStyle}>Variant</label>
+                                <select
+                                  value={pick.variantId}
+                                  onChange={(e) => updateSetComponentPick(idx, { variantId: e.target.value })}
+                                  style={selectStyle}
+                                  disabled={!pick.productId}
+                                >
+                                  <option value="">— select variant —</option>
+                                  {(prod?.variants ?? []).map((v) => (
+                                    <option key={v.variant_id} value={v.variant_id}>
+                                      {v.size} / {v.color}{v.pattern ? ` / ${v.pattern}` : ""} — ฿{v.price} (stock {v.stock})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={labelStyle}>Qty</label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={pick.quantity}
+                                  onChange={(e) => updateSetComponentPick(idx, { quantity: e.target.value })}
+                                  style={inputStyle}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeSetComponentPick(idx)}
+                                disabled={form.setComponents.length <= 2}
+                                title="Remove item"
+                                style={{
+                                  height: 42, borderRadius: 8, border: "1px solid #fca5a5",
+                                  background: "#fff", color: "#dc2626",
+                                  cursor: form.setComponents.length <= 2 ? "not-allowed" : "pointer",
+                                  opacity: form.setComponents.length <= 2 ? 0.4 : 1,
+                                }}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={addSetComponentPick}
+                          style={{
+                            height: 36, padding: "0 14px", borderRadius: 8,
+                            border: "1px solid #8b5e3c", background: "#fff",
+                            color: "#8b5e3c", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                            marginBottom: 14,
+                          }}
+                        >
+                          + Add item
+                        </button>
+
+                        {setPatternMismatch && (
+                          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#dc2626", fontWeight: 600 }}>
+                            ลายของสินค้าที่เลือกไม่ตรงกัน ไม่สามารถจับเป็นเซ็ตได้ — patterns don&apos;t
+                            match, this combination cannot be saved as a set.
+                          </p>
+                        )}
+                        {setComponentsResolved.length >= 2 && !setPatternMismatch && (
+                          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#707683" }}>
+                            Sum of individual prices:{" "}
+                            <strong>฿{setComponentsSum.toLocaleString()}</strong> — set the flat
+                            set price below.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
                     <div
                       style={{
                         display: "grid",
@@ -1730,9 +2031,11 @@ export default function AdminProductsPage() {
                         </div>
                       </div>
                     </div>
+                    )}
                   </section>
 
                   {/* Measurements */}
+                  {!isSet && (
                   <section style={sectionStyle}>
                     <div
                       style={{
@@ -1858,6 +2161,7 @@ export default function AdminProductsPage() {
                       </div>
                     )}
                   </section>
+                  )}
 
                   {/* Pricing & inventory */}
                   <section style={sectionStyle}>
@@ -1930,9 +2234,15 @@ export default function AdminProductsPage() {
                           type="number"
                           value={form.stock}
                           onChange={upd("stock")}
-                          placeholder="48"
-                          style={inputStyle}
+                          placeholder={isSet ? "Auto" : "48"}
+                          disabled={isSet}
+                          style={{ ...inputStyle, ...(isSet ? { background: "#f4f5f7", color: "#9aa0ac" } : {}) }}
                         />
+                        {isSet && (
+                          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#9aa0ac" }}>
+                            Derived automatically from the linked items&apos; stock — not editable.
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div

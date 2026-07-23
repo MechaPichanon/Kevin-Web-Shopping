@@ -55,7 +55,7 @@
   CREATE TABLE IF NOT EXISTS variants (
     variant_id VARCHAR(30)   PRIMARY KEY,
     product_id VARCHAR(20)   NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
-    size       VARCHAR(10)   NOT NULL,
+    size       VARCHAR(100)  NOT NULL,  -- widened for "set" rows, which store a synthesized combo label
     color      VARCHAR(50)   NOT NULL,
     color_th   VARCHAR(50)   DEFAULT NULL,
     pattern    VARCHAR(50)   DEFAULT NULL,
@@ -96,6 +96,67 @@
   CREATE INDEX IF NOT EXISTS product_images_color_idx   ON product_images (product_id, color);
   CREATE UNIQUE INDEX IF NOT EXISTS product_images_one_primary_idx
     ON product_images (product_id) WHERE is_primary = TRUE;
+
+  -- set_components — maps a "set" product's variant (products.category='set')
+  -- to the real, standalone-sellable variants it bundles. A set's stock is
+  -- never tracked independently; it's derived from its components via the
+  -- triggers below, so one physical item is counted once whether it sells
+  -- standalone or inside a set.
+  CREATE TABLE IF NOT EXISTS set_components (
+    set_variant_id       VARCHAR(30) NOT NULL REFERENCES variants(variant_id) ON DELETE CASCADE,
+    component_variant_id VARCHAR(30) NOT NULL REFERENCES variants(variant_id) ON DELETE RESTRICT,
+    quantity              INTEGER    NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    PRIMARY KEY (set_variant_id, component_variant_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS set_components_component_idx
+    ON set_components (component_variant_id);
+
+  -- Recompute one set-variant's stock as the floor of the scarcest component.
+  CREATE OR REPLACE FUNCTION recompute_set_variant_stock(p_set_variant_id VARCHAR)
+  RETURNS void AS $$
+    UPDATE variants v
+    SET stock = COALESCE((
+      SELECT MIN(c.stock / sc.quantity)
+      FROM set_components sc
+      JOIN variants c ON c.variant_id = sc.component_variant_id
+      WHERE sc.set_variant_id = p_set_variant_id
+    ), 0)
+    WHERE v.variant_id = p_set_variant_id;
+  $$ LANGUAGE sql;
+
+  -- Whenever a component's real stock changes, recompute every set built on it.
+  CREATE OR REPLACE FUNCTION trg_recompute_dependent_set_stock() RETURNS trigger AS $$
+  DECLARE r RECORD;
+  BEGIN
+    FOR r IN SELECT DISTINCT set_variant_id FROM set_components
+             WHERE component_variant_id = NEW.variant_id LOOP
+      PERFORM recompute_set_variant_stock(r.set_variant_id);
+    END LOOP;
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS trg_variants_stock_cascade ON variants;
+  CREATE TRIGGER trg_variants_stock_cascade
+  AFTER UPDATE OF stock ON variants
+  FOR EACH ROW WHEN (OLD.stock IS DISTINCT FROM NEW.stock)
+  EXECUTE FUNCTION trg_recompute_dependent_set_stock();
+
+  -- Whenever a set's component list changes (new set option created), give
+  -- the new set-variant its initial derived stock immediately.
+  CREATE OR REPLACE FUNCTION trg_init_set_variant_stock() RETURNS trigger AS $$
+  BEGIN
+    PERFORM recompute_set_variant_stock(NEW.set_variant_id);
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS trg_set_components_init_stock ON set_components;
+  CREATE TRIGGER trg_set_components_init_stock
+  AFTER INSERT ON set_components
+  FOR EACH ROW
+  EXECUTE FUNCTION trg_init_set_variant_stock();
 
   -- ════════════════════════════════════════
   -- USERS & ADDRESSES
@@ -142,6 +203,20 @@
   );
 
   CREATE INDEX IF NOT EXISTS addresses_user_id_idx ON addresses (user_id);
+
+  -- user_addresses — many-to-many sharing: lets more than one account use the
+  -- same saved address (e.g. family members at one house). addresses.user_id
+  -- stays as the original creator (informational); this table is the real
+  -- access/sharing source of truth.
+  CREATE TABLE IF NOT EXISTS user_addresses (
+    user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    address_id INTEGER     NOT NULL REFERENCES addresses(address_id) ON DELETE CASCADE,
+    is_default BOOLEAN     NOT NULL DEFAULT FALSE,
+    added_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, address_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS user_addresses_address_id_idx ON user_addresses (address_id);
 
   -- ════════════════════════════════════════
   -- CART

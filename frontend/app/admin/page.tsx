@@ -14,9 +14,63 @@ import {
   Menu,
   X,
   TrendingUp,
+  TrendingDown,
   DollarSign,
   Eye,
 } from "lucide-react"
+
+type DashboardStats = {
+  sales: number
+  sales_yesterday: number
+  orders: number
+  orders_yesterday: number
+  products: number
+  products_new_today: number
+  users: number
+  users_new_today: number
+}
+
+type RecentOrder = {
+  id: number | string
+  customer: string
+  total: number
+  status: string
+  date: string
+}
+
+type BestSeller = {
+  product_id: string
+  product_name: string
+  product_name_th?: string
+  category?: string
+  category_th?: string
+  total_sold: string | number
+}
+
+type LowStockItem = {
+  variant_id: string
+  product_id: string
+  product_name: string
+  product_name_th?: string
+  size: string
+  color: string
+  color_th?: string
+  stock: number
+}
+
+const formatChange = (today: number, yesterday: number) => {
+  const t = Number(today)
+  const y = Number(yesterday)
+
+  if (y === 0) {
+    return { label: t > 0 ? "New" : "0%", isUp: t >= 0 }
+  }
+
+  const pct = ((t - y) / y) * 100
+  const isUp = pct >= 0
+
+  return { label: `${isUp ? "+" : ""}${pct.toFixed(1)}%`, isUp }
+}
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
@@ -70,8 +124,10 @@ export default function AdminDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
 
-  const [stats, setStats] = useState<any>(null)
-  const [recentOrders, setRecentOrders] = useState<any[]>([])
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([])
+  const [bestSellers, setBestSellers] = useState<BestSeller[]>([])
+  const [lowStock, setLowStock] = useState<LowStockItem[]>([])
 
   useEffect(() => {
     const user = localStorage.getItem("user")
@@ -113,6 +169,24 @@ export default function AdminDashboard() {
       .then((data) => {
         setRecentOrders(data)
       })
+
+    // ✅ fetch best sellers (public endpoint, same one the homepage uses)
+    fetch("http://localhost:5000/products/best-sellers?limit=5")
+      .then((res) => res.json())
+      .then((data) => {
+        setBestSellers(data)
+      })
+
+    // ✅ fetch low-stock variants
+    fetch("http://localhost:5000/admin/low-stock", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setLowStock(data)
+      })
   }, [router])
 
   const handleLogout = () => {
@@ -136,32 +210,39 @@ export default function AdminDashboard() {
     )
   }
 
+  const salesChange = formatChange(stats.sales, stats.sales_yesterday)
+  const ordersChange = formatChange(stats.orders, stats.orders_yesterday)
+
   const dashboardStats = [
     {
       title: "ยอดขายวันนี้",
-      value: `฿${stats.sales?.toLocaleString() || 0}`,
-      change: "+12.5%",
+      value: `฿${Number(stats.sales || 0).toLocaleString()}`,
+      change: salesChange.label,
+      isUp: salesChange.isUp,
       icon: DollarSign,
       color: "text-green-600",
     },
     {
       title: "คำสั่งซื้อใหม่",
       value: stats.orders || 0,
-      change: "+8.2%",
+      change: ordersChange.label,
+      isUp: ordersChange.isUp,
       icon: ShoppingCart,
       color: "text-blue-600",
     },
     {
       title: "สินค้าทั้งหมด",
       value: stats.products || 0,
-      change: "+3",
+      change: `+${stats.products_new_today || 0} วันนี้`,
+      isUp: true,
       icon: Package,
       color: "text-purple-600",
     },
     {
       title: "ผู้ใช้ทั้งหมด",
       value: stats.users || 0,
-      change: "+18",
+      change: `+${stats.users_new_today || 0} วันนี้`,
+      isUp: true,
       icon: Users,
       color: "text-orange-600",
     },
@@ -307,8 +388,16 @@ export default function AdminDashboard() {
                   {stat.value}
                 </h2>
 
-                <div className="mt-2 flex items-center gap-1 text-sm text-green-600">
-                  <TrendingUp className="h-4 w-4" />
+                <div
+                  className={`mt-2 flex items-center gap-1 text-sm ${
+                    stat.isUp ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {stat.isUp ? (
+                    <TrendingUp className="h-4 w-4" />
+                  ) : (
+                    <TrendingDown className="h-4 w-4" />
+                  )}
                   {stat.change}
                 </div>
               </div>
@@ -465,6 +554,85 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
+          {/* BEST SELLERS + LOW STOCK */}
+          <div className="mt-8 grid gap-5 lg:grid-cols-2">
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-xl font-semibold text-[#5b3a29]">
+                สินค้าขายดี
+              </h2>
+
+              {bestSellers.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  ยังไม่มีข้อมูลการขาย
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {bestSellers.map((p, i) => (
+                    <li
+                      key={p.product_id}
+                      className="flex items-center justify-between gap-3 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#8b5e3c]/10 text-sm font-semibold text-[#8b5e3c]">
+                          {i + 1}
+                        </span>
+
+                        <div>
+                          <p className="text-sm font-medium text-[#5b3a29]">
+                            {p.product_name_th || p.product_name}
+                          </p>
+
+                          <p className="text-xs text-gray-500">
+                            {p.category_th || p.category}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className="whitespace-nowrap text-sm font-semibold text-[#5b3a29]">
+                        {Number(p.total_sold)} ชิ้น
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-xl font-semibold text-[#5b3a29]">
+                สินค้าใกล้หมดสต็อก
+              </h2>
+
+              {lowStock.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  สต็อกเพียงพอทุกรายการ
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {lowStock.map((v) => (
+                    <li
+                      key={v.variant_id}
+                      className="flex items-center justify-between gap-3 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[#5b3a29]">
+                          {v.product_name_th || v.product_name}
+                        </p>
+
+                        <p className="text-xs text-gray-500">
+                          {v.size} · {v.color_th || v.color}
+                        </p>
+                      </div>
+
+                      <span className="whitespace-nowrap text-sm font-semibold text-red-600">
+                        เหลือ {v.stock} ชิ้น
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </main>

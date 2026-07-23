@@ -6,8 +6,10 @@ export default function HeroBanner() {
     <section
       className="relative overflow-hidden py-24 sm:py-32"
       style={{
-        background:
-          "linear-gradient(150deg, #f4ede3 0%, #ece2d6 60%, #e3d4c2 100%)",
+        backgroundImage:
+          "linear-gradient(150deg, rgba(244,237,227,.88) 0%, rgba(236,226,214,.80) 60%, rgba(227,212,194,.85) 100%), url('/images/hero/hero-banner.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
       }}
     >
       <div

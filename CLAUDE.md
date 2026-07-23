@@ -154,7 +154,9 @@ Browser
 
 PostgreSQL 15 + pgvector (port 5432)  ← single source of truth for all data
   ├─ users / addresses          – auth, profile, multi-address
+  ├─ user_addresses             – join table: an address can be shared by 2+ users (e.g. family)
   ├─ products / variants        – catalogue with SKU-level stock & price
+  ├─ set_components             – "set"/bundle variants → their real component variants
   ├─ product_images             – gallery URLs (+ product_image_embeddings for CLIP)
   ├─ carts / cart_items         – active shopping carts
   ├─ orders / order_items       – order headers + line items
@@ -175,13 +177,15 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
 
 ### Schema files
 
-- `postgres/init/01_schema.sql` — auto-runs on fresh volume (complete schema, all 14 tables)
-- `postgres/migrations/` — numbered incremental migrations (`002_` through `009_`)
+- `postgres/init/01_schema.sql` — auto-runs on fresh volume (complete schema, all 16 tables)
+- `postgres/migrations/` — numbered incremental migrations (`002_` through `011_`)
   - `005_new_ecommerce_schema.sql` — migrates an existing DB from old schema → new schema
   - `006_add_thai_fields.sql` — Thai name/description columns + store_policies table
   - `007_add_thai_variant_fields.sql` — Thai columns for pattern, sleeve, collar
   - `008_color_images.sql` — color field on product_images + unique primary index
   - `009_expand_payment_status.sql` — widens `orders.payment_status` to `unpaid/pending_verification/paid/rejected/refunded`, matching what the admin orders UI already sends. Schema-only: no endpoint currently sets `pending_verification` — see `docs/payment_verification_recommendations.md` for the still-unbuilt slip-upload flow that would produce it.
+  - `010_product_sets.sql` — adds "product sets" (bundles, e.g. shirt + shorts sold together at a flat discounted price). Widens `variants.size` to `VARCHAR(100)` (a set-variant stores a synthesized combo label there, e.g. "Shirt (M) + Shorts (32)" — longer than the old 10-char size code). Adds `set_components(set_variant_id, component_variant_id, quantity)`, mapping a set's variant (a normal `variants` row on a `products` row with `category='set'`) to the real, standalone-sellable variants it bundles. A set's `stock` is never entered manually — it's derived via a trigger as `MIN(component.stock / quantity)` across its components, and recomputed automatically whenever a component's stock changes (including from an order). Admin-side, the backend (`addProduct`/`updateProduct` in `productControllers.js`) rejects creating/editing a set option whose picked components don't all share the same `pattern` — a set may never bundle mismatched patterns (e.g. a pattern-A shirt with a pattern-B short); sizes stay independent per component (a "pinned combo" — the admin picks one specific size per item per set option, not a combinatorial size matrix). `orderControllers.js` (`createOrder`) now checks stock and decrements it at order time — for a set item this decrements each component's stock instead of the set's own (which was previously a gap: no order ever touched `variants.stock` at all).
+  - `011_user_addresses_junction.sql` — makes users↔addresses genuinely many-to-many (e.g. family members sharing one saved address) via a new `user_addresses(user_id, address_id, is_default, added_at)` join table, backfilled from existing `addresses.user_id` rows. `addresses.user_id` is kept as-is (now just the original creator, informational) — nothing that already queried it breaks. No "add an existing address to my account" UI/endpoint exists yet — out of scope for now (no saved-address UI exists on either side today).
 
 ### users table — backward-compat note
 
@@ -189,13 +193,48 @@ The Express auth backend (`backend/server.js`) queries `id`, `password`, and `ad
 The new `users` table keeps those exact names:
 - `id` (not `user_id`) as PK
 - `password` (stores bcrypt hash — not plain text)
-- `address` (single-line legacy; structured addresses live in the `addresses` table)
+- `address` — kept for backward compat, but is now an **auto-synced flat-text mirror** of the user's default `addresses` row (see below), not something anyone edits directly anymore.
+
+### Address sync — profile ⇄ checkout share one row
+
+Previously `users.address` (profile) and the `addresses` table (checkout) were two
+completely disconnected records for the same user — checkout inserted a fresh
+`addresses` row on every single order and never read anything back. This is now
+fixed so there is exactly one "default" address per user, shared by both flows:
+
+- `GET /profile` (`backend/server.js`) LEFT JOINs `user_addresses` (`is_default = TRUE`)
+  → `addresses` and returns `addressLine1/province/postalCode` alongside the existing
+  profile fields. (`addresses.address_line2` exists in the schema but isn't exposed
+  here — neither UI has a line-2 field.)
+- `PUT /profile` upserts that same default row: updates it in place if it exists,
+  otherwise creates it (and links it via `user_addresses`, `is_default = TRUE`) —
+  but only if the request actually included address input, so a plain
+  name/phone/email edit doesn't leave behind an empty address row. It also writes a
+  flattened string into `users.address` (the legacy mirror column).
+- `orderControllers.js` (`createOrder`) no longer blind-inserts a new `addresses` row
+  per order — it looks up the same default row via `user_addresses` and updates it in
+  place (creating it only the first time), so editing your address at checkout keeps
+  your profile's saved address current too. This is a deliberate simplification: there
+  is one shared default address, not a per-order address history — but each order's
+  `orders.shipping_snapshot` (JSONB, previously unpopulated) now freezes a copy of the
+  address at order time, so past orders still show what was true when they were placed
+  even after the default address is later edited.
+- **Bug fixed in the same change:** the checkout form's "จังหวัด" (province) field was
+  being written into the `city` column while the real `province` column was hardcoded
+  to `'-'`. There's no separate district/city field in either UI, so the same value is
+  now stored in both `city` and `province` until one exists.
+- **UI fields aligned** (`frontend/app/profile/page.tsx`, `frontend/app/checkout/page.tsx`):
+  profile's address input changed from one free-text `<Textarea>` to the same 3 plain
+  inputs checkout already had (address line, province, postal code); checkout's single
+  combined "ชื่อ-นามสกุล" name input changed to the same 2 inputs (first/last name)
+  profile already had. `createOrder`'s request body is now `firstName/lastName/phone/
+  address/province/postalCode` (previously `name/phone/address/city/postalCode`).
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/010_description.sql` (next number is `010`).
+1. Create `postgres/migrations/012_description.sql` (next number is `012`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/010_description.sql`
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/012_description.sql`
 4. Mirror the change in `postgres/init/01_schema.sql`.
 
 ### Full seed (fresh Docker volume)
@@ -222,6 +261,8 @@ psql "$DATABASE_URL" -f postgres/migrations/006_add_thai_fields.sql
 psql "$DATABASE_URL" -f postgres/migrations/007_add_thai_variant_fields.sql
 psql "$DATABASE_URL" -f postgres/migrations/008_color_images.sql
 psql "$DATABASE_URL" -f postgres/migrations/009_expand_payment_status.sql
+psql "$DATABASE_URL" -f postgres/migrations/010_product_sets.sql
+psql "$DATABASE_URL" -f postgres/migrations/011_user_addresses_junction.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -365,7 +406,7 @@ FASTAPI_BASE_URL=http://localhost:8000
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `010_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `012_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`

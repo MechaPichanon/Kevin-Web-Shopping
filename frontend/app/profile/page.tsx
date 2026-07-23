@@ -19,7 +19,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { getToken } from "@/lib/auth";
 
@@ -33,7 +32,9 @@ type ProfileUser = {
   firstName: string;
   lastName: string;
   phone: string;
-  address: string;
+  addressLine1: string;
+  province: string;
+  postalCode: string;
 
 };
 
@@ -42,7 +43,9 @@ type ProfileForm = {
   lastName: string;
   email: string;
   phone: string;
-  address: string;
+  addressLine1: string;
+  province: string;
+  postalCode: string;
 
 };
 
@@ -57,7 +60,9 @@ const emptyForm: ProfileForm = {
   lastName: "",
   email: "",
   phone: "",
-  address: "",
+  addressLine1: "",
+  province: "",
+  postalCode: "",
 
 };
 
@@ -120,7 +125,9 @@ export default function ProfilePage() {
             lastName: data.lastName || "",
             email: data.email || "",
             phone: data.phone || "",
-            address: data.address || "",
+            addressLine1: data.addressLine1 || "",
+            province: data.province || "",
+            postalCode: data.postalCode || "",
           });
         }
       })
@@ -165,7 +172,9 @@ export default function ProfilePage() {
         lastName: data.user.lastName || "",
         email: data.user.email || "",
         phone: data.user.phone || "",
-        address: data.user.address || "",
+        addressLine1: data.user.addressLine1 || "",
+        province: data.user.province || "",
+        postalCode: data.user.postalCode || "",
       });
       setIsEditing(false);
       alert("บันทึกสำเร็จ");
@@ -185,7 +194,9 @@ export default function ProfilePage() {
       lastName: user.lastName || "",
       email: user.email || "",
       phone: user.phone || "",
-      address: user.address || "",
+      addressLine1: user.addressLine1 || "",
+      province: user.province || "",
+      postalCode: user.postalCode || "",
     });
   };
 
@@ -417,19 +428,43 @@ export default function ProfilePage() {
                     </div>
                     {/* ที่อยู่ */}
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="address">ที่อยู่</Label>
+                      <Label htmlFor="addressLine1">ที่อยู่</Label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Textarea
-                          id="address"
-                          value={form.address}
-                          onChange={(e) => handleChange("address", e.target.value)}
+                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="addressLine1"
+                          value={form.addressLine1}
+                          onChange={(e) => handleChange("addressLine1", e.target.value)}
                           disabled={!isEditing || isSaving}
-                          className="min-h-[80px] pl-10"
+                          className="pl-10"
+                          placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต"
                         />
                       </div>
                     </div>
 
+                    {/* จังหวัด */}
+                    <div className="space-y-2">
+                      <Label htmlFor="province">จังหวัด</Label>
+                      <Input
+                        id="province"
+                        value={form.province}
+                        onChange={(e) => handleChange("province", e.target.value)}
+                        disabled={!isEditing || isSaving}
+                        placeholder="จังหวัด"
+                      />
+                    </div>
+
+                    {/* รหัสไปรษณีย์ */}
+                    <div className="space-y-2">
+                      <Label htmlFor="postalCode">รหัสไปรษณีย์</Label>
+                      <Input
+                        id="postalCode"
+                        value={form.postalCode}
+                        onChange={(e) => handleChange("postalCode", e.target.value)}
+                        disabled={!isEditing || isSaving}
+                        placeholder="10XXX"
+                      />
+                    </div>
 
                   </div>
                 </div>

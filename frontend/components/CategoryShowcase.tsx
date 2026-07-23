@@ -28,6 +28,16 @@ export default function CategoryShowcase() {
     "linear-gradient(160deg,#b89f8d,#a3876f)",
   ];
 
+  // Add an entry once the matching file exists at frontend/public/images/categories/.
+  // Filenames must exactly match the `category` slug from GET /products/categories.
+  // Categories with no entry here fall back to tileGradients below (no broken-image risk).
+  const categoryImages: Record<string, string> = {
+    // shirt: "/images/categories/shirt.jpg",
+    // tshirt: "/images/categories/tshirt.jpg",
+    // pants: "/images/categories/pants.jpg",
+    // jacket: "/images/categories/jacket.jpg",
+  };
+
   return (
     <section className="bg-[#ece2d6] py-16 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -42,7 +52,15 @@ export default function CategoryShowcase() {
               key={cat.category}
               href={`/products?category=${encodeURIComponent(cat.category)}`}
               className="group relative block aspect-[3/4] overflow-hidden rounded-[10px] shadow-[0_2px_10px_rgba(139,94,60,0.1)] transition hover:shadow-[0_8px_20px_rgba(139,94,60,0.2)]"
-              style={{ background: tileGradients[i % tileGradients.length] }}
+              style={
+                categoryImages[cat.category]
+                  ? {
+                      backgroundImage: `linear-gradient(160deg, rgba(139,111,90,.35), rgba(61,48,37,.55)), url('${categoryImages[cat.category]}')`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }
+                  : { background: tileGradients[i % tileGradients.length] }
+              }
             >
               <div
                 className="pointer-events-none absolute inset-0"
