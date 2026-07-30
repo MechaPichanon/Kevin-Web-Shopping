@@ -66,24 +66,24 @@ ON CONFLICT DO NOTHING;
 -- ADDRESSES
 -- ════════════════════════════════════════
 
-INSERT INTO addresses (user_id, label, recipient_name, phone, address_line1, address_line2, city, province, postal_code, is_default)
+INSERT INTO addresses (user_id, recipient_name, phone, address_line1, address_line2, province, postal_code)
 SELECT
-  u.id, 'Home', 'สมชาย ใจดี', '+6681000002',
-  '123/4 ซอยลาดพร้าว 5', 'แขวงลาดพร้าว', 'กรุงเทพมหานคร', 'กรุงเทพมหานคร', '10230', TRUE
+  u.id, 'สมชาย ใจดี', '+6681000002',
+  '123/4 ซอยลาดพร้าว 5', 'แขวงลาดพร้าว', 'กรุงเทพมหานคร', '10230'
 FROM users u WHERE u.username = 'somchai99'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO addresses (user_id, label, recipient_name, phone, address_line1, city, province, postal_code, is_default)
+INSERT INTO addresses (user_id, recipient_name, phone, address_line1, province, postal_code)
 SELECT
-  u.id, 'Home', 'ณัฐมน สวยงาม', '+6681000003',
-  '56 ถนนนิมมานเหมินท์ ซอย 7', 'เชียงใหม่', 'เชียงใหม่', '50200', TRUE
+  u.id, 'ณัฐมน สวยงาม', '+6681000003',
+  '56 ถนนนิมมานเหมินท์ ซอย 7', 'เชียงใหม่', '50200'
 FROM users u WHERE u.username = 'nattamon'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO addresses (user_id, label, recipient_name, phone, address_line1, address_line2, city, province, postal_code, is_default)
+INSERT INTO addresses (user_id, recipient_name, phone, address_line1, address_line2, province, postal_code)
 SELECT
-  u.id, 'Home', 'วันชัย กรุงเทพ', '+6681000004',
-  '789 ถนนสุขุมวิท', 'แขวงคลองเตย', 'กรุงเทพมหานคร', 'กรุงเทพมหานคร', '10110', TRUE
+  u.id, 'วันชัย กรุงเทพ', '+6681000004',
+  '789 ถนนสุขุมวิท', 'แขวงคลองเตย', 'กรุงเทพมหานคร', '10110'
 FROM users u WHERE u.username = 'wanchai_bkk'
 ON CONFLICT DO NOTHING;
 

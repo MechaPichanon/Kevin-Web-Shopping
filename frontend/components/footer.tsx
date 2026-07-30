@@ -7,7 +7,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
           {/* Company */}
           <div>
-            <h3 className="font-serif text-lg font-bold text-footer-foreground">ร้านบอสเนยย์</h3>
+            <h3 className="font-serif text-lg font-bold text-footer-foreground">ร้านเควิน</h3>
             <p className="mt-2 text-sm text-footer-muted">
               ขายสินค้าคุณภาพดีราคาถูก เชื่อใจได้
             </p>
@@ -63,22 +63,22 @@ export default function Footer() {
             <ul className="mt-2 space-y-2 text-sm text-footer-muted">
               <li className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
-                <span>081-XXX-XXXX</span>
+                <span>095-095-2223</span>
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                <span>contact@bosbutter.com</span>
+                <span>pichanon.tavee0079@gmail.com</span>
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 flex-shrink-0 mt-1" />
-                <span>Bangkok, Thailand</span>
+                <span>Platinum Fashion Mall Floor 4 Zone 2 Room 1115, Bangkok, Thailand</span>
               </li>
             </ul>
           </div>
         </div>
 
         <div className="mt-8 border-t border-[#55463a] pt-8 text-center text-sm text-footer-muted">
-          <p>&copy; 2024 Boss Butter. All rights reserved.</p>
+          <p>&copy; 2026 Kevin. All rights reserved.</p>
         </div>
       </div>
     </footer>

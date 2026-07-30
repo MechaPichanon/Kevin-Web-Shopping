@@ -22,7 +22,7 @@ export default function HeroBanner() {
 
       <div className="relative mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
         <span className="font-mono text-xs font-medium uppercase tracking-[0.25em] text-[#8b6f5a]">
-          ร้านบอสเนยย์ · Boss Butter
+          ร้านเควิน · Kevin
         </span>
 
         <h1 className="font-serif mt-4 text-4xl font-semibold text-[#3d3025] sm:text-6xl">

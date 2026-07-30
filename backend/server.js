@@ -213,8 +213,9 @@ app.get("/profile", auth, async (req, res) => {
 
     const result = await pool.query(
       `SELECT u.id, u.username, u.email, u.first_name AS "firstName", u.last_name AS "lastName",
-              u.phone, u.address,
+              u.phone,
               a.address_line1 AS "addressLine1",
+              a.address_line2 AS "addressLine2",
               a.province,
               a.postal_code AS "postalCode"
        FROM users u
@@ -232,6 +233,7 @@ app.get("/profile", auth, async (req, res) => {
     res.json({
       ...row,
       addressLine1: row.addressLine1 || "",
+      addressLine2: row.addressLine2 || "",
       province: row.province || "",
       postalCode: row.postalCode || "",
     });
@@ -251,6 +253,7 @@ app.put("/profile", auth, async (req, res) => {
       email = "",
       phone = "",
       addressLine1 = "",
+      addressLine2 = "",
       province = "",
       postalCode = "",
     } = req.body;
@@ -261,31 +264,20 @@ app.put("/profile", auth, async (req, res) => {
 
     await client.query("BEGIN");
 
-    // No separate district/city field exists in the UI yet — "province"
-    // covers what checkout calls "จังหวัด" and is mirrored into both the
-    // addresses.city and addresses.province columns (same convention as
-    // orderControllers.js's createOrder).
-    const flatAddress = [addressLine1, province, postalCode]
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .join(", ");
-
     const userResult = await client.query(
       `UPDATE users
        SET email = $1,
            first_name = $2,
            last_name = $3,
-           phone = $4,
-           address = $5
-       WHERE id = $6
+           phone = $4
+       WHERE id = $5
        RETURNING id, username, email, first_name AS "firstName", last_name AS "lastName",
-                 phone, address`,
+                 phone`,
       [
         email.trim(),
         firstName.trim(),
         lastName.trim(),
         phone.trim(),
-        flatAddress,
         userId,
       ]
     );
@@ -311,6 +303,7 @@ app.put("/profile", auth, async (req, res) => {
 
     let addressRow = {
       addressLine1: "",
+      addressLine2: "",
       province: "",
       postalCode: "",
     };
@@ -322,15 +315,16 @@ app.put("/profile", auth, async (req, res) => {
          SET recipient_name = $1,
              phone = $2,
              address_line1 = $3,
-             city = $4,
-             province = $4,
-             postal_code = $5
-         WHERE address_id = $6
-         RETURNING address_line1 AS "addressLine1", province, postal_code AS "postalCode"`,
+             address_line2 = $4,
+             province = $5,
+             postal_code = $6
+         WHERE address_id = $7
+         RETURNING address_line1 AS "addressLine1", address_line2 AS "addressLine2", province, postal_code AS "postalCode"`,
         [
           recipientName,
           phone.trim(),
           addressLine1.trim(),
+          addressLine2.trim(),
           province.trim(),
           postalCode.trim(),
           addressId,
@@ -343,15 +337,16 @@ app.put("/profile", auth, async (req, res) => {
       // changing a phone number) would leave behind an empty default row.
       const inserted = await client.query(
         `INSERT INTO addresses (
-           user_id, recipient_name, phone, address_line1, city, province, postal_code
+           user_id, recipient_name, phone, address_line1, address_line2, province, postal_code
          )
-         VALUES ($1,$2,$3,$4,$5,$5,$6)
-         RETURNING address_id, address_line1 AS "addressLine1", province, postal_code AS "postalCode"`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         RETURNING address_id, address_line1 AS "addressLine1", address_line2 AS "addressLine2", province, postal_code AS "postalCode"`,
         [
           userId,
           recipientName,
           phone.trim(),
           addressLine1.trim(),
+          addressLine2.trim(),
           province.trim(),
           postalCode.trim(),
         ]
@@ -371,6 +366,7 @@ app.put("/profile", auth, async (req, res) => {
       user: {
         ...userResult.rows[0],
         addressLine1: addressRow.addressLine1 || "",
+        addressLine2: addressRow.addressLine2 || "",
         province: addressRow.province || "",
         postalCode: addressRow.postalCode || "",
       },

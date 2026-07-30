@@ -11,7 +11,8 @@ const createOrder = async (req, res) => {
       firstName,
       lastName,
       phone,
-      address,
+      addressLine1,
+      addressLine2 = "",
       province,
       postalCode,
       payment_method,
@@ -102,9 +103,7 @@ const createOrder = async (req, res) => {
     const totalPrice = subtotal + shippingFee;
 
     // Upsert into the user's one default address (shared with the profile
-    // page) instead of inserting a throwaway row every order. There's no
-    // separate district/city field in the UI, so "province" (จังหวัด) is
-    // stored in both the city and province columns until one exists.
+    // page) instead of inserting a throwaway row every order.
     const defaultAddressResult = await client.query(
       `SELECT a.address_id
        FROM user_addresses ua
@@ -122,12 +121,12 @@ const createOrder = async (req, res) => {
         SET recipient_name = $1,
             phone = $2,
             address_line1 = $3,
-            city = $4,
-            province = $4,
-            postal_code = $5
-        WHERE address_id = $6
+            address_line2 = $4,
+            province = $5,
+            postal_code = $6
+        WHERE address_id = $7
         `,
-        [name, phone, address, province, postalCode, addressId]
+        [name, phone, addressLine1, addressLine2, province, postalCode, addressId]
       );
     } else {
       const addressResult = await client.query(
@@ -137,14 +136,14 @@ const createOrder = async (req, res) => {
           recipient_name,
           phone,
           address_line1,
-          city,
+          address_line2,
           province,
           postal_code
         )
-        VALUES ($1,$2,$3,$4,$5,$5,$6)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
         RETURNING address_id
         `,
-        [user_id, name, phone, address, province, postalCode]
+        [user_id, name, phone, addressLine1, addressLine2, province, postalCode]
       );
 
       addressId = addressResult.rows[0].address_id;
@@ -158,8 +157,8 @@ const createOrder = async (req, res) => {
     const shippingSnapshot = {
       recipient_name: name,
       phone,
-      address_line1: address,
-      city: province,
+      address_line1: addressLine1,
+      address_line2: addressLine2,
       province,
       postal_code: postalCode,
     };
@@ -283,10 +282,11 @@ const getAllOrders = async (req, res) => {
         o.notes,
         o.ordered_at,
         o.updated_at,
+        o.shipping_snapshot,
         a.recipient_name,
         a.phone,
         a.address_line1,
-        a.city,
+        a.address_line2,
         a.province,
         a.postal_code,
         pm.method AS payment_method,
@@ -329,24 +329,33 @@ const getAllOrders = async (req, res) => {
       });
     });
 
-    const formatted = orders.map((o) => ({
-      id: o.order_id,
-      customer: o.recipient_name,
-      phone: o.phone,
-      address: [o.address_line1, o.city, o.province, o.postal_code]
-        .filter(Boolean)
-        .join(" "),
-      items: itemsByOrder[o.order_id] || [],
-      subtotal: Number(o.subtotal),
-      shippingFee: Number(o.shipping_fee),
-      total: Number(o.total_price),
-      status: o.status,
-      paymentStatus: o.payment_status,
-      paymentMethod: o.payment_method,
-      trackingNumber: o.tracking_number,
-      notes: o.notes,
-      date: o.ordered_at,
-    }));
+    const formatted = orders.map((o) => {
+      const snap = o.shipping_snapshot || {};
+      const recipient = snap.recipient_name || o.recipient_name;
+      const phone = snap.phone || o.phone;
+      const addressLine1 = snap.address_line1 || o.address_line1;
+      const addressLine2 = snap.address_line2 || o.address_line2;
+      const province = snap.province || o.province;
+      const postalCode = snap.postal_code || o.postal_code;
+      return {
+        id: o.order_id,
+        customer: recipient,
+        phone,
+        address: [addressLine1, addressLine2, province, postalCode]
+          .filter(Boolean)
+          .join(" "),
+        items: itemsByOrder[o.order_id] || [],
+        subtotal: Number(o.subtotal),
+        shippingFee: Number(o.shipping_fee),
+        total: Number(o.total_price),
+        status: o.status,
+        paymentStatus: o.payment_status,
+        paymentMethod: o.payment_method,
+        trackingNumber: o.tracking_number,
+        notes: o.notes,
+        date: o.ordered_at,
+      };
+    });
 
     res.json(formatted);
   } catch (err) {
@@ -377,10 +386,11 @@ const getOrderById = async (req, res) => {
         o.notes,
         o.ordered_at,
         o.updated_at,
+        o.shipping_snapshot,
         a.recipient_name,
         a.phone,
         a.address_line1,
-        a.city,
+        a.address_line2,
         a.province,
         a.postal_code,
         pm.method AS payment_method,
@@ -409,12 +419,19 @@ const getOrderById = async (req, res) => {
     );
 
     const o = orderResult.rows[0];
+    const snap = o.shipping_snapshot || {};
+    const recipient = snap.recipient_name || o.recipient_name;
+    const phone = snap.phone || o.phone;
+    const addressLine1 = snap.address_line1 || o.address_line1;
+    const addressLine2 = snap.address_line2 || o.address_line2;
+    const province = snap.province || o.province;
+    const postalCode = snap.postal_code || o.postal_code;
 
     res.json({
       id: o.order_id,
-      customer: o.recipient_name,
-      phone: o.phone,
-      address: [o.address_line1, o.city, o.province, o.postal_code]
+      customer: recipient,
+      phone,
+      address: [addressLine1, addressLine2, province, postalCode]
         .filter(Boolean)
         .join(" "),
       items: itemsResult.rows.map((item) => ({

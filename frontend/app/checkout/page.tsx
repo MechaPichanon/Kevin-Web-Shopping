@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useCart } from "@/lib/cart-context"
 import { useRouter } from "next/navigation"
 import { getToken } from "@/lib/auth"
+import type { ShippingAddress } from "@/types/address"
 
 
 const paymentMethods = [
@@ -34,11 +35,12 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("promptpay")
   const [isLoading, setIsLoading] = useState(false)
   const [userId, setUserId] = useState<number | null>(null)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ShippingAddress>({
     firstName: "",
     lastName: "",
     phone: "",
-    address: "",
+    addressLine1: "",
+    addressLine2: "",
     province: "",
     postalCode: "",
   })
@@ -69,7 +71,8 @@ export default function CheckoutPage() {
           firstName: data.firstName || "",
           lastName: data.lastName || "",
           phone: data.phone || "",
-          address: data.addressLine1 || "",
+          addressLine1: data.addressLine1 || "",
+          addressLine2: data.addressLine2 || "",
           province: data.province || "",
           postalCode: data.postalCode || "",
         }))
@@ -145,7 +148,8 @@ export default function CheckoutPage() {
         firstName: form.firstName,
         lastName: form.lastName,
         phone: form.phone,
-        address: form.address,
+        addressLine1: form.addressLine1,
+        addressLine2: form.addressLine2,
         province: form.province,
         postalCode: form.postalCode,
         payment_method: paymentMethod,
@@ -314,14 +318,24 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <Label htmlFor="address">ที่อยู่</Label>
+                      <Label htmlFor="addressLine1">ที่อยู่</Label>
                       <Input
-                        id="address"
+                        id="addressLine1"
                         required
-                        value={form.address}
-                        onChange={(e) => setForm({ ...form, address: e.target.value })}
+                        value={form.addressLine1}
+                        onChange={(e) => setForm({ ...form, addressLine1: e.target.value })}
                         className="mt-1.5"
                         placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label htmlFor="addressLine2">ที่อยู่เพิ่มเติม (ถ้ามี)</Label>
+                      <Input
+                        id="addressLine2"
+                        value={form.addressLine2}
+                        onChange={(e) => setForm({ ...form, addressLine2: e.target.value })}
+                        className="mt-1.5"
+                        placeholder="ชั้น, ห้อง, อาคาร (ไม่บังคับ)"
                       />
                     </div>
                     <div>

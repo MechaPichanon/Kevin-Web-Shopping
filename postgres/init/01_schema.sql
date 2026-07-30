@@ -166,7 +166,6 @@
   -- Column names kept backward-compatible with the existing Express auth backend:
   --   · 'id'       (not user_id)    — JWT payload uses id
   --   · 'password' (not password_hash) — stores bcrypt hash; never plain text
-  --   · 'address'  (legacy single-line) — kept; structured addresses are in addresses table
   CREATE TABLE IF NOT EXISTS users (
     id          SERIAL       PRIMARY KEY,
     username    VARCHAR(50)  UNIQUE NOT NULL,
@@ -175,7 +174,6 @@
     first_name  VARCHAR(80)  NOT NULL DEFAULT '',
     last_name   VARCHAR(80)  NOT NULL DEFAULT '',
     phone       VARCHAR(20)  DEFAULT NULL,
-    address     TEXT         DEFAULT NULL,   -- legacy; use addresses table for new features
     role        VARCHAR(20)  NOT NULL DEFAULT 'customer',
     is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -190,16 +188,13 @@
   CREATE TABLE IF NOT EXISTS addresses (
     address_id     SERIAL       PRIMARY KEY,
     user_id        INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    label          VARCHAR(50)  DEFAULT NULL,        -- e.g. 'Home', 'Office'
     recipient_name VARCHAR(160) NOT NULL,
     phone          VARCHAR(20)  NOT NULL,
     address_line1  VARCHAR(200) NOT NULL,
     address_line2  VARCHAR(200) DEFAULT NULL,
-    city           VARCHAR(80)  NOT NULL,
     province       VARCHAR(80)  NOT NULL,
     postal_code    VARCHAR(10)  NOT NULL,
-    country        CHAR(2)      NOT NULL DEFAULT 'TH',
-    is_default     BOOLEAN      NOT NULL DEFAULT FALSE
+    country        CHAR(2)      NOT NULL DEFAULT 'TH'
   );
 
   CREATE INDEX IF NOT EXISTS addresses_user_id_idx ON addresses (user_id);

@@ -45,8 +45,8 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "ผ้าฝ้าย.co · ร้านเสื้อผ้าฝ้ายทอมือคุณภาพ",
-  description: "เสื้อผ้าฝ้ายแท้ทอมือคุณภาพ ราคาที่คุณเข้าถึงได้",
+  title: "Kevin Shop · ร้านเสื้อผ้าคุณภาพ",
+  description: "เสื้อคุณภาพ ราคาที่คุณเข้าถึงได้",
 };
 
 export default function RootLayout({

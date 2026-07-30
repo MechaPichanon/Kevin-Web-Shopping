@@ -40,21 +40,19 @@ const CATEGORIES = [
 
 const SUBCATS: Record<string, { value: string; label: string; labelTh: string }[]> = {
   shirt: [
-    { value: "cotton-shirt",  label: "Cotton Shirt",  labelTh: "เสื้อผ้าฝ้าย" },
-    { value: "oxford",        label: "Oxford",        labelTh: "ออกซ์ฟอร์ด" },
-    { value: "casual-shirt",  label: "Casual Shirt",  labelTh: "เสื้อเชิ้ตลำลอง" },
-    { value: "linen-shirt",   label: "Linen Shirt",   labelTh: "เสื้อลินิน" },
+    { value: "silk-shirt",  label: "Silk Shirt",  labelTh: "เชิ้ตผ้าไหม" },
+    { value: "linen-shirt", label: "Linen Shirt", labelTh: "เชิ้ตลินิน" },
   ],
   polo: [
-    { value: "classic-polo",  label: "Classic Polo",  labelTh: "โปโลคลาสสิก" },
-    { value: "pique-polo",    label: "Piqué Polo",    labelTh: "โปโลพีเก้" },
-    { value: "zip-polo",      label: "Zip Polo",      labelTh: "โปโลซิป" },
+    { value: "plain-polo",   label: "Plain Polo",   labelTh: "โปโลพื้น" },
+    { value: "striped-polo", label: "Striped Polo", labelTh: "โปโลริ้ว" },
+    { value: "corn-polo",    label: "Corn Polo",    labelTh: "โปโลข้าวโพด" },
+    { value: "zip-polo",     label: "Zip Polo",     labelTh: "โปโลซิป" },
+    { value: "knit-polo",    label: "Knit Polo",    labelTh: "โปโลถัก" },
   ],
   pant: [
-    { value: "slim-pant",     label: "Slim Pant",     labelTh: "กางเกงสลิม" },
-    { value: "straight-pant", label: "Straight Pant", labelTh: "กางเกงตรง" },
-    { value: "chino",         label: "Chino",         labelTh: "ชิโน่" },
-    { value: "shorts",        label: "Shorts",        labelTh: "กางเกงขาสั้น" },
+    { value: "silk-pant",   label: "Silk Pants",  labelTh: "กางเกงไหม" },
+    { value: "swim-shorts", label: "Swim Shorts", labelTh: "ขาสั้นว่ายน้ำ" },
   ],
 }
 
@@ -92,6 +90,14 @@ const PRESET_COLORS = [
   { hex: "#5a6b3b", name: "Olive", nameTh: "เขียวมะกอก" },
   { hex: "#6e2733", name: "Maroon", nameTh: "แดงเลือดหมู" },
   { hex: "#7fb3d5", name: "Sky Blue", nameTh: "ฟ้า" },
+  { hex: "#f2e8d5", name: "Cream", nameTh: "ครีม" },
+  { hex: "#8b8556", name: "Green Silk", nameTh: "เขียวขี้ม้า" },
+  { hex: "#1e40af", name: "Blue", nameTh: "น้ำเงิน" },
+  { hex: "#c0392b", name: "Red", nameTh: "แดง" },
+  { hex: "#f1c40f", name: "Yellow", nameTh: "เหลือง" },
+  { hex: "#40c9c9", name: "Cyan", nameTh: "ฟ้าอมเขียว" },
+  { hex: "#e8a0bf", name: "Pink", nameTh: "ชมพู" },
+  { hex: "#7a4b28", name: "Brown", nameTh: "น้ำตาล" },
 ]
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -318,8 +324,8 @@ const BLANK_FORM: FormState = {
   descTh: "",
   category: "shirt",
   categoryTh: "เชิ้ต",
-  subcategory: "oxford",
-  subcategoryTh: "ออกซ์ฟอร์ด",
+  subcategory: "silk-shirt",
+  subcategoryTh: "เชิ้ตผ้าไหม",
   ...BLANK_VARIANT_EDITOR,
   variants: [],
   editingVariantKey: null,

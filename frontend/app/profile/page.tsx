@@ -21,32 +21,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { getToken } from "@/lib/auth";
+import type { ShippingAddress } from "@/types/address";
 
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type ProfileUser = {
+type ProfileUser = ShippingAddress & {
   id: number;
   username: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  addressLine1: string;
-  province: string;
-  postalCode: string;
-
 };
 
-type ProfileForm = {
-  firstName: string;
-  lastName: string;
+type ProfileForm = ShippingAddress & {
   email: string;
-  phone: string;
-  addressLine1: string;
-  province: string;
-  postalCode: string;
-
 };
 
 type PasswordForm = {
@@ -61,6 +48,7 @@ const emptyForm: ProfileForm = {
   email: "",
   phone: "",
   addressLine1: "",
+  addressLine2: "",
   province: "",
   postalCode: "",
 
@@ -126,6 +114,7 @@ export default function ProfilePage() {
             email: data.email || "",
             phone: data.phone || "",
             addressLine1: data.addressLine1 || "",
+            addressLine2: data.addressLine2 || "",
             province: data.province || "",
             postalCode: data.postalCode || "",
           });
@@ -173,6 +162,7 @@ export default function ProfilePage() {
         email: data.user.email || "",
         phone: data.user.phone || "",
         addressLine1: data.user.addressLine1 || "",
+        addressLine2: data.user.addressLine2 || "",
         province: data.user.province || "",
         postalCode: data.user.postalCode || "",
       });
@@ -195,6 +185,7 @@ export default function ProfilePage() {
       email: user.email || "",
       phone: user.phone || "",
       addressLine1: user.addressLine1 || "",
+      addressLine2: user.addressLine2 || "",
       province: user.province || "",
       postalCode: user.postalCode || "",
     });
@@ -438,6 +429,22 @@ export default function ProfilePage() {
                           disabled={!isEditing || isSaving}
                           className="pl-10"
                           placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต"
+                        />
+                      </div>
+                    </div>
+
+                    {/* ที่อยู่เพิ่มเติม (ไม่บังคับ) */}
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="addressLine2">ที่อยู่เพิ่มเติม (ถ้ามี)</Label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="addressLine2"
+                          value={form.addressLine2}
+                          onChange={(e) => handleChange("addressLine2", e.target.value)}
+                          disabled={!isEditing || isSaving}
+                          className="pl-10"
+                          placeholder="ชั้น, ห้อง, อาคาร (ไม่บังคับ)"
                         />
                       </div>
                     </div>
