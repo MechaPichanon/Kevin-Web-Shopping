@@ -19,31 +19,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { getToken } from "@/lib/auth";
+import type { ShippingAddress } from "@/types/address";
 
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type ProfileUser = {
+type ProfileUser = ShippingAddress & {
   id: number;
   username: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  address: string;
-
 };
 
-type ProfileForm = {
-  firstName: string;
-  lastName: string;
+type ProfileForm = ShippingAddress & {
   email: string;
-  phone: string;
-  address: string;
-
 };
 
 type PasswordForm = {
@@ -57,12 +47,15 @@ const emptyForm: ProfileForm = {
   lastName: "",
   email: "",
   phone: "",
-  address: "",
+  addressLine1: "",
+  addressLine2: "",
+  province: "",
+  postalCode: "",
 
 };
 
 const menuItems = [
-  { icon: Package, label: "คำสั่งซื้อของฉัน", href: "/orders"},
+  { icon: Package, label: "คำสั่งซื้อของฉัน", href: "/orders" },
   // { icon: Heart, label: "สินค้าที่ชอบ", href: "/wishlist", badge: "12" },
   // { icon: CreditCard, label: "วิธีการชำระเงิน", href: "/payment-methods" },
   // { icon: MapPin, label: "ที่อยู่จัดส่ง", href: "/addresses" },
@@ -120,7 +113,10 @@ export default function ProfilePage() {
             lastName: data.lastName || "",
             email: data.email || "",
             phone: data.phone || "",
-            address: data.address || "",
+            addressLine1: data.addressLine1 || "",
+            addressLine2: data.addressLine2 || "",
+            province: data.province || "",
+            postalCode: data.postalCode || "",
           });
         }
       })
@@ -165,7 +161,10 @@ export default function ProfilePage() {
         lastName: data.user.lastName || "",
         email: data.user.email || "",
         phone: data.user.phone || "",
-        address: data.user.address || "",
+        addressLine1: data.user.addressLine1 || "",
+        addressLine2: data.user.addressLine2 || "",
+        province: data.user.province || "",
+        postalCode: data.user.postalCode || "",
       });
       setIsEditing(false);
       alert("บันทึกสำเร็จ");
@@ -185,7 +184,10 @@ export default function ProfilePage() {
       lastName: user.lastName || "",
       email: user.email || "",
       phone: user.phone || "",
-      address: user.address || "",
+      addressLine1: user.addressLine1 || "",
+      addressLine2: user.addressLine2 || "",
+      province: user.province || "",
+      postalCode: user.postalCode || "",
     });
   };
 
@@ -295,14 +297,7 @@ export default function ProfilePage() {
                       <item.icon className="h-5 w-5 text-muted-foreground" />
                       <span className="text-sm font-medium text-foreground">{item.label}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {item.badge && (
-                        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
-                          {item.badge}
-                        </span>
-                      )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </a>
                 ))}
               </div>
@@ -417,19 +412,59 @@ export default function ProfilePage() {
                     </div>
                     {/* ที่อยู่ */}
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="address">ที่อยู่</Label>
+                      <Label htmlFor="addressLine1">ที่อยู่</Label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Textarea
-                          id="address"
-                          value={form.address}
-                          onChange={(e) => handleChange("address", e.target.value)}
+                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="addressLine1"
+                          value={form.addressLine1}
+                          onChange={(e) => handleChange("addressLine1", e.target.value)}
                           disabled={!isEditing || isSaving}
-                          className="min-h-[80px] pl-10"
+                          className="pl-10"
+                          placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต"
                         />
                       </div>
                     </div>
 
+                    {/* ที่อยู่เพิ่มเติม (ไม่บังคับ) */}
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="addressLine2">ที่อยู่เพิ่มเติม (ถ้ามี)</Label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="addressLine2"
+                          value={form.addressLine2}
+                          onChange={(e) => handleChange("addressLine2", e.target.value)}
+                          disabled={!isEditing || isSaving}
+                          className="pl-10"
+                          placeholder="ชั้น, ห้อง, อาคาร (ไม่บังคับ)"
+                        />
+                      </div>
+                    </div>
+
+                    {/* จังหวัด */}
+                    <div className="space-y-2">
+                      <Label htmlFor="province">จังหวัด</Label>
+                      <Input
+                        id="province"
+                        value={form.province}
+                        onChange={(e) => handleChange("province", e.target.value)}
+                        disabled={!isEditing || isSaving}
+                        placeholder="จังหวัด"
+                      />
+                    </div>
+
+                    {/* รหัสไปรษณีย์ */}
+                    <div className="space-y-2">
+                      <Label htmlFor="postalCode">รหัสไปรษณีย์</Label>
+                      <Input
+                        id="postalCode"
+                        value={form.postalCode}
+                        onChange={(e) => handleChange("postalCode", e.target.value)}
+                        disabled={!isEditing || isSaving}
+                        placeholder="10XXX"
+                      />
+                    </div>
 
                   </div>
                 </div>
