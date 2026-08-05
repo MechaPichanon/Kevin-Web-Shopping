@@ -1,5 +1,21 @@
 const db = require("../db");
 
+const VALID_ORDER_STATUSES = [
+  "pending",
+  "confirmed",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "refunded",
+];
+const VALID_PAYMENT_STATUSES = [
+  "unpaid",
+  "pending_verification",
+  "paid",
+  "rejected",
+  "refunded",
+];
+
 const createOrder = async (req, res) => {
   const client = await db.connect();
 
@@ -275,6 +291,7 @@ const getAllOrders = async (req, res) => {
         o.user_id,
         o.status,
         o.payment_status,
+        o.payment_slip_url,
         o.subtotal,
         o.shipping_fee,
         o.total_price,
@@ -350,6 +367,7 @@ const getAllOrders = async (req, res) => {
         total: Number(o.total_price),
         status: o.status,
         paymentStatus: o.payment_status,
+        paymentSlipUrl: o.payment_slip_url,
         paymentMethod: o.payment_method,
         trackingNumber: o.tracking_number,
         notes: o.notes,
@@ -379,6 +397,7 @@ const getOrderById = async (req, res) => {
         o.user_id,
         o.status,
         o.payment_status,
+        o.payment_slip_url,
         o.subtotal,
         o.shipping_fee,
         o.total_price,
@@ -445,6 +464,7 @@ const getOrderById = async (req, res) => {
       total: Number(o.total_price),
       status: o.status,
       paymentStatus: o.payment_status,
+      paymentSlipUrl: o.payment_slip_url,
       paymentMethod: o.payment_method,
       trackingNumber: o.tracking_number,
       notes: o.notes,
@@ -464,6 +484,12 @@ const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+
+    if (!VALID_ORDER_STATUSES.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid status. Must be one of: ${VALID_ORDER_STATUSES.join(", ")}`,
+      });
+    }
 
     const result = await db.query(
       `
@@ -493,11 +519,21 @@ const updateOrderStatus = async (req, res) => {
 
 // ---- Admin: update payment status (unpaid / pending_verification / paid / rejected) ----
 const updatePaymentStatus = async (req, res) => {
+  const client = await db.connect();
+
   try {
     const { id } = req.params;
     const { payment_status } = req.body;
 
-    const result = await db.query(
+    if (!VALID_PAYMENT_STATUSES.includes(payment_status)) {
+      return res.status(400).json({
+        error: `Invalid payment_status. Must be one of: ${VALID_PAYMENT_STATUSES.join(", ")}`,
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
       `
       UPDATE orders
       SET payment_status = $2, updated_at = NOW()
@@ -508,12 +544,76 @@ const updatePaymentStatus = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         error: "Order Not Found",
       });
     }
 
+    // Keep the payments row's own status/paid_at in sync — previously only
+    // orders.payment_status changed, leaving payments stuck at 'pending'/NULL
+    // forever even after an order was confirmed paid.
+    if (payment_status === "paid") {
+      await client.query(
+        `UPDATE payments SET status = 'success', paid_at = NOW() WHERE order_id = $1`,
+        [id]
+      );
+    } else if (payment_status === "rejected") {
+      await client.query(
+        `UPDATE payments SET status = 'failed' WHERE order_id = $1`,
+        [id]
+      );
+    }
+
+    await client.query("COMMIT");
+
     res.json({ success: true });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// ---- Customer: upload a payment slip for an existing order ----
+const uploadPaymentSlip = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({
+        error: "No slip file uploaded",
+      });
+    }
+
+    const slipUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+
+    const result = await db.query(
+      `
+      UPDATE orders
+      SET payment_slip_url = $2, payment_status = 'pending_verification', updated_at = NOW()
+      WHERE order_id = $1
+      RETURNING order_id, payment_slip_url, payment_status
+      `,
+      [id, slipUrl]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Order Not Found",
+      });
+    }
+
+    res.json({
+      success: true,
+      payment_slip_url: result.rows[0].payment_slip_url,
+      payment_status: result.rows[0].payment_status,
+    });
   } catch (err) {
     console.log(err);
 
@@ -529,4 +629,5 @@ module.exports = {
   getOrderById,
   updateOrderStatus,
   updatePaymentStatus,
+  uploadPaymentSlip,
 };

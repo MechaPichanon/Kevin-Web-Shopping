@@ -32,10 +32,10 @@ export default function CategoryShowcase() {
   // Filenames must exactly match the `category` slug from GET /products/categories.
   // Categories with no entry here fall back to tileGradients below (no broken-image risk).
   const categoryImages: Record<string, string> = {
-    // shirt: "/images/categories/shirt.jpg",
-    // tshirt: "/images/categories/tshirt.jpg",
-    // pants: "/images/categories/pants.jpg",
-    // jacket: "/images/categories/jacket.jpg",
+    shirt: "/images/categories/shirt.jpg",
+    polo: "/images/categories/polo.jpg",
+    pant: "/images/categories/pant.jpg",
+    // set: "/images/categories/set.jpg",
   };
 
   return (
@@ -62,18 +62,6 @@ export default function CategoryShowcase() {
                   : { background: tileGradients[i % tileGradients.length] }
               }
             >
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  backgroundImage:
-                    "repeating-linear-gradient(45deg, rgba(255,255,255,.18) 0 1px, transparent 1px 14px)",
-                }}
-              />
-
-              <span className="font-serif absolute left-[18px] top-4 text-3xl font-semibold text-white/55">
-                {cat.category_th.charAt(0)}
-              </span>
-
               <div className="absolute bottom-0 left-0 right-0 flex flex-col p-[18px]">
                 <span className="font-serif text-xl font-semibold text-white">
                   {cat.category_th}

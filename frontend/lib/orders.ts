@@ -20,6 +20,7 @@ export type Order = {
   total: number
   status: string // pending | shipping | completed | cancelled
   paymentStatus: string // unpaid | pending_verification | paid | rejected
+  paymentSlipUrl?: string
   paymentMethod?: string
   trackingNumber?: string
   notes?: string

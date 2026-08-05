@@ -9,7 +9,7 @@ router.post("/promptpay", async (req, res) => {
     const { amount } = req.body;
 
     const payload = generatePayload(
-        "0812345678",
+        "0884906653",
         {
             amount
         }

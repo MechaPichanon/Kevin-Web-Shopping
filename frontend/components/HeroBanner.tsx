@@ -12,14 +12,6 @@ export default function HeroBanner() {
         backgroundPosition: "center",
       }}
     >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(135deg, rgba(139,111,90,.05) 0 2px, transparent 2px 22px)",
-        }}
-      />
-
       <div className="relative mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
         <span className="font-mono text-xs font-medium uppercase tracking-[0.25em] text-[#8b6f5a]">
           ร้านเควิน · Kevin

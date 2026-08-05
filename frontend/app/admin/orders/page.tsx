@@ -605,6 +605,21 @@ export default function AdminOrdersPage() {
                             </span>
                           </div>
 
+                          {selectedOrder.paymentSlipUrl && (
+                            <a
+                              href={selectedOrder.paymentSlipUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-3 block"
+                            >
+                              <img
+                                src={selectedOrder.paymentSlipUrl}
+                                alt="สลิปการโอนเงิน"
+                                className="max-h-64 w-full rounded-lg border border-border object-contain"
+                              />
+                            </a>
+                          )}
+
                           {selectedOrder.paymentStatus === "pending_verification" && (
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               <Button

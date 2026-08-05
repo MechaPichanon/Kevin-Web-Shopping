@@ -29,8 +29,12 @@ export default function CheckoutPage() {
   const [totalPrice, setTotalPrice] = useState(0)
   const router = useRouter()
   const [slip, setSlip] = useState<string | null>(null)
+  const [slipFile, setSlipFile] = useState<File | null>(null)
   const [slipError, setSlipError] = useState("")
-  const [isComplete, setIsComplete] = useState(false)
+  const [isUploadingSlip, setIsUploadingSlip] = useState(false)
+  const [step, setStep] = useState<"form" | "payment" | "done">("form")
+  const [qrCode, setQrCode] = useState<string | null>(null)
+  const [qrLoading, setQrLoading] = useState(false)
   const [orderId, setOrderId] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("promptpay")
   const [isLoading, setIsLoading] = useState(false)
@@ -128,9 +132,52 @@ export default function CheckoutPage() {
       return
     }
     setSlipError("")
+    setSlipFile(file)
     const reader = new FileReader()
     reader.onload = () => setSlip(reader.result as string)
     reader.readAsDataURL(file)
+  }
+
+  const fetchQrCode = async (amount: number) => {
+    setQrLoading(true)
+    try {
+      const res = await fetch("http://localhost:5000/payment/promptpay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      })
+      const data = await res.json()
+      if (res.ok) setQrCode(data.qr)
+    } catch (err) {
+      console.error("QR fetch error:", err)
+    } finally {
+      setQrLoading(false)
+    }
+  }
+
+  const handleSlipUpload = async () => {
+    if (!slipFile || !orderId) return
+    setIsUploadingSlip(true)
+    setSlipError("")
+    try {
+      const formData = new FormData()
+      formData.append("slip", slipFile)
+      const res = await fetch(`http://localhost:5000/orders/${orderId}/payment-slip`, {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSlipError(data.error || "อัปโหลดสลิปไม่สำเร็จ")
+        return
+      }
+      setStep("done")
+    } catch (err) {
+      console.error("Slip upload error:", err)
+      setSlipError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้")
+    } finally {
+      setIsUploadingSlip(false)
+    }
   }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -170,7 +217,6 @@ export default function CheckoutPage() {
       }
 
       setOrderId(data.order_id || "")
-      setIsComplete(true)
       setItems([])
       setTotalPrice(0)
       setOrderSummary({
@@ -179,6 +225,8 @@ export default function CheckoutPage() {
         totalPrice: data.totalPrice,
       })
       window.dispatchEvent(new Event("cartUpdated"))
+      setStep("payment")
+      fetchQrCode(data.totalPrice)
     } catch (err) {
       console.error("Order submit error:", err)
       alert("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้")
@@ -187,8 +235,72 @@ export default function CheckoutPage() {
     }
   }
 
-  // Order success screen
-  if (isComplete) {
+  // Payment step: show the PromptPay QR and collect the transfer slip
+  if (step === "payment") {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <main className="flex flex-1 items-center justify-center px-4 py-16">
+          <div className="flex w-full max-w-md flex-col items-center text-center">
+            <h1 className="font-serif text-3xl font-bold text-foreground">
+              ชำระเงินผ่านพร้อมเพย์
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              สแกน QR เพื่อชำระเงิน แล้วอัปโหลดสลิปการโอนเพื่อยืนยัน
+            </p>
+            <Card className="mt-6 w-full border-border">
+              <CardContent className="flex flex-col items-center gap-4 p-6">
+                <div className="flex justify-between w-full text-sm">
+                  <span className="text-muted-foreground">หมายเลขคำสั่งซื้อ</span>
+                  <span className="font-medium text-foreground">{orderId}</span>
+                </div>
+                <div className="flex justify-between w-full text-sm">
+                  <span className="text-muted-foreground">ยอดชำระ</span>
+                  <span className="font-medium text-foreground">{formatPrice(orderSummary.totalPrice)}</span>
+                </div>
+
+                <div className="flex h-56 w-56 items-center justify-center rounded-lg border border-border bg-secondary/30">
+                  {qrLoading ? (
+                    <span className="text-sm text-muted-foreground">กำลังสร้าง QR...</span>
+                  ) : qrCode ? (
+                    <img src={qrCode} alt="PromptPay QR" className="h-full w-full object-contain" />
+                  ) : (
+                    <span className="text-sm text-muted-foreground">ไม่สามารถสร้าง QR ได้</span>
+                  )}
+                </div>
+
+                <div className="w-full text-left">
+                  <Label htmlFor="slip">อัปโหลดสลิปการโอนเงิน</Label>
+                  <input
+                    id="slip"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSlipChange}
+                    className="mt-1.5 block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:text-primary-foreground"
+                  />
+                  {slipError && <p className="mt-1 text-sm text-destructive">{slipError}</p>}
+                  {slip && (
+                    <img src={slip} alt="ตัวอย่างสลิป" className="mt-3 max-h-48 w-full rounded-md object-contain" />
+                  )}
+                </div>
+
+                <Button
+                  className="w-full"
+                  disabled={!slipFile || isUploadingSlip}
+                  onClick={handleSlipUpload}
+                >
+                  {isUploadingSlip ? "กำลังอัปโหลด..." : "ยืนยันการอัปโหลดสลิป"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  // Order placed, awaiting payment verification
+  if (step === "done") {
     return (
       <div className="flex min-h-screen flex-col">
 
@@ -198,10 +310,10 @@ export default function CheckoutPage() {
               <CheckCircle2 className="h-12 w-12 text-primary" />
             </div>
             <h1 className="mt-6 font-serif text-3xl font-bold text-foreground">
-              สั่งซื้อสำเร็จ!
+              รอตรวจสอบการชำระเงิน
             </h1>
             <p className="mt-2 text-muted-foreground">
-              ขอบคุณสำหรับการสั่งซื้อ เราได้รับคำสั่งซื้อของคุณแล้ว
+              เราได้รับคำสั่งซื้อและสลิปการโอนของคุณแล้ว ทีมงานจะตรวจสอบและยืนยันการชำระเงินเร็วๆ นี้
             </p>
             <Card className="mt-6 w-full border-border">
               <CardContent className="p-6">

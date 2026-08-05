@@ -262,6 +262,7 @@
     total_price       NUMERIC(10,2) NOT NULL CHECK (total_price >= 0),
     status            VARCHAR(20)   NOT NULL DEFAULT 'pending',
     payment_status    VARCHAR(20)   NOT NULL DEFAULT 'unpaid',
+    payment_slip_url  TEXT          DEFAULT NULL,  -- customer-uploaded transfer slip image
     tracking_number   VARCHAR(100)  DEFAULT NULL,
     notes             TEXT          DEFAULT NULL,
     ordered_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
