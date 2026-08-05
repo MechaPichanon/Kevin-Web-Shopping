@@ -8,17 +8,13 @@ const createOrder = async (req, res) => {
 
     const {
       user_id,
-      firstName,
-      lastName,
+      name,
       phone,
-      addressLine1,
-      addressLine2 = "",
-      province,
+      address,
+      address_line2,
       postalCode,
       payment_method,
     } = req.body;
-
-    const name = `${firstName || ""} ${lastName || ""}`.trim();
 
     const cartResult = await client.query(
       `
@@ -26,11 +22,15 @@ const createOrder = async (req, res) => {
         ci.quantity,
         v.variant_id,
         v.price,
-        p.product_name
+        p.product_name,
+        pi.image_url
       FROM carts c
       JOIN cart_items ci ON c.cart_id = ci.cart_id
       JOIN variants v ON ci.variant_id = v.variant_id
       JOIN products p ON v.product_id = p.product_id
+      LEFT JOIN product_images pi
+        ON pi.product_id = p.product_id
+        AND pi.is_primary = true
       WHERE c.user_id = $1
       `,
       [user_id]
@@ -39,160 +39,86 @@ const createOrder = async (req, res) => {
     const cartItems = cartResult.rows;
 
     if (cartItems.length === 0) {
+      await client.query("ROLLBACK");
+
       return res.status(400).json({
         error: "Cart Empty",
       });
     }
 
-    // Check availability and decrement stock. A "set" item (variant_id
-    // present as set_variant_id in set_components) has no independent
-    // stock of its own — it draws from its real component variants, so
-    // decrementing here also keeps any other set sharing that component
-    // correct (recomputed automatically by the DB trigger).
-    for (const item of cartItems) {
-      const setComponentsResult = await client.query(
-        `SELECT component_variant_id, quantity FROM set_components WHERE set_variant_id = $1`,
-        [item.variant_id]
-      );
-
-      if (setComponentsResult.rows.length > 0) {
-        for (const comp of setComponentsResult.rows) {
-          const needed = comp.quantity * item.quantity;
-          const stockResult = await client.query(
-            `SELECT stock FROM variants WHERE variant_id = $1 FOR UPDATE`,
-            [comp.component_variant_id]
-          );
-          const available = stockResult.rows[0]?.stock ?? 0;
-          if (available < needed) {
-            await client.query("ROLLBACK");
-            return res.status(400).json({
-              error: `สินค้าบางรายการในเซ็ต "${item.product_name}" มีไม่เพียงพอ`,
-            });
-          }
-          await client.query(
-            `UPDATE variants SET stock = stock - $1 WHERE variant_id = $2`,
-            [needed, comp.component_variant_id]
-          );
-        }
-      } else {
-        const stockResult = await client.query(
-          `SELECT stock FROM variants WHERE variant_id = $1 FOR UPDATE`,
-          [item.variant_id]
-        );
-        const available = stockResult.rows[0]?.stock ?? 0;
-        if (available < item.quantity) {
-          await client.query("ROLLBACK");
-          return res.status(400).json({
-            error: `สินค้า "${item.product_name}" มีไม่เพียงพอ`,
-          });
-        }
-        await client.query(
-          `UPDATE variants SET stock = stock - $1 WHERE variant_id = $2`,
-          [item.quantity, item.variant_id]
-        );
-      }
-    }
-
     let subtotal = 0;
 
     cartItems.forEach((item) => {
-      subtotal += item.price * item.quantity;
+      subtotal += Number(item.price) * item.quantity;
     });
 
-    const shippingFee = subtotal >= 1500 ? 0 : 50;
-    const totalPrice = subtotal + shippingFee;
+    const shippingFee =
+      subtotal >= 1500 ? 0 : 50;
 
-    // Upsert into the user's one default address (shared with the profile
-    // page) instead of inserting a throwaway row every order.
-    const defaultAddressResult = await client.query(
-      `SELECT a.address_id
-       FROM user_addresses ua
-       JOIN addresses a ON a.address_id = ua.address_id
-       WHERE ua.user_id = $1 AND ua.is_default = TRUE`,
-      [user_id]
-    );
+    const totalPrice =
+      subtotal + shippingFee;
 
-    let addressId;
-    if (defaultAddressResult.rows.length > 0) {
-      addressId = defaultAddressResult.rows[0].address_id;
-      await client.query(
-        `
-        UPDATE addresses
-        SET recipient_name = $1,
-            phone = $2,
-            address_line1 = $3,
-            address_line2 = $4,
-            province = $5,
-            postal_code = $6
-        WHERE address_id = $7
-        `,
-        [name, phone, addressLine1, addressLine2, province, postalCode, addressId]
-      );
-    } else {
-      const addressResult = await client.query(
-        `
-        INSERT INTO addresses (
-          user_id,
-          recipient_name,
-          phone,
-          address_line1,
-          address_line2,
-          province,
-          postal_code
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-        RETURNING address_id
-        `,
-        [user_id, name, phone, addressLine1, addressLine2, province, postalCode]
-      );
-
-      addressId = addressResult.rows[0].address_id;
-
-      await client.query(
-        `INSERT INTO user_addresses (user_id, address_id, is_default) VALUES ($1, $2, TRUE)`,
-        [user_id, addressId]
-      );
-    }
-
-    const shippingSnapshot = {
-      recipient_name: name,
-      phone,
-      address_line1: addressLine1,
-      address_line2: addressLine2,
-      province,
-      postal_code: postalCode,
-    };
-
-    const orderResult = await client.query(
+    const addressResult = await client.query(
       `
-      INSERT INTO orders (
+      INSERT INTO addresses
+      (
         user_id,
-        address_id,
-        shipping_snapshot,
-        subtotal,
-        shipping_fee,
-        total_price
+        recipient_name,
+        phone,
+        address_line1,
+        address_line2,
+        province,
+        postal_code
       )
-      VALUES ($1,$2,$3,$4,$5,$6)
-      RETURNING order_id
+      VALUES
+      ($1,$2,$3,$4,$5,'-',$6)
+      RETURNING address_id
       `,
       [
         user_id,
-        addressId,
-        JSON.stringify(shippingSnapshot),
-        subtotal,
-        shippingFee,
-        totalPrice,
+        name,
+        phone,
+        address,
+        address_line2,
+        postalCode,
       ]
     );
 
-    const orderId =
-      orderResult.rows[0].order_id;
+    const addressId =
+      addressResult.rows[0].address_id;
+
+    const orderResult =
+      await client.query(
+        `
+        INSERT INTO orders
+        (
+          user_id,
+          address_id,
+          subtotal,
+          shipping_fee,
+          total_price
+        )
+        VALUES
+        ($1,$2,$3,$4,$5)
+        RETURNING *
+        `,
+        [
+          user_id,
+          addressId,
+          subtotal,
+          shippingFee,
+          totalPrice,
+        ]
+      );
+
+    const order =
+      orderResult.rows[0];
 
     for (const item of cartItems) {
       await client.query(
         `
-        INSERT INTO order_items (
+        INSERT INTO order_items
+        (
           order_id,
           variant_id,
           product_name,
@@ -201,10 +127,11 @@ const createOrder = async (req, res) => {
           unit_price,
           subtotal
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        VALUES
+        ($1,$2,$3,$4,$5,$6,$7)
         `,
         [
-          orderId,
+          order.order_id,
           item.variant_id,
           item.product_name,
           "-",
@@ -217,15 +144,17 @@ const createOrder = async (req, res) => {
 
     await client.query(
       `
-      INSERT INTO payments (
+      INSERT INTO payments
+      (
         order_id,
         method,
         amount
       )
-      VALUES ($1,$2,$3)
+      VALUES
+      ($1,$2,$3)
       `,
       [
-        orderId,
+        order.order_id,
         payment_method,
         totalPrice,
       ]
@@ -234,10 +163,11 @@ const createOrder = async (req, res) => {
     await client.query(
       `
       DELETE FROM cart_items
-      WHERE cart_id IN (
+      WHERE cart_id IN
+      (
         SELECT cart_id
         FROM carts
-        WHERE user_id = $1
+        WHERE user_id=$1
       )
       `,
       [user_id]
@@ -247,27 +177,125 @@ const createOrder = async (req, res) => {
 
     res.json({
       success: true,
-      order_id: orderId,
-      subtotal,
-      shippingFee,
-      totalPrice,
+      order_id: order.order_id,
+      total_price: totalPrice,
     });
 
   } catch (err) {
+
     await client.query("ROLLBACK");
+
     console.log(err);
 
     res.status(500).json({
       error: "Server Error",
     });
+
   } finally {
+
     client.release();
+
   }
 };
 
-// ---- Admin: list all orders (with items, address, payment info) ----
+const getMyOrders = async (req, res) => {
+
+  try {
+
+    const user_id = req.user.id
+
+    const result = await db.query(
+      `
+      SELECT
+
+      order_id,
+      status,
+      payment_status,
+      total_price,
+      ordered_at
+
+      FROM orders
+
+      WHERE user_id=$1
+
+      ORDER BY ordered_at DESC
+      `,
+      [user_id]
+    );
+
+    res.json(result.rows);
+
+  } catch (err) {
+
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error"
+    });
+
+  }
+
+};
+
+const getMyOrderById = async (req, res) => {
+  try {
+    const { id } = req.params
+    const user_id = req.user.id  // จาก auth middleware
+
+    const orderResult = await db.query(
+      `SELECT 
+        o.order_id, o.status, o.payment_status,
+        o.total_price, o.shipping_fee, o.subtotal, o.ordered_at,
+        a.recipient_name, a.phone,
+        a.address_line1, a.address_line2, a.province, a.postal_code,
+        p.method AS payment_method
+       FROM orders o
+       JOIN addresses a ON o.address_id = a.address_id
+       LEFT JOIN payments p ON p.order_id = o.order_id
+       WHERE o.order_id = $1 AND o.user_id = $2`, 
+    [id, user_id]
+    )
+
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" })
+    }
+
+    const itemsResult = await db.query(
+      `SELECT product_name, variant_desc, quantity, unit_price
+       FROM order_items WHERE order_id = $1`,
+      [id]
+    )
+
+    const order = orderResult.rows[0]
+    res.json({
+      id: order.order_id,
+      status: order.status,
+      paymentStatus: order.payment_status,
+      subtotal: Number(order.subtotal),
+      shippingFee: Number(order.shipping_fee),
+      total: Number(order.total_price),
+      orderedAt: order.ordered_at,
+      recipient: order.recipient_name,
+      phone: order.phone,
+      address: `${order.address_line1} ${order.address_line2} ${order.province} ${order.postal_code}`,
+      paymentMethod: order.payment_method,
+      items: itemsResult.rows
+    })
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({ error: "Server Error" })
+  }
+
+
+};
+
+// =========================
+// Admin : Get All Orders
+// =========================
+
 const getAllOrders = async (req, res) => {
   try {
+
     const ordersResult = await db.query(
       `
       SELECT
@@ -281,19 +309,25 @@ const getAllOrders = async (req, res) => {
         o.tracking_number,
         o.notes,
         o.ordered_at,
-        o.updated_at,
-        o.shipping_snapshot,
+
         a.recipient_name,
         a.phone,
         a.address_line1,
         a.address_line2,
         a.province,
         a.postal_code,
-        pm.method AS payment_method,
-        pm.amount AS payment_amount
+
+        p.method AS payment_method,
+        p.amount
+
       FROM orders o
-      JOIN addresses a ON a.address_id = o.address_id
-      LEFT JOIN payments pm ON pm.order_id = o.order_id
+
+      LEFT JOIN addresses a
+      ON a.address_id = o.address_id
+
+      LEFT JOIN payments p
+      ON p.order_id = o.order_id
+
       ORDER BY o.ordered_at DESC
       `
     );
@@ -304,229 +338,345 @@ const getAllOrders = async (req, res) => {
       return res.json([]);
     }
 
-    const orderIds = orders.map((o) => o.order_id);
+    const ids = orders.map(o => o.order_id);
 
     const itemsResult = await db.query(
       `
-      SELECT *
+      SELECT
+        order_id,
+        product_name,
+        variant_desc,
+        quantity,
+        unit_price
+
       FROM order_items
+
       WHERE order_id = ANY($1::int[])
       `,
-      [orderIds]
+      [ids]
     );
 
-    const itemsByOrder = {};
+    const itemsMap = {};
 
-    itemsResult.rows.forEach((item) => {
-      if (!itemsByOrder[item.order_id]) {
-        itemsByOrder[item.order_id] = [];
+    itemsResult.rows.forEach(item => {
+
+      if (!itemsMap[item.order_id]) {
+        itemsMap[item.order_id] = [];
       }
-      itemsByOrder[item.order_id].push({
+
+      itemsMap[item.order_id].push({
+
         name: item.product_name,
+
         variant: item.variant_desc,
+
         qty: item.quantity,
-        price: Number(item.unit_price),
+
+        price: Number(item.unit_price)
+
       });
+
     });
 
-    const formatted = orders.map((o) => {
-      const snap = o.shipping_snapshot || {};
-      const recipient = snap.recipient_name || o.recipient_name;
-      const phone = snap.phone || o.phone;
-      const addressLine1 = snap.address_line1 || o.address_line1;
-      const addressLine2 = snap.address_line2 || o.address_line2;
-      const province = snap.province || o.province;
-      const postalCode = snap.postal_code || o.postal_code;
-      return {
-        id: o.order_id,
-        customer: recipient,
-        phone,
-        address: [addressLine1, addressLine2, province, postalCode]
-          .filter(Boolean)
-          .join(" "),
-        items: itemsByOrder[o.order_id] || [],
-        subtotal: Number(o.subtotal),
-        shippingFee: Number(o.shipping_fee),
-        total: Number(o.total_price),
-        status: o.status,
-        paymentStatus: o.payment_status,
-        paymentMethod: o.payment_method,
-        trackingNumber: o.tracking_number,
-        notes: o.notes,
-        date: o.ordered_at,
-      };
-    });
+    const data = orders.map(order => ({
 
-    res.json(formatted);
+      id: order.order_id,
+
+      customer: order.recipient_name,
+
+      phone: order.phone,
+
+      address:
+        `${order.address_line1}
+${order.address_line2}
+${order.province}
+${order.postal_code}`,
+
+      items:
+        itemsMap[order.order_id] || [],
+
+      subtotal:
+        Number(order.subtotal),
+
+      shippingFee:
+        Number(order.shipping_fee),
+
+      total:
+        Number(order.total_price),
+
+      paymentMethod:
+        order.payment_method,
+
+      paymentStatus:
+        order.payment_status,
+
+      status:
+        order.status,
+
+      trackingNumber:
+        order.tracking_number,
+
+      notes:
+        order.notes,
+
+      date:
+        order.ordered_at
+
+    }));
+
+    res.json(data);
+
   } catch (err) {
+
     console.log(err);
 
     res.status(500).json({
-      error: "Server Error",
+      error: "Server Error"
     });
+
   }
 };
 
-// ---- Admin: get one order ----
+
+// =========================
+// Admin : Get Order Detail
+// =========================
+
 const getOrderById = async (req, res) => {
+
   try {
+
     const { id } = req.params;
 
     const orderResult = await db.query(
       `
       SELECT
-        o.order_id,
-        o.user_id,
-        o.status,
-        o.payment_status,
-        o.subtotal,
-        o.shipping_fee,
-        o.total_price,
-        o.tracking_number,
-        o.notes,
-        o.ordered_at,
-        o.updated_at,
-        o.shipping_snapshot,
-        a.recipient_name,
-        a.phone,
-        a.address_line1,
-        a.address_line2,
-        a.province,
-        a.postal_code,
-        pm.method AS payment_method,
-        pm.amount AS payment_amount
+
+      o.order_id,
+      o.status,
+      o.payment_status,
+      o.subtotal,
+      o.shipping_fee,
+      o.total_price,
+      o.tracking_number,
+      o.notes,
+      o.ordered_at,
+
+      a.recipient_name,
+      a.phone,
+      a.address_line1,
+      a.address_line2,
+      a.province,
+      a.postal_code,
+
+      p.method
+
       FROM orders o
-      JOIN addresses a ON a.address_id = o.address_id
-      LEFT JOIN payments pm ON pm.order_id = o.order_id
-      WHERE o.order_id = $1
+
+      LEFT JOIN addresses a
+      ON a.address_id=o.address_id
+
+      LEFT JOIN payments p
+      ON p.order_id=o.order_id
+
+      WHERE o.order_id=$1
       `,
       [id]
     );
 
     if (orderResult.rows.length === 0) {
+
       return res.status(404).json({
-        error: "Order Not Found",
+        error: "Order not found"
       });
+
     }
 
     const itemsResult = await db.query(
       `
-      SELECT *
+      SELECT
+
+      product_name,
+      variant_desc,
+      quantity,
+      unit_price
+
       FROM order_items
-      WHERE order_id = $1
+
+      WHERE order_id=$1
       `,
       [id]
     );
 
-    const o = orderResult.rows[0];
-    const snap = o.shipping_snapshot || {};
-    const recipient = snap.recipient_name || o.recipient_name;
-    const phone = snap.phone || o.phone;
-    const addressLine1 = snap.address_line1 || o.address_line1;
-    const addressLine2 = snap.address_line2 || o.address_line2;
-    const province = snap.province || o.province;
-    const postalCode = snap.postal_code || o.postal_code;
+    const order = orderResult.rows[0];
 
     res.json({
-      id: o.order_id,
-      customer: recipient,
-      phone,
-      address: [addressLine1, addressLine2, province, postalCode]
-        .filter(Boolean)
-        .join(" "),
-      items: itemsResult.rows.map((item) => ({
-        name: item.product_name,
-        variant: item.variant_desc,
-        qty: item.quantity,
-        price: Number(item.unit_price),
-      })),
-      subtotal: Number(o.subtotal),
-      shippingFee: Number(o.shipping_fee),
-      total: Number(o.total_price),
-      status: o.status,
-      paymentStatus: o.payment_status,
-      paymentMethod: o.payment_method,
-      trackingNumber: o.tracking_number,
-      notes: o.notes,
-      date: o.ordered_at,
+
+      id: order.order_id,
+
+      customer:
+        order.recipient_name,
+
+      phone:
+        order.phone,
+
+      address:
+        `${order.address_line1}
+${order.address_line2}
+${order.province}
+${order.postal_code}`,
+
+      subtotal:
+        Number(order.subtotal),
+
+      shippingFee:
+        Number(order.shipping_fee),
+
+      total:
+        Number(order.total_price),
+
+      paymentMethod:
+        order.method,
+
+      paymentStatus:
+        order.payment_status,
+
+      trackingNumber:
+        order.tracking_number,
+
+      notes:
+        order.notes,
+
+      status:
+        order.status,
+
+      orderedAt:
+        order.ordered_at,
+
+      items:
+        itemsResult.rows
+
     });
+
   } catch (err) {
+
     console.log(err);
 
     res.status(500).json({
-      error: "Server Error",
+      error: "Server Error"
     });
+
   }
+
 };
 
-// ---- Admin: update order status (pending / shipping / completed / cancelled) ----
+
+// =========================
+// Update Status
+// =========================
+
 const updateOrderStatus = async (req, res) => {
+
   try {
+
     const { id } = req.params;
+
     const { status } = req.body;
 
-    const result = await db.query(
+    await db.query(
       `
       UPDATE orders
-      SET status = $2, updated_at = NOW()
-      WHERE order_id = $1
-      RETURNING order_id
+
+      SET status=$1,
+      updated_at=NOW()
+
+      WHERE order_id=$2
       `,
-      [id, status]
+      [
+        status,
+        id
+      ]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: "Order Not Found",
-      });
-    }
+    res.json({
+      success: true
+    });
 
-    res.json({ success: true });
   } catch (err) {
+
     console.log(err);
 
     res.status(500).json({
-      error: "Server Error",
+      error: "Server Error"
     });
+
   }
+
 };
 
-// ---- Admin: update payment status (unpaid / pending_verification / paid / rejected) ----
+
+// =========================
+// Update Payment
+// =========================
+
 const updatePaymentStatus = async (req, res) => {
+
   try {
+
     const { id } = req.params;
+
     const { payment_status } = req.body;
 
-    const result = await db.query(
+    await db.query(
       `
       UPDATE orders
-      SET payment_status = $2, updated_at = NOW()
-      WHERE order_id = $1
-      RETURNING order_id
+
+      SET payment_status=$1,
+      updated_at=NOW()
+
+      WHERE order_id=$2
       `,
-      [id, payment_status]
+      [
+        payment_status,
+        id
+      ]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: "Order Not Found",
-      });
-    }
+    res.json({
+      success: true
+    });
 
-    res.json({ success: true });
   } catch (err) {
+
     console.log(err);
 
     res.status(500).json({
-      error: "Server Error",
+      error: "Server Error"
     });
+
   }
+
 };
 
+
+// =========================
+// Export
+// =========================
+
 module.exports = {
+
   createOrder,
+
+  getMyOrders,
+
+  getMyOrderById,
+
   getAllOrders,
+
   getOrderById,
+
   updateOrderStatus,
-  updatePaymentStatus,
+
+  updatePaymentStatus
+
 };
