@@ -7,6 +7,8 @@ const { auth, requireAdmin } = require("../middleware/auth");
 
 const {
   createOrder,
+  getMyOrders,
+  getMyOrderById,
   getAllOrders,
   getOrderById,
   updateOrderStatus,
@@ -27,6 +29,10 @@ const upload = multer({ storage });
 
 router.post("/create", createOrder);
 router.post("/:id/payment-slip", upload.single("slip"), uploadPaymentSlip);
+
+// Customer — logged-in user's own orders
+router.get("/my", auth, getMyOrders);
+router.get("/my/:id", auth, getMyOrderById);
 
 // Admin
 router.get("/admin", auth, requireAdmin, getAllOrders);

@@ -19,21 +19,31 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { getToken } from "@/lib/auth";
-import type { ShippingAddress } from "@/types/address";
 
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type ProfileUser = ShippingAddress & {
+type ProfileUser = {
   id: number;
   username: string;
   email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  address: string;
+
 };
 
-type ProfileForm = ShippingAddress & {
+type ProfileForm = {
+  firstName: string;
+  lastName: string;
   email: string;
+  phone: string;
+  address: string;
+
 };
 
 type PasswordForm = {
@@ -47,20 +57,17 @@ const emptyForm: ProfileForm = {
   lastName: "",
   email: "",
   phone: "",
-  addressLine1: "",
-  addressLine2: "",
-  province: "",
-  postalCode: "",
+  address: "",
 
 };
 
-// const menuItems = [
-//   { icon: Package, label: "คำสั่งซื้อของฉัน", href: "/orders", badge: "3" },
-//   { icon: Heart, label: "สินค้าที่ชอบ", href: "/wishlist", badge: "12" },
-//   { icon: CreditCard, label: "วิธีการชำระเงิน", href: "/payment-methods" },
-//   { icon: MapPin, label: "ที่อยู่จัดส่ง", href: "/addresses" },
-//   { icon: Lock, label: "เปลี่ยนรหัสผ่าน", href: "/change-password" },
-// ];
+const menuItems = [
+  { icon: Package, label: "คำสั่งซื้อของฉัน", href: "/orders"},
+  // { icon: Heart, label: "สินค้าที่ชอบ", href: "/wishlist", badge: "12" },
+  // { icon: CreditCard, label: "วิธีการชำระเงิน", href: "/payment-methods" },
+  // { icon: MapPin, label: "ที่อยู่จัดส่ง", href: "/addresses" },
+  // { icon: Lock, label: "เปลี่ยนรหัสผ่าน", href: "/change-password" },
+];
 
 // ─────────────────────────────────────────────
 // Component
@@ -113,10 +120,7 @@ export default function ProfilePage() {
             lastName: data.lastName || "",
             email: data.email || "",
             phone: data.phone || "",
-            addressLine1: data.addressLine1 || "",
-            addressLine2: data.addressLine2 || "",
-            province: data.province || "",
-            postalCode: data.postalCode || "",
+            address: data.address || "",
           });
         }
       })
@@ -161,10 +165,7 @@ export default function ProfilePage() {
         lastName: data.user.lastName || "",
         email: data.user.email || "",
         phone: data.user.phone || "",
-        addressLine1: data.user.addressLine1 || "",
-        addressLine2: data.user.addressLine2 || "",
-        province: data.user.province || "",
-        postalCode: data.user.postalCode || "",
+        address: data.user.address || "",
       });
       setIsEditing(false);
       alert("บันทึกสำเร็จ");
@@ -184,10 +185,7 @@ export default function ProfilePage() {
       lastName: user.lastName || "",
       email: user.email || "",
       phone: user.phone || "",
-      addressLine1: user.addressLine1 || "",
-      addressLine2: user.addressLine2 || "",
-      province: user.province || "",
-      postalCode: user.postalCode || "",
+      address: user.address || "",
     });
   };
 
@@ -287,7 +285,7 @@ export default function ProfilePage() {
 
               {/* Quick Menu */}
               <div className="space-y-2">
-                {/* {menuItems.map((item) => (
+                {menuItems.map((item) => (
                   <a
                     key={item.label}
                     href={item.href}
@@ -306,7 +304,7 @@ export default function ProfilePage() {
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </a>
-                ))} */}
+                ))}
               </div>
             </aside>
 
@@ -419,59 +417,19 @@ export default function ProfilePage() {
                     </div>
                     {/* ที่อยู่ */}
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="addressLine1">ที่อยู่</Label>
+                      <Label htmlFor="address">ที่อยู่</Label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="addressLine1"
-                          value={form.addressLine1}
-                          onChange={(e) => handleChange("addressLine1", e.target.value)}
+                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Textarea
+                          id="address"
+                          value={form.address}
+                          onChange={(e) => handleChange("address", e.target.value)}
                           disabled={!isEditing || isSaving}
-                          className="pl-10"
-                          placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต"
+                          className="min-h-[80px] pl-10"
                         />
                       </div>
                     </div>
 
-                    {/* ที่อยู่เพิ่มเติม (ไม่บังคับ) */}
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="addressLine2">ที่อยู่เพิ่มเติม (ถ้ามี)</Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="addressLine2"
-                          value={form.addressLine2}
-                          onChange={(e) => handleChange("addressLine2", e.target.value)}
-                          disabled={!isEditing || isSaving}
-                          className="pl-10"
-                          placeholder="ชั้น, ห้อง, อาคาร (ไม่บังคับ)"
-                        />
-                      </div>
-                    </div>
-
-                    {/* จังหวัด */}
-                    <div className="space-y-2">
-                      <Label htmlFor="province">จังหวัด</Label>
-                      <Input
-                        id="province"
-                        value={form.province}
-                        onChange={(e) => handleChange("province", e.target.value)}
-                        disabled={!isEditing || isSaving}
-                        placeholder="จังหวัด"
-                      />
-                    </div>
-
-                    {/* รหัสไปรษณีย์ */}
-                    <div className="space-y-2">
-                      <Label htmlFor="postalCode">รหัสไปรษณีย์</Label>
-                      <Input
-                        id="postalCode"
-                        value={form.postalCode}
-                        onChange={(e) => handleChange("postalCode", e.target.value)}
-                        disabled={!isEditing || isSaving}
-                        placeholder="10XXX"
-                      />
-                    </div>
 
                   </div>
                 </div>

@@ -281,6 +281,209 @@ const createOrder = async (req, res) => {
   }
 };
 
+// ---- Customer: list the logged-in user's own orders ----
+const getMyOrders = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+
+    const ordersResult = await db.query(
+      `
+      SELECT
+        o.order_id,
+        o.user_id,
+        o.status,
+        o.payment_status,
+        o.payment_slip_url,
+        o.subtotal,
+        o.shipping_fee,
+        o.total_price,
+        o.tracking_number,
+        o.notes,
+        o.ordered_at,
+        o.updated_at,
+        o.shipping_snapshot,
+        a.recipient_name,
+        a.phone,
+        a.address_line1,
+        a.address_line2,
+        a.province,
+        a.postal_code,
+        pm.method AS payment_method,
+        pm.amount AS payment_amount
+      FROM orders o
+      JOIN addresses a ON a.address_id = o.address_id
+      LEFT JOIN payments pm ON pm.order_id = o.order_id
+      WHERE o.user_id = $1
+      ORDER BY o.ordered_at DESC
+      `,
+      [user_id]
+    );
+
+    const orders = ordersResult.rows;
+
+    if (orders.length === 0) {
+      return res.json([]);
+    }
+
+    const orderIds = orders.map((o) => o.order_id);
+
+    const itemsResult = await db.query(
+      `
+      SELECT *
+      FROM order_items
+      WHERE order_id = ANY($1::int[])
+      `,
+      [orderIds]
+    );
+
+    const itemsByOrder = {};
+
+    itemsResult.rows.forEach((item) => {
+      if (!itemsByOrder[item.order_id]) {
+        itemsByOrder[item.order_id] = [];
+      }
+      itemsByOrder[item.order_id].push({
+        name: item.product_name,
+        variant: item.variant_desc,
+        qty: item.quantity,
+        price: Number(item.unit_price),
+      });
+    });
+
+    const formatted = orders.map((o) => {
+      const snap = o.shipping_snapshot || {};
+      const recipient = snap.recipient_name || o.recipient_name;
+      const phone = snap.phone || o.phone;
+      const addressLine1 = snap.address_line1 || o.address_line1;
+      const addressLine2 = snap.address_line2 || o.address_line2;
+      const province = snap.province || o.province;
+      const postalCode = snap.postal_code || o.postal_code;
+      return {
+        id: o.order_id,
+        customer: recipient,
+        phone,
+        address: [addressLine1, addressLine2, province, postalCode]
+          .filter(Boolean)
+          .join(" "),
+        items: itemsByOrder[o.order_id] || [],
+        subtotal: Number(o.subtotal),
+        shippingFee: Number(o.shipping_fee),
+        total: Number(o.total_price),
+        status: o.status,
+        paymentStatus: o.payment_status,
+        paymentSlipUrl: o.payment_slip_url,
+        paymentMethod: o.payment_method,
+        trackingNumber: o.tracking_number,
+        notes: o.notes,
+        date: o.ordered_at,
+      };
+    });
+
+    res.json(formatted);
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  }
+};
+
+// ---- Customer: get one of the logged-in user's own orders ----
+const getMyOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user_id = req.user.id;
+
+    const orderResult = await db.query(
+      `
+      SELECT
+        o.order_id,
+        o.user_id,
+        o.status,
+        o.payment_status,
+        o.payment_slip_url,
+        o.subtotal,
+        o.shipping_fee,
+        o.total_price,
+        o.tracking_number,
+        o.notes,
+        o.ordered_at,
+        o.updated_at,
+        o.shipping_snapshot,
+        a.recipient_name,
+        a.phone,
+        a.address_line1,
+        a.address_line2,
+        a.province,
+        a.postal_code,
+        pm.method AS payment_method,
+        pm.amount AS payment_amount
+      FROM orders o
+      JOIN addresses a ON a.address_id = o.address_id
+      LEFT JOIN payments pm ON pm.order_id = o.order_id
+      WHERE o.order_id = $1 AND o.user_id = $2
+      `,
+      [id, user_id]
+    );
+
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({
+        error: "Order Not Found",
+      });
+    }
+
+    const itemsResult = await db.query(
+      `
+      SELECT *
+      FROM order_items
+      WHERE order_id = $1
+      `,
+      [id]
+    );
+
+    const o = orderResult.rows[0];
+    const snap = o.shipping_snapshot || {};
+    const recipient = snap.recipient_name || o.recipient_name;
+    const phone = snap.phone || o.phone;
+    const addressLine1 = snap.address_line1 || o.address_line1;
+    const addressLine2 = snap.address_line2 || o.address_line2;
+    const province = snap.province || o.province;
+    const postalCode = snap.postal_code || o.postal_code;
+
+    res.json({
+      id: o.order_id,
+      customer: recipient,
+      phone,
+      address: [addressLine1, addressLine2, province, postalCode]
+        .filter(Boolean)
+        .join(" "),
+      items: itemsResult.rows.map((item) => ({
+        name: item.product_name,
+        variant: item.variant_desc,
+        qty: item.quantity,
+        price: Number(item.unit_price),
+      })),
+      subtotal: Number(o.subtotal),
+      shippingFee: Number(o.shipping_fee),
+      total: Number(o.total_price),
+      status: o.status,
+      paymentStatus: o.payment_status,
+      paymentSlipUrl: o.payment_slip_url,
+      paymentMethod: o.payment_method,
+      trackingNumber: o.tracking_number,
+      notes: o.notes,
+      date: o.ordered_at,
+    });
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  }
+};
+
 // ---- Admin: list all orders (with items, address, payment info) ----
 const getAllOrders = async (req, res) => {
   try {
@@ -625,6 +828,8 @@ const uploadPaymentSlip = async (req, res) => {
 
 module.exports = {
   createOrder,
+  getMyOrders,
+  getMyOrderById,
   getAllOrders,
   getOrderById,
   updateOrderStatus,
