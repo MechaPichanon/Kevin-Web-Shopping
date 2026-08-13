@@ -1,0 +1,3 @@
+# One review per user per product, not per order
+
+The schema's `UNIQUE (product_id, user_id, order_id)` constraint permits a user to leave a separate review each time they buy the same product again. This is being tightened to one review per user per product ever, matching how most storefronts present reviews and avoiding a product page cluttered with repeat reviews from the same buyer. Requires a migration: drop the compound unique constraint on `reviews`, replace with `UNIQUE (product_id, user_id)`. Whether a second submission attempt upserts the existing review or is rejected outright is an open implementation question, not decided here.

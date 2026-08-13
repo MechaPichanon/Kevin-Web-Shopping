@@ -346,12 +346,16 @@ def format_products_for_prompt(products):
 app = FastAPI()
 
 # Allow the Next.js dev server (and similar local demos) to call this API from the browser.
+# CORS_ORIGINS is a comma-separated list; defaults to the local dev origins when unset.
+_default_cors_origins = "http://localhost:3000,http://127.0.0.1:3000"
+_cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", _default_cors_origins).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

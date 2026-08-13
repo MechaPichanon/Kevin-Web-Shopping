@@ -8,13 +8,13 @@ const pool = require("./db");
 const productRoutes = require("./routes/productRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const app = express();
-const multer = require("multer")
 const path = require("path")
+const { upload, handleUploadErrors } = require("./middleware/upload")
 const orderRoutes =
   require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/payment");
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
   credentials: true,
 }));
 
@@ -39,24 +39,6 @@ app.use(
     path.join(__dirname, "uploads")
   )
 )
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/")
-  },
-
-  filename: function (req, file, cb) {
-    cb(
-      null,
-      Date.now() +
-      "-" +
-      file.originalname
-    )
-  },
-})
-
-const upload = multer({
-  storage,
-})
 app.post(
   "/upload/image",
   upload.single("image"),
@@ -480,6 +462,8 @@ app.get("/admin/orders/recent", auth, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+app.use(handleUploadErrors);
 
 /* ======================
    START SERVER
