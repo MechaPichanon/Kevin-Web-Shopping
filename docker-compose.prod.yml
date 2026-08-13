@@ -1,0 +1,49 @@
+# Production overlay for the thesis-demo deployment (cloud VM).
+#
+# Local development is unaffected: `docker compose up` (no args) keeps using
+# only docker-compose.yml, which still runs the frontend/chatbot in dev mode
+# with hot reload. This file is applied ON TOP of docker-compose.yml, only
+# when actually deploying:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#
+# It overrides just the settings that differ between dev and production —
+# it does not repeat anything dev-mode already gets right (build context,
+# ports, non-command env vars, volumes, depends_on).
+
+services:
+  backend:
+    command: uvicorn chatbot.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    command: sh -c "npm ci && npm run build && npm run start -- --hostname 0.0.0.0 --port 3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  auth-backend:
+    command: npm run start
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  postgres:
+    restart: unless-stopped
+
+  adminer:
+    restart: unless-stopped

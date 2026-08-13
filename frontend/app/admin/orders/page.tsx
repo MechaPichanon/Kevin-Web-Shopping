@@ -175,7 +175,7 @@ export default function AdminOrdersPage() {
     router.push("/login")
   }
 
-  const updatePaymentStatus = async (orderId: string, newPaymentStatus: string) => {
+  const updatePaymentStatus = async (orderId: number, newPaymentStatus: string) => {
     // optimistic update
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, paymentStatus: newPaymentStatus } : o))
@@ -192,7 +192,7 @@ export default function AdminOrdersPage() {
     }
   }
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (orderId: number, newStatus: string) => {
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     )

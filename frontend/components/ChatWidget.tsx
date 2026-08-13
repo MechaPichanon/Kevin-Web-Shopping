@@ -52,19 +52,19 @@ const TEXT_MAIN = "#2A2622";
 const TEXT_MUTED = "#6B5F55";
 
 const mdComponents = {
-  p: ({ children }: { children: React.ReactNode }) => (
+  p: ({ children }: { children?: React.ReactNode }) => (
     <p style={{ margin: "0 0 4px 0" }}>{children}</p>
   ),
-  strong: ({ children }: { children: React.ReactNode }) => (
+  strong: ({ children }: { children?: React.ReactNode }) => (
     <strong style={{ fontWeight: 600 }}>{children}</strong>
   ),
-  ul: ({ children }: { children: React.ReactNode }) => (
+  ul: ({ children }: { children?: React.ReactNode }) => (
     <ul style={{ margin: "4px 0", paddingLeft: 16 }}>{children}</ul>
   ),
-  ol: ({ children }: { children: React.ReactNode }) => (
+  ol: ({ children }: { children?: React.ReactNode }) => (
     <ol style={{ margin: "4px 0", paddingLeft: 16 }}>{children}</ol>
   ),
-  li: ({ children }: { children: React.ReactNode }) => <li>{children}</li>,
+  li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
 };
 
 export default function ChatWidget() {
@@ -557,7 +557,7 @@ export default function ChatWidget() {
                                       {c.min_price.toLocaleString()} ฿
                                     </div>
                                   )}
-                                  <Link href="/products">
+                                  <Link href={`/products/${c.id}`}>
                                     <button
                                       style={{
                                         padding: "5px 12px",
