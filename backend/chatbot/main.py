@@ -30,6 +30,14 @@ logger = logging.getLogger(__name__)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
 
+# When set, chat completions go to OpenRouter instead of local Ollama — no
+# GPU/host Ollama needed for the deployed demo, and better Thai output
+# quality (Typhoon2 is purpose-built for Thai). Unset (local dev default)
+# keeps using Ollama qwen2.5:7b exactly as before.
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "scb10x/typhoon2-70b-instruct")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
 OUT_OF_SCOPE_RESPONSE = (
     "Sorry, I can only help with questions about products"
 )
@@ -704,20 +712,36 @@ Product Data:
 {history_block}
 User Question: {request.message}"""
     
-    logger.info("sending prompt to LLM")
-
-    response = requests.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
-        json={
-            "model": OLLAMA_CHAT_MODEL,
-            "prompt": prompt,
-            "stream": False,
-        },
-        timeout=300
-    )
-    
-    data = response.json()
-    reply = data.get("response", "Sorry, something went wrong.")
+    if OPENROUTER_API_KEY:
+        logger.info(f"sending prompt to OpenRouter ({OPENROUTER_CHAT_MODEL})")
+        response = requests.post(
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+            json={
+                "model": OPENROUTER_CHAT_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=300
+        )
+        data = response.json()
+        try:
+            reply = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            logger.error(f"unexpected OpenRouter response: {data}")
+            reply = "Sorry, something went wrong."
+    else:
+        logger.info("sending prompt to local Ollama")
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={
+                "model": OLLAMA_CHAT_MODEL,
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=300
+        )
+        data = response.json()
+        reply = data.get("response", "Sorry, something went wrong.")
 
     if isinstance(reply, str) and reply.strip().upper() == "OUT_OF_SCOPE":
         reply = OUT_OF_SCOPE_RESPONSE

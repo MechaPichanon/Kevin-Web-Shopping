@@ -5,11 +5,13 @@ services:
       dockerfile: backend/Dockerfile
     working_dir: /app/backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       OLLAMA_BASE_URL: "http://host.docker.internal:11434"
       OLLAMA_CHAT_MODEL: "qwen2.5:7b"
       OLLAMA_EMBED_MODEL: "bge-m3"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_CHAT_MODEL: ${OPENROUTER_CHAT_MODEL:-scb10x/typhoon2-70b-instruct}
       DATABASE_URL: ${DATABASE_URL}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     volumes:
@@ -49,7 +51,7 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro

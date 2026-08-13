@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Thai clothing e-commerce platform (thesis project) with an AI product chatbot and image search. Four services run together via Docker Compose: a Next.js storefront, a Node.js/Express auth API, a Python/FastAPI chatbot, and PostgreSQL 15 with the pgvector extension. Ollama runs on the **host machine** (not in Docker) and serves the embedding model (`bge-m3`). Chat LLM is planned to migrate from Ollama `qwen2.5:7b` → **OpenRouter API** (better Thai language quality, no local GPU required).
+Thai clothing e-commerce platform (thesis project) with an AI product chatbot and image search. Four services run together via Docker Compose: a Next.js storefront, a Node.js/Express auth API, a Python/FastAPI chatbot, and PostgreSQL 15 with the pgvector extension. Ollama runs on the **host machine** (not in Docker) and serves the embedding model (`bge-m3`). Chat LLM migrates from Ollama `qwen2.5:7b` → **OpenRouter API** (`scb10x/typhoon2-70b-instruct` — Thai-English tuned, better Thai quality, no local GPU required) whenever `OPENROUTER_API_KEY` is set; unset (local dev default) keeps using Ollama `qwen2.5:7b` exactly as before. Note Typhoon2's context window is 8K tokens — smaller than typical frontier models, so keep `RAG_TOP_K`/history modest.
 
 ## project duty
 
@@ -356,7 +356,9 @@ backend/data/products.json
 | Variable | Default | Notes |
 |---|---|---|
 | `OLLAMA_EMBED_MODEL` | `bge-m3` | Changing invalidates all caches |
-| `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | |
+| `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Used only when `OPENROUTER_API_KEY` is unset |
+| `OPENROUTER_API_KEY` | unset | When set, chat completions go to OpenRouter instead of Ollama |
+| `OPENROUTER_CHAT_MODEL` | `scb10x/typhoon2-70b-instruct` | Only used when `OPENROUTER_API_KEY` is set |
 | `RAG_TOP_K` | `3` | Products sent to LLM |
 | `RAG_MIN_SCORE` | `0.20` | Lower = more recall, more noise |
 
@@ -400,9 +402,10 @@ python-multipart
 ```
 DATABASE_URL=postgresql://<user>:<pass>@localhost:5432/<db>
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_CHAT_MODEL=qwen2.5:7b        # will be replaced by OpenRouter — keep for local dev
+OLLAMA_CHAT_MODEL=qwen2.5:7b        # used only when OPENROUTER_API_KEY is unset — local dev default
 OLLAMA_EMBED_MODEL=bge-m3           # stays on Ollama — do not change without regenerating embeddings
-OPENROUTER_API_KEY=...              # planned: replaces OLLAMA_CHAT_MODEL for production chat
+OPENROUTER_API_KEY=...              # set to route chat through OpenRouter instead of Ollama
+OPENROUTER_CHAT_MODEL=scb10x/typhoon2-70b-instruct  # only used when OPENROUTER_API_KEY is set
 RAG_TOP_K=3
 RAG_MIN_SCORE=0.20
 JWT_SECRET=...
