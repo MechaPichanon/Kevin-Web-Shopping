@@ -378,6 +378,17 @@ def load_products() -> List[Dict]:
         """, (product_ids,))
         variant_rows = cur.fetchall()
 
+        # ── Fetch primary image per product ──────────────────────────────────────
+        cur.execute("""
+            SELECT DISTINCT ON (pi.product_id)
+                pi.product_id,
+                pi.image_url
+            FROM product_images pi
+            WHERE pi.product_id = ANY(%s)
+            ORDER BY pi.product_id, pi.is_primary DESC, pi.sort_order ASC
+        """, (product_ids,))
+        image_by_product: Dict[str, str] = {row[0]: row[1] for row in cur.fetchall()}
+
         # ── Group variants by product_id ───────────────────────────────────────
         variants_by_product: Dict[str, List[Dict]] = {}
         for row in variant_rows:
@@ -420,6 +431,7 @@ def load_products() -> List[Dict]:
                 "category_th":     row[7],
                 "sub_category_th": row[8],
                 "variants":        variants_by_product.get(pid, []),
+                "image_url":       image_by_product.get(pid, ""),
             })
 
         logger.info("Loaded %d product(s) from PostgreSQL", len(products))

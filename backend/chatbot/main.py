@@ -33,11 +33,13 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip(
 OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
 
 # When set, chat completions go to OpenRouter instead of local Ollama — no
-# GPU/host Ollama needed for the deployed demo, and better Thai output
-# quality (Typhoon2 is purpose-built for Thai). Unset (local dev default)
+# GPU/host Ollama needed for the deployed demo. Unset (local dev default)
 # keeps using Ollama qwen2.5:7b exactly as before.
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
-OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "scb10x/llama3.1-typhoon2-70b-instruct")
+# Interim default (the original pick, Typhoon2, was delisted from
+# OpenRouter) — pending the user's own Thai-quality comparison against
+# qwen/qwen3.7-flash.
+OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "google/gemini-3.5-flash-lite")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 OUT_OF_SCOPE_RESPONSE = (
@@ -761,6 +763,7 @@ User Question: {request.message}"""
             "id": p.get("id", ""),
             "name": name,
             "min_price": min(prices) if prices else 0,
+            "image_url": p.get("image_url", ""),
         })
 
     intent_key = intent.name if hasattr(intent, "name") else str(intent)

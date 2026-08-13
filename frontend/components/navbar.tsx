@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import ImageSearchButton from "./ImageSearchButton";
 
 type User = {
   id: number;
@@ -199,6 +200,9 @@ export default function Navbar() {
 
           {/* Right */}
           <div className="flex items-center space-x-3 sm:space-x-5">
+
+            {/* Image search */}
+            <ImageSearchButton />
 
             {/* Cart */}
             <Link href="/cart">

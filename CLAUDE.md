@@ -1,10 +1,11 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
+## github commit
+before commit tell me what are you going to commit. and let me name it
 ## Project overview
 
-Thai clothing e-commerce platform (thesis project) with an AI product chatbot and image search. Four services run together via Docker Compose: a Next.js storefront, a Node.js/Express auth API, a Python/FastAPI chatbot, and PostgreSQL 15 with the pgvector extension. Ollama runs on the **host machine** (not in Docker) and serves the embedding model (`bge-m3`). Chat LLM migrates from Ollama `qwen2.5:7b` → **OpenRouter API** (`scb10x/llama3.1-typhoon2-70b-instruct` — Thai-English tuned, better Thai quality, no local GPU required) whenever `OPENROUTER_API_KEY` is set; unset (local dev default) keeps using Ollama `qwen2.5:7b` exactly as before. Note Typhoon2's context window is 8K tokens — smaller than typical frontier models, so keep `RAG_TOP_K`/history modest.
+Thai clothing e-commerce platform (thesis project) with an AI product chatbot and image search. Four services run together via Docker Compose: a Next.js storefront, a Node.js/Express auth API, a Python/FastAPI chatbot, and PostgreSQL 15 with the pgvector extension. Ollama runs on the **host machine** (not in Docker) and serves the embedding model (`bge-m3`). Chat LLM migrates from Ollama `qwen2.5:7b` → **OpenRouter API** (no local GPU required) whenever `OPENROUTER_API_KEY` is set; unset (local dev default) keeps using Ollama `qwen2.5:7b` exactly as before. Default OpenRouter model is `google/gemini-3.5-flash-lite` — an **interim pick, pending the user's own side-by-side Thai-quality test** against `qwen/qwen3.7-flash` (much cheaper, unverified Thai quality); update this once they report back. Both candidates have 1M-token context windows, so unlike the earlier (delisted) Typhoon2 pick, context size is not a concern here.
 
 ## project duty
 
@@ -358,7 +359,7 @@ backend/data/products.json
 | `OLLAMA_EMBED_MODEL` | `bge-m3` | Changing invalidates all caches |
 | `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Used only when `OPENROUTER_API_KEY` is unset |
 | `OPENROUTER_API_KEY` | unset | When set, chat completions go to OpenRouter instead of Ollama |
-| `OPENROUTER_CHAT_MODEL` | `scb10x/llama3.1-typhoon2-70b-instruct` | Only used when `OPENROUTER_API_KEY` is set |
+| `OPENROUTER_CHAT_MODEL` | `google/gemini-3.5-flash-lite` | Only used when `OPENROUTER_API_KEY` is set |
 | `RAG_TOP_K` | `3` | Products sent to LLM |
 | `RAG_MIN_SCORE` | `0.20` | Lower = more recall, more noise |
 
@@ -404,7 +405,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=qwen2.5:7b        # used only when OPENROUTER_API_KEY is unset — local dev default
 OLLAMA_EMBED_MODEL=bge-m3           # stays on Ollama — do not change without regenerating embeddings
 OPENROUTER_API_KEY=...              # set to route chat through OpenRouter instead of Ollama
-OPENROUTER_CHAT_MODEL=scb10x/llama3.1-typhoon2-70b-instruct  # only used when OPENROUTER_API_KEY is set
+OPENROUTER_CHAT_MODEL=google/gemini-3.5-flash-lite  # only used when OPENROUTER_API_KEY is set
 RAG_TOP_K=3
 RAG_MIN_SCORE=0.20
 JWT_SECRET=...

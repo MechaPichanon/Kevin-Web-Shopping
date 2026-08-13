@@ -67,7 +67,9 @@ def search_by_image(embedding: List[float], limit: int = 10) -> List[dict]:
         cur.execute(
             """
             SELECT pie.product_id, p.product_name, pi.image_url,
-                   1 - (pie.embedding <=> %s::vector(512)) AS similarity
+                   1 - (pie.embedding <=> %s::vector(512)) AS similarity,
+                   (SELECT MIN(v.price) FROM variants v
+                    WHERE v.product_id = p.product_id AND v.is_active = TRUE) AS min_price
             FROM product_image_embeddings pie
             JOIN product_images pi ON pie.image_id = pi.image_id
             JOIN products p        ON pie.product_id = p.product_id
@@ -88,8 +90,9 @@ def search_by_image(embedding: List[float], limit: int = 10) -> List[dict]:
             "product_name": product_name,
             "image_url": image_url,
             "similarity": float(similarity),
+            "min_price": float(min_price) if min_price is not None else None,
         }
-        for product_id, product_name, image_url, similarity in rows
+        for product_id, product_name, image_url, similarity, min_price in rows
     ]
 
 

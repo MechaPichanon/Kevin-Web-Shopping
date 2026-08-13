@@ -10,6 +10,7 @@ type ProductCard = {
   id: string;
   name: string;
   min_price: number;
+  image_url?: string;
 };
 
 type ChatMessage = {
@@ -530,9 +531,26 @@ export default function ChatWidget() {
                                     height: 66,
                                     borderRadius: 8,
                                     flex: "0 0 52px",
+                                    overflow: "hidden",
                                     background: `repeating-linear-gradient(135deg,${ACCENT}33,${ACCENT}33 7px,${ACCENT}14 7px,${ACCENT}14 14px)`,
                                   }}
-                                />
+                                >
+                                  {c.image_url && (
+                                    <img
+                                      src={c.image_url}
+                                      alt={c.name}
+                                      style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                        display: "block",
+                                      }}
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                                      }}
+                                    />
+                                  )}
+                                </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div
                                     style={{
