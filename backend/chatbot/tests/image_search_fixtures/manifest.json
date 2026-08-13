@@ -1,0 +1,32 @@
+[
+  {
+    "file": "query_1.jpg",
+    "expected_product_id": "P1785413565827",
+    "source_image_id": 1
+  },
+  {
+    "file": "query_2.jpg",
+    "expected_product_id": "P1785413565827",
+    "source_image_id": 2
+  },
+  {
+    "file": "query_3.jpg",
+    "expected_product_id": "P1785413760020",
+    "source_image_id": 3
+  },
+  {
+    "file": "query_5.jpg",
+    "expected_product_id": "P1785413760020",
+    "source_image_id": 5
+  },
+  {
+    "file": "query_6.jpg",
+    "expected_product_id": "P1785413921520",
+    "source_image_id": 6
+  },
+  {
+    "file": "query_7.jpg",
+    "expected_product_id": "P1785413921520",
+    "source_image_id": 7
+  }
+]

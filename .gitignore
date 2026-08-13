@@ -25,5 +25,3 @@ node_modules/
 backend/db_backups/
 
 backend/uploads/
-
-tests
