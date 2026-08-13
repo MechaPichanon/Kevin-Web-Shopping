@@ -37,7 +37,7 @@ OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
 # quality (Typhoon2 is purpose-built for Thai). Unset (local dev default)
 # keeps using Ollama qwen2.5:7b exactly as before.
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
-OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "scb10x/typhoon2-70b-instruct")
+OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "scb10x/llama3.1-typhoon2-70b-instruct")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 OUT_OF_SCOPE_RESPONSE = (

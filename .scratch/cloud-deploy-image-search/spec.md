@@ -184,11 +184,11 @@ not a fresh implementation.
   is a call-site branch, not a new abstraction layer — don't over-build a
   provider interface for two call sites.
 - **Model decision (2026-08-13):** default OpenRouter model is
-  `scb10x/typhoon2-70b-instruct` — Thai-English instruction-tuned, built on
+  `scb10x/llama3.1-typhoon2-70b-instruct` — Thai-English instruction-tuned, built on
   Llama 3.1, purpose-built for Thai output quality (the stated reason for
   this migration in `CLAUDE.md`). New env var `OPENROUTER_CHAT_MODEL`
   (mirroring the existing `OLLAMA_CHAT_MODEL` naming), defaulting to
-  `scb10x/typhoon2-70b-instruct`, documented in `.env.example`. Note: this
+  `scb10x/llama3.1-typhoon2-70b-instruct`, documented in `.env.example`. Note: this
   model reports an **8K context window** — smaller than the local
   `qwen2.5:7b` setup may assume. Verify during implementation that the
   RAG-injected system prompt (`RAG_TOP_K` products + conversation history)

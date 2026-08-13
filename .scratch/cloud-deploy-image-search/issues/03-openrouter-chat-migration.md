@@ -1,7 +1,7 @@
 # 03 — OpenRouter chat migration with local Ollama fallback
 
 **What to build:** the chatbot's chat-completion call goes to OpenRouter
-(model: `scb10x/typhoon2-70b-instruct`, chosen for Thai-English output
+(model: `scb10x/llama3.1-typhoon2-70b-instruct`, chosen for Thai-English output
 quality — see `../spec.md` §"Chat LLM + embedding model hosting" for the
 full rationale) when `OPENROUTER_API_KEY` is set, and falls back to the
 existing local Ollama `qwen2.5:7b` call when it isn't — so local
@@ -15,7 +15,7 @@ layer.
 
 - [x] With `OPENROUTER_API_KEY` set and `OPENROUTER_CHAT_MODEL` unset,
       sending a chat message gets a response generated via OpenRouter using
-      the default model `scb10x/typhoon2-70b-instruct`.
+      the default model `scb10x/llama3.1-typhoon2-70b-instruct`.
 - [x] With `OPENROUTER_API_KEY` unset, sending a chat message still gets a
       response, generated via local Ollama `qwen2.5:7b` exactly as before —
       no regression to existing local dev behavior.
