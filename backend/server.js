@@ -1,5 +1,16 @@
 require("dotenv").config();
 
+// Fail fast and clearly instead of falling through to db.js's DB_HOST
+// fallback (which isn't set in docker-compose.yml either) or an empty
+// JWT secret — both would otherwise surface as confusing runtime errors
+// on the first request rather than a clear message at startup.
+for (const name of ["DATABASE_URL", "JWT_SECRET"]) {
+  if (!process.env[name]) {
+    console.error(`FATAL: ${name} is not set. Check your .env file (see .env.example).`);
+    process.exit(1);
+  }
+}
+
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
@@ -13,8 +24,16 @@ const { upload, handleUploadErrors } = require("./middleware/upload")
 const orderRoutes =
   require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/payment");
+// Comma-separated, matching CORS_ORIGINS on the chatbot service — a single
+// value (the common case) still works unchanged since split() on a string
+// with no commas just returns a one-element array.
+const corsOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  origin: corsOrigins,
   credentials: true,
 }));
 
