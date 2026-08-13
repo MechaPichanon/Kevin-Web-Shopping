@@ -1,14 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 try:
     from .intent import detect_intent, Intent
     from .retrieval import retrieve_products, load_products
     from .db import get_conn, release_conn
+    from . import image_search
 except ImportError:
     from intent import detect_intent, Intent
     from retrieval import retrieve_products, load_products
     from db import get_conn, release_conn
+    import image_search
 from typing import Dict, Any, List, Optional
 import uuid
 import time
@@ -771,3 +773,27 @@ User Question: {request.message}"""
         "quick_replies": QUICK_REPLIES_BY_INTENT.get(intent_key, _DEFAULT_QUICK_REPLIES),
         "conversation_id": conversation_id,
     }
+
+
+@app.get("/image-search/status")
+def image_search_status():
+    return {
+        "model_loaded": image_search.is_model_loaded(),
+        "embeddings_in_db": image_search.count_embeddings(),
+    }
+
+
+@app.post("/image-search")
+async def image_search_endpoint(image: UploadFile = File(...)):
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Empty image upload")
+
+    try:
+        embedding = image_search.embed_image(image_bytes)
+    except Exception as exc:
+        logger.error(f"image embedding failed: {exc}")
+        raise HTTPException(status_code=400, detail="Could not process image")
+
+    results = image_search.search_by_image(embedding, limit=10)
+    return {"results": results}

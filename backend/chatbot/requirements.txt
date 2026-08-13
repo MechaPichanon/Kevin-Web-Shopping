@@ -3,3 +3,6 @@ uvicorn
 requests
 watchfiles
 psycopg2-binary
+sentence-transformers
+Pillow
+python-multipart

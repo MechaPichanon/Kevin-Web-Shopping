@@ -366,17 +366,16 @@ Vector/lexical weights and the clothing-type penalty are hardcoded in `backend/c
 
 ## Image search
 
-**DB table exists; backend pipeline in progress.**
-The `product_image_embeddings` table (vector(512)) is ready in the schema.
+**Backend pipeline built and working end-to-end. Frontend upload UI not built yet (friend's side).**
 
-### Implementation plan
-- **Model:** `clip-ViT-B-32` via `sentence-transformers` (512-dim, matches schema)
-- **New file:** `backend/chatbot/image_search.py` — lazy-loads CLIP model, `embed_image()`, `search_by_image()`
-- **New endpoints in `main.py`:**
+- **Model:** `clip-ViT-B-32` via `sentence-transformers` (512-dim, matches schema), lazy-loaded on first use (not at FastAPI startup) — CPU-only torch build (see `backend/Dockerfile`; the default PyPI torch wheel pulls the full CUDA toolchain, unneeded on this no-GPU deploy target).
+- **`backend/chatbot/image_search.py`** — `embed_image(image_bytes)`, `search_by_image(embedding, limit)`, `count_embeddings()`.
+- **Endpoints in `main.py`:**
   - `POST /image-search` — multipart image upload → returns ranked product matches
-  - `GET /image-search/status` — reports model_loaded + embeddings_in_db count
-- **Backfill script:** `backend/scripts/backfill_image_embeddings.py` — downloads each `product_images.image_url`, computes CLIP embedding, writes to `product_image_embeddings`
-- **Frontend API route:** `frontend/app/api/image-search/route.ts` (friend's side — mirrors `app/api/chat/route.ts`)
+  - `GET /image-search/status` — reports `model_loaded` + `embeddings_in_db` count
+- **Backfill script:** `backend/scripts/backfill_image_embeddings.py` — run **inside the backend container** (`docker exec kevin-web-shopping-backend-1 python backend/scripts/backfill_image_embeddings.py`), not on the host, since CLIP's dependencies are only installed there. Downloads each `product_images.image_url`, computes a CLIP embedding, writes to `product_image_embeddings`. Skip logic is simpler than `backfill_chunk_embeddings.js`'s hash-aware version: `product_image_embeddings` has no `content_hash` column, so it only skips images with `embedded_at` already set — it can't detect a changed image at the same URL (clear `embedded_at` to force re-embedding one).
+  - **Note:** `product_images.image_url` is stored as the browser-facing URL (`http://localhost:5000/...`), not reachable by that hostname from inside another container. The script rewrites it to `UPLOADS_BASE_URL` (default `http://auth-backend:5000`, the internal docker-network hostname) before fetching — override this env var if ever running the script on the host instead.
+- **Frontend API route (not built, friend's side):** `frontend/app/api/image-search/route.ts` (mirrors `app/api/chat/route.ts`), plus upload UI in `/search` and the chat widget.
 
 ### Query pattern
 ```sql
