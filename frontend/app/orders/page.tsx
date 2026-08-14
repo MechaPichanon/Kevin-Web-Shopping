@@ -42,54 +42,54 @@ type Order = {
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case "pending":    return <Clock className="h-5 w-5" />
-    case "shipped":   return <Truck className="h-5 w-5" />
+    case "pending": return <Clock className="h-5 w-5" />
+    case "shipped": return <Truck className="h-5 w-5" />
     case "confirmed": return <CheckCircle2 className="h-5 w-5" />
     case "delivered": return <CheckCircle2 className="h-5 w-5" />
-    case "cancelled":  return <AlertCircle className="h-5 w-5" />
-    default:           return <Package className="h-5 w-5" />
+    case "cancelled": return <AlertCircle className="h-5 w-5" />
+    default: return <Package className="h-5 w-5" />
   }
 }
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case "pending":   return "bg-yellow-100 text-yellow-800"
-    case "shipped":  return "bg-blue-100 text-blue-800"
+    case "pending": return "bg-yellow-100 text-yellow-800"
+    case "shipped": return "bg-blue-100 text-blue-800"
     case "confirmed": return "bg-green-100 text-green-800"
     case "delivered": return "bg-green-100 text-green-800"
     case "cancelled": return "bg-red-100 text-red-800"
-    default:          return "bg-gray-100 text-gray-800"
+    default: return "bg-gray-100 text-gray-800"
   }
 }
 
 const getPaymentStatusColor = (status: string) => {
   switch (status) {
-    case "paid":                 return "bg-green-100 text-green-800"
+    case "paid": return "bg-green-100 text-green-800"
     case "pending_verification": return "bg-yellow-100 text-yellow-800"
-    case "unpaid":               return "bg-red-100 text-red-800"
-    case "rejected":             return "bg-red-100 text-red-800"
-    default:                     return "bg-gray-100 text-gray-800"
+    case "unpaid": return "bg-red-100 text-red-800"
+    case "rejected": return "bg-red-100 text-red-800"
+    default: return "bg-gray-100 text-gray-800"
   }
 }
 
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case "pending":   return "กำลังดำเนินการ"
-    case "shipped":  return "กำลังจัดส่ง"
+    case "pending": return "กำลังดำเนินการ"
+    case "shipped": return "กำลังจัดส่ง"
     case "confirmed": return "ยืนยันแล้ว"
     case "delivered": return "สำเร็จ"
     case "cancelled": return "ยกเลิก"
-    default:          return status
+    default: return status
   }
 }
 
 const getPaymentStatusLabel = (status: string) => {
   switch (status) {
-    case "paid":                 return "ชำระแล้ว"
+    case "paid": return "ชำระแล้ว"
     case "pending_verification": return "รอการยืนยัน"
-    case "unpaid":               return "ยังไม่ชำระ"
-    case "rejected":             return "ปฏิเสธ"
-    default:                     return status
+    case "unpaid": return "ยังไม่ชำระ"
+    case "rejected": return "ปฏิเสธ"
+    default: return status
   }
 }
 
@@ -134,39 +134,137 @@ export default function OrdersPage() {
   }
 
   // ── download ใบเสร็จ ──
-  const handleDownloadReceipt = (order: Order) => {
-    const lines = [
-      "KEVIN SHOP - ใบเสร็จรับเงิน",
-      "================================",
-      `หมายเลขคำสั่ง: ${order.id}`,
-      `วันที่: ${new Date(order.date).toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" })}`,
-      "",
-      "ข้อมูลลูกค้า:",
-      order.customer,
-      order.phone,
-      order.address,
-      "",
-      "สินค้า:",
-      ...order.items.map(
-        (i) => `- ${i.name} x${i.qty} @ ฿${Number(i.price).toFixed(2)} = ฿${(i.qty * Number(i.price)).toFixed(2)}`
-      ),
-      "",
-      `ค่าสินค้า: ฿${order.subtotal.toFixed(2)}`,
-      `ค่าจัดส่ง: ฿${order.shippingFee.toFixed(2)}`,
-      `รวมทั้งสิ้น: ฿${order.total.toFixed(2)}`,
-      `สถานะคำสั่ง: ${getStatusLabel(order.status)}`,
-      `สถานะการชำระเงิน: ${getPaymentStatusLabel(order.paymentStatus)}`,
-    ]
+  const handleDownloadReceipt = async (order: Order) => {
+    const { jsPDF } = await import("jspdf")
+    const doc = new jsPDF({ unit: "mm", format: "a4" })
 
-    const blob = new Blob([lines.join("\n")], { type: "text/plain" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `receipt-${order.id}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    const [regularRes, boldRes] = await Promise.all([
+      fetch("/fonts/Sarabun-Regular.ttf"),
+      fetch("/fonts/Sarabun-Bold.ttf"),
+    ])
+    const regularBuf = await regularRes.arrayBuffer()
+    const boldBuf = await boldRes.arrayBuffer()
+    const toBase64 = (buf: ArrayBuffer) =>
+      btoa(String.fromCharCode(...new Uint8Array(buf)))
+
+    doc.addFileToVFS("Sarabun-Regular.ttf", toBase64(regularBuf))
+    doc.addFileToVFS("Sarabun-Bold.ttf", toBase64(boldBuf))
+    doc.addFont("Sarabun-Regular.ttf", "Sarabun", "normal")
+    doc.addFont("Sarabun-Bold.ttf", "Sarabun", "bold")
+
+    const W = 210
+    const margin = 20
+    let y = 0
+
+    doc.setFillColor(101, 67, 33)
+    doc.rect(0, 0, W, 38, "F")
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(20)
+    doc.setFont("Sarabun", "bold")
+    doc.text("KEVIN SHOP", margin, 17)
+    doc.setFontSize(9)
+    doc.setFont("Sarabun", "normal")
+    doc.text("ใบเสร็จรับเงิน / Receipt", margin, 25)
+    doc.text(`#${order.id}`, W - margin, 17, { align: "right" })
+    doc.text(
+      new Date(order.date).toLocaleDateString("th-TH", {
+        year: "numeric", month: "long", day: "numeric",
+      }),
+      W - margin, 25, { align: "right" }
+    )
+
+    y = 50
+
+    doc.setFillColor(248, 245, 242)
+    doc.roundedRect(margin, y, 80, 42, 3, 3, "F")
+    doc.setTextColor(120, 80, 50)
+    doc.setFontSize(8)
+    doc.setFont("Sarabun", "bold")
+    doc.text("ข้อมูลจัดส่ง", margin + 5, y + 8)
+    doc.setTextColor(60, 60, 60)
+    doc.setFont("Sarabun", "normal")
+    doc.setFontSize(8.5)
+    const recipientLines = doc.splitTextToSize(order.customer, 68)
+    const addressLines = doc.splitTextToSize(order.address, 68)
+    doc.text(recipientLines, margin + 5, y + 16)
+    doc.text(order.phone, margin + 5, y + 16 + recipientLines.length * 5)
+    doc.text(addressLines, margin + 5, y + 22 + recipientLines.length * 5)
+
+    doc.setFillColor(248, 245, 242)
+    doc.roundedRect(W - margin - 80, y, 80, 42, 3, 3, "F")
+    doc.setTextColor(120, 80, 50)
+    doc.setFontSize(8)
+    doc.setFont("Sarabun", "bold")
+    doc.text("การชำระเงิน", W - margin - 75, y + 8)
+    doc.setFont("Sarabun", "normal")
+    doc.setTextColor(60, 60, 60)
+    doc.setFontSize(8.5)
+    doc.text("สถานะ:", W - margin - 75, y + 18)
+    doc.text(getPaymentStatusLabel(order.paymentStatus), W - margin - 5, y + 18, { align: "right" })
+    doc.text("วิธีชำระเงิน:", W - margin - 75, y + 26)
+    doc.text(order.paymentMethod || "-", W - margin - 5, y + 26, { align: "right" })
+
+    y += 52
+
+    doc.setFillColor(101, 67, 33)
+    doc.rect(margin, y, W - margin * 2, 9, "F")
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(8.5)
+    doc.setFont("Sarabun", "bold")
+    doc.text("สินค้า", margin + 4, y + 6)
+    doc.text("จำนวน", 130, y + 6, { align: "center" })
+    doc.text("ราคา/ชิ้น", 155, y + 6, { align: "center" })
+    doc.text("รวม", W - margin - 4, y + 6, { align: "right" })
+
+    y += 9
+
+    order.items.forEach((item, i) => {
+      const rowH = 10
+      doc.setFillColor(i % 2 === 0 ? 255 : 250, i % 2 === 0 ? 255 : 248, i % 2 === 0 ? 255 : 245)
+      doc.rect(margin, y, W - margin * 2, rowH, "F")
+      doc.setTextColor(40, 40, 40)
+      doc.setFont("Sarabun", "normal")
+      doc.setFontSize(8.5)
+      const nameLine = doc.splitTextToSize(
+        item.name + (item.variant && item.variant !== "-" ? ` (${item.variant})` : ""), 80
+      )
+      doc.text(nameLine[0], margin + 4, y + 6.5)
+      doc.text(`${item.qty}`, 130, y + 6.5, { align: "center" })
+      doc.text(`฿${Number(item.price).toFixed(2)}`, 155, y + 6.5, { align: "center" })
+      doc.text(`฿${(item.qty * Number(item.price)).toFixed(2)}`, W - margin - 4, y + 6.5, { align: "right" })
+      y += rowH
+    })
+
+    doc.setDrawColor(220, 210, 200)
+    doc.line(margin, y + 4, W - margin, y + 4)
+    y += 10
+
+    const summaryX = W - margin - 70
+    doc.setFontSize(9)
+    doc.setFont("Sarabun", "normal")
+    doc.setTextColor(80, 80, 80)
+    doc.text("ค่าสินค้า", summaryX, y)
+    doc.text(`฿${order.subtotal.toFixed(2)}`, W - margin, y, { align: "right" })
+    y += 7
+    doc.text("ค่าจัดส่ง", summaryX, y)
+    doc.text(order.shippingFee === 0 ? "ฟรี" : `฿${order.shippingFee.toFixed(2)}`, W - margin, y, { align: "right" })
+    y += 7
+
+    doc.setFillColor(101, 67, 33)
+    doc.roundedRect(summaryX - 5, y - 4, W - margin - summaryX + 9, 12, 2, 2, "F")
+    doc.setTextColor(255, 255, 255)
+    doc.setFont("Sarabun", "bold")
+    doc.setFontSize(10)
+    doc.text("ยอดรวม", summaryX, y + 4.5)
+    doc.text(`฿${order.total.toFixed(2)}`, W - margin - 2, y + 4.5, { align: "right" })
+    y += 20
+
+    doc.setTextColor(160, 140, 120)
+    doc.setFontSize(8)
+    doc.setFont("Sarabun", "normal")
+    doc.text("ขอบคุณที่ใช้บริการ KEVIN SHOP", W / 2, y, { align: "center" })
+
+    doc.save(`receipt-${order.id}.pdf`)
   }
 
   // ── filter ──
@@ -207,15 +305,14 @@ export default function OrdersPage() {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  filter === f
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === f
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
               >
-                {f === "all"       && `ทั้งหมด (${orders.length})`}
-                {f === "pending"   && `กำลังดำเนินการ (${countOf("pending")})`}
-                {f === "shipped"  && `กำลังจัดส่ง (${countOf("shipped")})`}
+                {f === "all" && `ทั้งหมด (${orders.length})`}
+                {f === "pending" && `กำลังดำเนินการ (${countOf("pending")})`}
+                {f === "shipped" && `กำลังจัดส่ง (${countOf("shipped")})`}
                 {f === "confirmed" && `ยืนยันแล้ว (${countOf("confirmed")})`}
                 {f === "delivered" && `สำเร็จ (${countOf("delivered")})`}
                 {f === "cancelled" && `ยกเลิก (${countOf("cancelled")})`}
@@ -351,14 +448,16 @@ export default function OrdersPage() {
 
                           {/* Actions */}
                           <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-border">
-                            <Button
-                              variant="outline"
-                              onClick={() => handleDownloadReceipt(order)}
-                              className="gap-2"
-                            >
-                              <Download className="h-4 w-4" />
-                              ดาวน์โหลดใบเสร็จ
-                            </Button>
+                            {order.paymentStatus === "paid" && (
+                              <Button
+                                variant="outline"
+                                onClick={() => handleDownloadReceipt(order)}
+                                className="gap-2"
+                              >
+                                <Download className="h-4 w-4" />
+                                ดาวน์โหลดใบเสร็จ
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </>

@@ -246,7 +246,10 @@ export default function AdminOrdersPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
                 <span className="text-sm font-bold text-primary-foreground">L</span>
               </div>
-              <span className="font-serif text-lg font-semibold text-foreground">Admin</span>
+              <div>
+                <span className="font-semibold">BosButter</span>
+                <p className="text-xs text-white/60">Admin Panel</p>
+              </div>
             </Link>
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsSidebarOpen(false)}>
               <X className="h-5 w-5" />

@@ -18,5 +18,5 @@ CREATE INDEX IF NOT EXISTS user_addresses_address_id_idx ON user_addresses (addr
 -- Backfill: every existing address's creator gets a matching junction row
 -- so no existing relationship is lost.
 INSERT INTO user_addresses (user_id, address_id, is_default)
-SELECT user_id, address_id, is_default FROM addresses
+SELECT user_id, address_id, TRUE FROM addresses
 ON CONFLICT (user_id, address_id) DO NOTHING;
