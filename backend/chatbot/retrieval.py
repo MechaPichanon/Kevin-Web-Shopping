@@ -378,16 +378,23 @@ def load_products() -> List[Dict]:
         """, (product_ids,))
         variant_rows = cur.fetchall()
 
-        # ── Fetch primary image per product ──────────────────────────────────────
+        # ── Fetch all images per product (default thumbnail + per-color lookup) ──
+        # Mirrors postgres/migrations/008_color_images.sql's design: a NULL-color
+        # row is a generic/legacy photo, a color-tagged row depicts that specific
+        # variant. Without this, chatbot/image-search replies always showed the
+        # single is_primary photo even when the user asked about a different color.
         cur.execute("""
-            SELECT DISTINCT ON (pi.product_id)
-                pi.product_id,
-                pi.image_url
+            SELECT pi.product_id, pi.color, pi.image_url, pi.is_primary
             FROM product_images pi
             WHERE pi.product_id = ANY(%s)
             ORDER BY pi.product_id, pi.is_primary DESC, pi.sort_order ASC
         """, (product_ids,))
-        image_by_product: Dict[str, str] = {row[0]: row[1] for row in cur.fetchall()}
+        image_by_product: Dict[str, str] = {}
+        images_by_color: Dict[str, Dict[str, str]] = {}
+        for pid, color, image_url, is_primary in cur.fetchall():
+            image_by_product.setdefault(pid, image_url)  # first row per pid = primary (query is ordered)
+            if color:
+                images_by_color.setdefault(pid, {}).setdefault(color.strip().lower(), image_url)
 
         # ── Group variants by product_id ───────────────────────────────────────
         variants_by_product: Dict[str, List[Dict]] = {}
@@ -432,6 +439,7 @@ def load_products() -> List[Dict]:
                 "sub_category_th": row[8],
                 "variants":        variants_by_product.get(pid, []),
                 "image_url":       image_by_product.get(pid, ""),
+                "images_by_color": images_by_color.get(pid, {}),
             })
 
         logger.info("Loaded %d product(s) from PostgreSQL", len(products))
@@ -630,7 +638,113 @@ def _preprocess_query(query: str) -> str:
     return text
 
 
+# Color-family groupings for the closest-match image fallback below. Deliberately
+# excludes words that double as fabric/pattern vocabulary in this store (e.g.
+# "wine", "rose", "cream", "camel", Thai "เงิน") to avoid false color hits.
+_COLOR_FAMILIES: Dict[str, Dict[str, List[str]]] = {
+    "red":    {"en": ["red", "maroon", "crimson", "burgundy"],  "th": ["แดง"]},
+    "pink":   {"en": ["pink", "magenta"],                        "th": ["ชมพู"]},
+    "blue":   {"en": ["blue", "navy", "teal", "turquoise", "cyan"], "th": ["น้ำเงิน", "ฟ้า"]},
+    "green":  {"en": ["green", "olive", "mint", "emerald"],      "th": ["เขียวมะกอก", "เขียว", "มินท์"]},
+    "yellow": {"en": ["yellow", "gold", "mustard"],              "th": ["เหลือง", "ทอง"]},
+    "orange": {"en": ["orange", "peach"],                        "th": ["ส้ม"]},
+    "purple": {"en": ["purple", "violet", "lavender"],           "th": ["ม่วง"]},
+    "brown":  {"en": ["brown", "tan", "beige", "khaki"],         "th": ["น้ำตาล", "กากี"]},
+    "black":  {"en": ["black", "charcoal"],                      "th": ["ดำ"]},
+    "white":  {"en": ["white", "ivory"],                         "th": ["ขาว"]},
+    "gray":   {"en": ["gray", "grey", "silver"],                 "th": ["เทา"]},
+}
+_EN_COLOR_TO_FAMILY: Dict[str, str] = {
+    word: family for family, groups in _COLOR_FAMILIES.items() for word in groups["en"]
+}
+_TH_COLOR_TO_FAMILY: Dict[str, str] = {
+    word: family for family, groups in _COLOR_FAMILIES.items() for word in groups["th"]
+}
+# Longest-first so e.g. "เขียวมะกอก" isn't shadowed by the shorter "เขียว".
+_TH_COLOR_WORDS_LONGEST_FIRST = sorted(_TH_COLOR_TO_FAMILY, key=len, reverse=True)
+
+
+def _select_product_image(product: Dict, query: str) -> str:
+    """
+    Pick the image that best matches a color mentioned in the query, falling
+    back to the product's default (is_primary) image. `images_by_color` is
+    keyed by lowercased color (see load_products()).
+
+    `product_images.color` is always populated in English (matching
+    `variants.color`, never `variants.color_th` — confirmed by how the admin
+    upload flow sources it), so a variant's Thai color name is only ever used
+    to detect that the query refers to that variant; the actual photo lookup
+    always goes through the variant's English `color` field.
+
+    Two tiers:
+      1. Exact color match against a variant's `color`/`color_th`.
+      2. If nothing matched exactly (the color isn't stocked, or is stocked
+         but has no tagged photo), fall back to the closest in-stock color in
+         the same family (e.g. "green" -> "olive") rather than an unrelated
+         default photo. This can surface a different color than requested by
+         design — that's the point of the fallback.
+    """
+    images_by_color = product.get("images_by_color") or {}
+    default = product.get("image_url", "")
+    if not images_by_color:
+        return default
+
+    query_l = (query or "").lower()
+    query_tokens = _tokenize(query_l)  # ordered: first color word as typed wins
+    variants = product.get("variants", []) or []
+
+    # Tier 1: exact match.
+    for variant in variants:
+        color_en = (variant.get("color") or "").strip().lower()
+        color_th = (variant.get("color_th") or "").strip().lower()
+
+        # English color words must match a whole query token; Thai colors are
+        # matched by substring since Thai script has no ASCII word boundaries.
+        matched = (color_en and color_en in query_tokens) or (color_th and color_th in query_l)
+        if not matched:
+            continue
+
+        if color_en in images_by_color:
+            return images_by_color[color_en]
+
+    # Tier 2: color-family fallback.
+    requested_family = None
+    for token in query_tokens:
+        if token in _EN_COLOR_TO_FAMILY:
+            requested_family = _EN_COLOR_TO_FAMILY[token]
+            break
+    if requested_family is None:
+        for th_word in _TH_COLOR_WORDS_LONGEST_FIRST:
+            if th_word in query_l:
+                requested_family = _TH_COLOR_TO_FAMILY[th_word]
+                break
+
+    if requested_family is not None:
+        for variant in variants:
+            color_en = (variant.get("color") or "").strip().lower()
+            if _EN_COLOR_TO_FAMILY.get(color_en) == requested_family and color_en in images_by_color:
+                return images_by_color[color_en]
+
+    return default
+
+
+def _apply_query_image(products: List[Dict], query: str) -> List[Dict]:
+    """Return `products` with image_url swapped to a color-matched photo where one exists."""
+    result = []
+    for product in products:
+        image_url = _select_product_image(product, query)
+        if image_url != product.get("image_url"):
+            product = {**product, "image_url": image_url}
+        result.append(product)
+    return result
+
+
 def retrieve_products(query: str) -> List[Dict]:
+    """Hybrid vector + lexical retrieval, with per-color image selection applied."""
+    return _apply_query_image(_retrieve_products_core(query), query)
+
+
+def _retrieve_products_core(query: str) -> List[Dict]:
     """
     Hybrid vector + lexical retrieval.
 

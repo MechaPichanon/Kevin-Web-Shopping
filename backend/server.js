@@ -86,6 +86,55 @@ app.use("/products", productRoutes)
 ====================== */
 const { auth, requireAdmin } = require("./middleware/auth");
 
+// Dashboard KPI routes are readable by admin AND staff (the frontend's own
+// admin-area guard already allows both) — kept separate from requireAdmin,
+// which is admin-only and shared by order/product management routes.
+async function requireAdminOrStaff(req, res, next) {
+  try {
+    const result = await pool.query(
+      "SELECT role, is_active FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    const user = result.rows[0];
+
+    if (!user || !["admin", "staff"].includes(user.role) || user.is_active === false) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    next();
+  } catch (err) {
+    console.error("ADMIN OR STAFF CHECK ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+}
+
+// Thailand has no DST, so a plain locale-string round-trip is enough to get
+// "today" in Asia/Bangkok regardless of the container's own TZ (UTC).
+function getBangkokDateParts() {
+  const bkkNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
+  const pad = (n) => String(n).padStart(2, "0");
+  const toISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  const today = new Date(bkkNow.getFullYear(), bkkNow.getMonth(), bkkNow.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const daysIntoMonth = today.getDate(); // e.g. the 19th -> 19 days including today
+
+  const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthEnd = new Date(prevMonthStart);
+  prevMonthEnd.setDate(prevMonthStart.getDate() + daysIntoMonth - 1);
+
+  return {
+    today: toISODate(today),
+    yesterday: toISODate(yesterday),
+    monthStart: toISODate(monthStart),
+    prevMonthStart: toISODate(prevMonthStart),
+    prevMonthEnd: toISODate(prevMonthEnd),
+  };
+}
+
 /* ======================
    REGISTER
 ====================== */
@@ -419,19 +468,52 @@ app.delete("/users/:id", auth, requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/admin/stats", auth, async (req, res) => {
+app.get("/admin/stats", auth, requireAdminOrStaff, async (req, res) => {
   try {
-    const result = await pool.query(`
+    const { today, yesterday, monthStart, prevMonthStart, prevMonthEnd } = getBangkokDateParts();
+
+    const result = await pool.query(
+      `
       SELECT
-        COALESCE((SELECT SUM(total_price) FROM orders WHERE ordered_at::date = CURRENT_DATE), 0)::numeric AS sales,
-        COALESCE((SELECT SUM(total_price) FROM orders WHERE ordered_at::date = CURRENT_DATE - 1), 0)::numeric AS sales_yesterday,
-        (SELECT COUNT(*) FROM orders WHERE ordered_at::date = CURRENT_DATE)::integer AS orders,
-        (SELECT COUNT(*) FROM orders WHERE ordered_at::date = CURRENT_DATE - 1)::integer AS orders_yesterday,
+        COALESCE((SELECT SUM(total_price) FROM orders
+          WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
+            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales,
+        COALESCE((SELECT SUM(total_price) FROM orders
+          WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $2::date
+            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales_yesterday,
+        COALESCE((SELECT SUM(total_price) FROM orders
+          WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date BETWEEN $3::date AND $1::date
+            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales_month,
+        COALESCE((SELECT SUM(total_price) FROM orders
+          WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date BETWEEN $4::date AND $5::date
+            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales_prev_month,
+        (SELECT COUNT(*) FROM orders WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date)::integer AS orders,
+        (SELECT COUNT(*) FROM orders WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $2::date)::integer AS orders_yesterday,
         (SELECT COUNT(*) FROM products)::integer AS products,
-        (SELECT COUNT(*) FROM products WHERE created_at::date = CURRENT_DATE)::integer AS products_new_today,
+        (SELECT COUNT(*) FROM products WHERE (created_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date)::integer AS products_new_today,
         (SELECT COUNT(*) FROM users)::integer AS users,
-        (SELECT COUNT(*) FROM users WHERE created_at::date = CURRENT_DATE)::integer AS users_new_today
-    `);
+        (SELECT COUNT(*) FROM users WHERE (created_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date)::integer AS users_new_today,
+        COALESCE((
+          SELECT SUM((oi.unit_price - v.cost_price) * oi.quantity)
+          FROM order_items oi
+          JOIN orders o ON o.order_id = oi.order_id
+          JOIN variants v ON v.variant_id = oi.variant_id
+          WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
+            AND o.status NOT IN ('cancelled','refunded')
+            AND v.cost_price IS NOT NULL
+        ), 0)::numeric AS profit,
+        COALESCE((
+          SELECT SUM((oi.unit_price - v.cost_price) * oi.quantity)
+          FROM order_items oi
+          JOIN orders o ON o.order_id = oi.order_id
+          JOIN variants v ON v.variant_id = oi.variant_id
+          WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $2::date
+            AND o.status NOT IN ('cancelled','refunded')
+            AND v.cost_price IS NOT NULL
+        ), 0)::numeric AS profit_yesterday
+      `,
+      [today, yesterday, monthStart, prevMonthStart, prevMonthEnd]
+    );
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -440,7 +522,45 @@ app.get("/admin/stats", auth, async (req, res) => {
   }
 });
 
-app.get("/admin/low-stock", auth, async (req, res) => {
+// Daily revenue for the last 30 days plus the 30 days before that, so the
+// dashboard chart can show a current-vs-previous-period comparison. Gaps
+// (days with no orders) are filled with 0 via generate_series rather than
+// left absent, so the chart doesn't silently drop points.
+app.get("/admin/revenue-daily", auth, requireAdminOrStaff, async (req, res) => {
+  try {
+    const { today } = getBangkokDateParts();
+
+    const result = await pool.query(
+      `
+      WITH days AS (
+        SELECT generate_series($1::date - INTERVAL '59 days', $1::date, INTERVAL '1 day')::date AS day
+      ),
+      daily AS (
+        SELECT (ordered_at AT TIME ZONE 'Asia/Bangkok')::date AS day, SUM(total_price) AS revenue
+        FROM orders
+        WHERE status NOT IN ('cancelled','refunded')
+          AND (ordered_at AT TIME ZONE 'Asia/Bangkok')::date BETWEEN $1::date - INTERVAL '59 days' AND $1::date
+        GROUP BY 1
+      )
+      SELECT d.day, COALESCE(dl.revenue, 0)::numeric AS revenue
+      FROM days d
+      LEFT JOIN daily dl ON dl.day = d.day
+      ORDER BY d.day
+      `,
+      [today]
+    );
+
+    const format = (r) => ({ date: r.day.toISOString().slice(0, 10), revenue: Number(r.revenue) });
+    const rows = result.rows.map(format);
+
+    res.json({ previous: rows.slice(0, 30), current: rows.slice(30, 60) });
+  } catch (err) {
+    console.error("ADMIN REVENUE DAILY ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/admin/low-stock", auth, requireAdminOrStaff, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -460,7 +580,7 @@ app.get("/admin/low-stock", auth, async (req, res) => {
   }
 });
 
-app.get("/admin/orders/recent", auth, async (req, res) => {
+app.get("/admin/orders/recent", auth, requireAdminOrStaff, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT

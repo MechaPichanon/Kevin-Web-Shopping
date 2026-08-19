@@ -397,6 +397,38 @@ Pillow
 python-multipart
 ```
 
+## Admin dashboard KPIs
+
+`frontend/app/admin/page.tsx` shows sales (today + month-to-date), profit, order/user
+counts, and a 30-day daily-revenue chart (current vs. previous 30 days, hover
+tooltip), backed by `backend/server.js`'s `GET /admin/stats` and the new
+`GET /admin/revenue-daily`.
+
+- **Revenue definition:** every sales/profit figure excludes orders with
+  `status IN ('cancelled','refunded')` — matches `getBestSellers`'s existing
+  exclusion, which the old `/admin/stats` didn't (it summed *all* orders,
+  including cancelled/unpaid ones).
+- **Timezone:** all "today"/"yesterday"/month-to-date date comparisons use
+  `(ordered_at AT TIME ZONE 'Asia/Bangkok')::date` — the container runs UTC,
+  so a plain `::date` comparison was previously off by 7 hours.
+- **Month-to-date comparison** is against the *same day-of-month range* last
+  month (e.g. Aug 1–19 vs. Jul 1–19), not the full previous month.
+- **Profit** is real revenue-minus-cost (`(order_items.unit_price -
+  variants.cost_price) * quantity`), not an estimate — `variants.cost_price`
+  was checked and found populated for all active variants at the time this
+  was built. Only order items whose variant has `cost_price IS NOT NULL` are
+  included, so profit will under-count (not silently zero out) if future
+  products omit cost data.
+- **`GET /admin/revenue-daily`** returns 60 days of daily revenue (`previous`:
+  days 60–31 ago, `current`: last 30 days) with gaps filled to `0` via
+  `generate_series`, so the chart never silently drops a day.
+- **Auth:** `/admin/stats`, `/admin/low-stock`, `/admin/orders/recent`, and
+  `/admin/revenue-daily` now require `role IN ('admin','staff')` (previously
+  just a valid JWT — any logged-in customer could read store-wide sales
+  figures). This is a separate inline check, not the shared `requireAdmin`
+  middleware (which is admin-only and used by order/product management
+  routes) — widening that would have loosened those too.
+
 ## Key env vars
 
 ```
