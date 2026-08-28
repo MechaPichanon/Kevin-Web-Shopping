@@ -24,6 +24,9 @@ const { upload, handleUploadErrors } = require("./middleware/upload")
 const orderRoutes =
   require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/payment");
+const wishlistRoutes = require("./routes/wishlistRoutes");
+const discountRoutes = require("./routes/discountRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
 // Comma-separated, matching CORS_ORIGINS on the chatbot service — a single
 // value (the common case) still works unchanged since split() on a string
 // with no commas just returns a one-element array.
@@ -43,7 +46,9 @@ app.use("/cart", cartRoutes);
 
 app.use("/orders", orderRoutes);
 app.use("/payment", paymentRoutes);
-
+app.use("/wishlist", wishlistRoutes);
+app.use("/discount", discountRoutes);
+app.use("/reviews", reviewRoutes);
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Auth backend is running" });
 });

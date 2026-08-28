@@ -1,16 +1,20 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ChevronDown, Package, Clock, CheckCircle2, Truck, AlertCircle, Download } from "lucide-react"
+import { ChevronDown, Package, Clock, CheckCircle2, Truck, AlertCircle, Download, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { getToken } from "@/lib/auth"
 import { useRouter } from "next/navigation"
+
+const API = "http://localhost:5000"
 
 // ─────────────────────────────────────────────
 // Types (same struct as the admin orders view — backend/controllers/orderControllers.js)
 // ─────────────────────────────────────────────
 type OrderItem = {
+  productId?: string
   name: string
   variant?: string
   qty: number
@@ -38,8 +42,6 @@ type Order = {
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
-
-
 const getStatusIcon = (status: string) => {
   switch (status) {
     case "pending": return <Clock className="h-5 w-5" />
@@ -93,6 +95,10 @@ const getPaymentStatusLabel = (status: string) => {
   }
 }
 
+// key used to track which (order, product) pairs are already reviewed —
+// matches the real unique constraint on reviews(product_id, user_id, order_id)
+const reviewKey = (orderId: number, productId: string) => `${orderId}:${productId}`
+
 // ─────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────
@@ -105,20 +111,37 @@ export default function OrdersPage() {
   const [pageError, setPageError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
-  // ── โหลด order list (มาพร้อม items/ที่อยู่/การชำระเงินครบในคำขอเดียว) ──
+  // ── slip dialog ──
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [isSlipDialogOpen, setIsSlipDialogOpen] = useState(false)
+
+  // ── review dialog ──
+  const [reviewedKeys, setReviewedKeys] = useState<Set<string>>(new Set())
+  const [reviewItem, setReviewItem] = useState<{ orderId: number; productId: string; name: string } | null>(null)
+  const [reviewRating, setReviewRating] = useState(0)
+  const [reviewComment, setReviewComment] = useState("")
+  const [reviewError, setReviewError] = useState("")
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+
+  // ── โหลด order list + สถานะที่รีวิวไปแล้ว ──
   useEffect(() => {
     const token = getToken()
     if (!token) { router.push("/login"); return }
 
-    fetch("http://localhost:5000/orders/my", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          setPageError(data.error)
+    Promise.all([
+      fetch(`${API}/orders/my`, { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
+      fetch(`${API}/reviews/mine`, { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
+    ])
+      .then(([ordersData, reviewsData]) => {
+        if (ordersData.error) {
+          setPageError(ordersData.error)
         } else {
-          setOrders(data)
+          setOrders(ordersData)
+        }
+        if (Array.isArray(reviewsData)) {
+          setReviewedKeys(
+            new Set(reviewsData.map((r: { order_id: number; product_id: string }) => reviewKey(r.order_id, r.product_id)))
+          )
         }
       })
       .catch(() => setPageError("ไม่สามารถโหลดคำสั่งซื้อได้"))
@@ -131,6 +154,51 @@ export default function OrdersPage() {
       next.has(orderId) ? next.delete(orderId) : next.add(orderId)
       return next
     })
+  }
+
+  const handleViewSlip = (order: Order) => {
+    setSelectedOrder(order)
+    setIsSlipDialogOpen(true)
+  }
+
+  const openReview = (orderId: number, item: OrderItem) => {
+    if (!item.productId || reviewedKeys.has(reviewKey(orderId, item.productId))) return
+    setReviewItem({ orderId, productId: item.productId, name: item.name })
+    setReviewRating(0)
+    setReviewComment("")
+    setReviewError("")
+  }
+
+  const submitReview = async () => {
+    if (!reviewItem || reviewRating === 0) return
+    const token = getToken()
+    if (!token) { router.push("/login"); return }
+
+    setIsSubmittingReview(true)
+    setReviewError("")
+    try {
+      const res = await fetch(`${API}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          product_id: reviewItem.productId,
+          order_id: reviewItem.orderId,
+          rating: reviewRating,
+          body: reviewComment.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setReviewError(data.error || "ส่งรีวิวไม่สำเร็จ")
+        return
+      }
+      setReviewedKeys((prev) => new Set(prev).add(reviewKey(reviewItem.orderId, reviewItem.productId)))
+      setReviewItem(null)
+    } catch {
+      setReviewError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้")
+    } finally {
+      setIsSubmittingReview(false)
+    }
   }
 
   // ── download ใบเสร็จ ──
@@ -286,7 +354,6 @@ export default function OrdersPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-
       <main className="flex-1 py-8">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           {/* Header */}
@@ -390,19 +457,33 @@ export default function OrdersPage() {
                             <h3 className="font-semibold text-foreground mb-3">สินค้าในคำสั่ง</h3>
                             <div className="space-y-2">
                               {order.items.map((item, idx) => (
-                                <div key={idx} className="flex justify-between py-2 border-b border-border last:border-0">
-                                  <div>
+                                <div
+                                  key={item.productId ? `${item.productId}-${idx}` : idx}
+                                  className="flex flex-col gap-3 border-b border-border py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                  <div className="flex-1">
                                     <p className="text-foreground">{item.name}</p>
                                     {item.variant && item.variant !== "-" && (
                                       <p className="text-xs text-muted-foreground">{item.variant}</p>
                                     )}
                                     <p className="text-sm text-muted-foreground">จำนวน: {item.qty}</p>
                                   </div>
-                                  <div className="text-right">
-                                    <p className="text-foreground font-medium">
-                                      ฿{(item.qty * Number(item.price)).toFixed(2)}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">฿{Number(item.price).toFixed(2)}/ชิ้น</p>
+                                  <div className="flex items-center gap-3">
+                                    <div className="text-right">
+                                      <p className="text-foreground font-medium">
+                                        ฿{(item.qty * Number(item.price)).toFixed(2)}
+                                      </p>
+                                      <p className="text-sm text-muted-foreground">฿{Number(item.price).toFixed(2)}/ชิ้น</p>
+                                    </div>
+                                    {order.status === "confirmed" && item.productId && (
+                                      reviewedKeys.has(reviewKey(order.id, item.productId)) ? (
+                                        <span className="text-sm font-medium text-muted-foreground">รีวิวแล้ว</span>
+                                      ) : (
+                                        <Button size="sm" variant="outline" onClick={() => openReview(order.id, item)} className="gap-2">
+                                          <Star className="h-4 w-4" /> รีวิวสินค้า
+                                        </Button>
+                                      )
+                                    )}
                                   </div>
                                 </div>
                               ))}
@@ -438,11 +519,27 @@ export default function OrdersPage() {
                             <h3 className="font-semibold text-foreground mb-3">ข้อมูลการชำระเงิน</h3>
                             <div className="bg-muted/30 rounded-lg p-4 space-y-3">
                               <div className="flex justify-between">
+                                <span className="text-muted-foreground">วิธีชำระเงิน</span>
+                                <span className="text-foreground font-medium">{order.paymentMethod || "-"}</span>
+                              </div>
+                              <div className="flex justify-between">
                                 <span className="text-muted-foreground">สถานะชำระเงิน</span>
                                 <span className={`font-medium ${getPaymentStatusColor(order.paymentStatus)} px-3 py-1 rounded-lg`}>
                                   {getPaymentStatusLabel(order.paymentStatus)}
                                 </span>
                               </div>
+                              {order.paymentSlipUrl && (
+                                <div className="pt-3 border-t border-border">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleViewSlip(order)}
+                                    className="gap-2 w-full"
+                                  >
+                                    ดูสลิปการโอนเงิน
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -470,6 +567,61 @@ export default function OrdersPage() {
         </div>
       </main>
 
+      {/* Product Review Dialog */}
+      <Dialog open={Boolean(reviewItem)} onOpenChange={(open) => !open && setReviewItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>รีวิว {reviewItem?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div>
+              <p className="mb-2 text-sm font-medium text-foreground">ให้คะแนนสินค้า</p>
+              <div className="flex gap-2" role="radiogroup" aria-label="คะแนนสินค้า">
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <button key={rating} type="button" onClick={() => setReviewRating(rating)} aria-label={`${rating} ดาว`} aria-pressed={reviewRating === rating}>
+                    <Star className={`h-8 w-8 transition-colors ${rating <= reviewRating ? "fill-primary text-primary" : "text-muted-foreground"}`} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label htmlFor="review-comment" className="mb-2 block text-sm font-medium text-foreground">ความคิดเห็น</label>
+              <textarea
+                id="review-comment"
+                value={reviewComment}
+                onChange={(event) => setReviewComment(event.target.value)}
+                placeholder="บอกเล่าประสบการณ์การใช้งานของคุณ"
+                className="min-h-28 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {reviewError && <p className="text-sm text-destructive">{reviewError}</p>}
+            <Button className="w-full" disabled={reviewRating === 0 || isSubmittingReview} onClick={submitReview}>
+              {isSubmittingReview ? "กำลังส่ง..." : "ส่งรีวิว"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Slip Dialog */}
+      <Dialog open={isSlipDialogOpen} onOpenChange={setIsSlipDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>สลิปการโอนเงิน</DialogTitle>
+          </DialogHeader>
+          {selectedOrder?.paymentSlipUrl && (
+            <div className="space-y-4">
+              <img
+                src={selectedOrder.paymentSlipUrl}
+                alt="Payment slip"
+                className="w-full rounded-lg border border-border"
+              />
+              <p className="text-sm text-muted-foreground">
+                หมายเลขคำสั่ง: {selectedOrder.id}
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
-}
+} 
