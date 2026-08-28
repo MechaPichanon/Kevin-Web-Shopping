@@ -63,7 +63,7 @@ const createReview = async (req, res) => {
     }
 
     // Confirm this order belongs to the user, contains this product, and is
-    // actually delivered — otherwise skip straight to "not eligible".
+    // actually confirmed — otherwise skip straight to "not eligible".
     const eligible = await db.query(
       `
       SELECT 1
@@ -87,11 +87,11 @@ const createReview = async (req, res) => {
 
     const result = await db.query(
       `
-      INSERT INTO reviews (product_id, user_id, order_id, rating, title, body)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO reviews (product_id, user_id, order_id, rating, title, body, is_approved)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING review_id, product_id, order_id, rating, title, body, is_approved, created_at
       `,
-      [product_id, userId, order_id, ratingNum, title || null, body || null , is_approved = true]
+      [product_id, userId, order_id, ratingNum, title || null, body || null, true]
     );
 
     res.status(201).json(result.rows[0]);
@@ -122,4 +122,4 @@ const getMyReviewedItems = async (req, res) => {
   }
 };
 
-module.exports = { getProductReviews, createReview, getMyReviewedItems }
+module.exports = { getProductReviews, createReview, getMyReviewedItems }ห
