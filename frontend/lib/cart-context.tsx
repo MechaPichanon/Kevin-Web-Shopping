@@ -15,6 +15,11 @@ interface CartContextType {
   items: CartItem[]
   totalItems: number
   totalPrice: number
+  discountCode: string
+  discountAmount: number
+  grandTotal: number
+  applyDiscount: (code: string) => Promise<{ success: boolean; error?: string }>
+  removeDiscount: () => void
   addItem: (item: CartItem) => void
   removeItem: (id: string | number, size: string) => void
   updateQuantity: (id: string | number, size: string, quantity: number) => void
@@ -23,11 +28,16 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
+  const [discountCode, setDiscountCode] = useState("")
+  const [discountAmount, setDiscountAmount] = useState(0)
+
   const fetchRemoteCart = async (userId: number) => {
     try {
-      const res = await fetch(`http://localhost:5000/cart/${userId}`)
+      const res = await fetch(`${API}/cart/${userId}`)
       if (!res.ok) return
       const rows = await res.json()
       const mapped: CartItem[] = rows.map((r: any) => ({
@@ -44,7 +54,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Initialize cart: if logged in, load from backend; otherwise load from localStorage
   useEffect(() => {
     const init = async () => {
       try {
@@ -56,14 +65,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             return
           }
         }
-
         const saved = localStorage.getItem("cart")
         if (saved) {
-          try {
-            setItems(JSON.parse(saved))
-          } catch (err) {
-            console.error("Failed to load cart:", err)
-          }
+          try { setItems(JSON.parse(saved)) } catch (err) { console.error("Failed to load cart:", err) }
         }
       } catch (err) {
         console.error("Cart init error:", err)
@@ -87,17 +91,51 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("cartUpdated", onCartUpdated)
   }, [])
 
-  // Save cart to localStorage whenever it changes (for guest carts)
   useEffect(() => {
-    try {
-      localStorage.setItem("cart", JSON.stringify(items))
-    } catch (err) {
-      console.error("Failed to save cart:", err)
+    try { localStorage.setItem("cart", JSON.stringify(items)) } catch (err) { console.error("Failed to save cart:", err) }
+  }, [items])
+
+  // ── reset discount เมื่อตะกร้าว่าง ──
+  useEffect(() => {
+    if (items.length === 0) {
+      setDiscountCode("")
+      setDiscountAmount(0)
     }
   }, [items])
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0)
   const totalPrice = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const shippingFee = totalPrice >= 1500 || totalPrice === 0 ? 0 : 50
+  const grandTotal = Math.max(0, totalPrice - discountAmount) + shippingFee
+
+  // ── apply discount code ──
+  const applyDiscount = async (code: string): Promise<{ success: boolean; error?: string }> => {
+    if (!code.trim()) return { success: false, error: "กรุณากรอกรหัสส่วนลด" }
+
+    try {
+      const res = await fetch(`${API}/discount/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code.trim(), subtotal: totalPrice }),
+      })
+      const data = await res.json()
+
+      if (!res.ok || data.error) {
+        return { success: false, error: data.error || "รหัสส่วนลดไม่ถูกต้อง" }
+      }
+
+      setDiscountCode(code.trim())
+      setDiscountAmount(Number(data.discount_amount))
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้" }
+    }
+  }
+
+  const removeDiscount = () => {
+    setDiscountCode("")
+    setDiscountAmount(0)
+  }
 
   const addItem = (newItem: CartItem) => {
     setItems((prev) => {
@@ -118,23 +156,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }
 
   const updateQuantity = (id: string | number, size: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeItem(id, size)
-      return
-    }
+    if (quantity <= 0) { removeItem(id, size); return }
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === id && item.size === size ? { ...item, quantity } : item
-      )
+      prev.map((item) => item.id === id && item.size === size ? { ...item, quantity } : item)
     )
   }
 
   const clearCart = () => {
     setItems([])
+    setDiscountCode("")
+    setDiscountAmount(0)
   }
 
   return (
-    <CartContext.Provider value={{ items, totalItems, totalPrice, addItem, removeItem, updateQuantity, clearCart }}>
+    <CartContext.Provider value={{
+      items, totalItems, totalPrice,
+      discountCode, discountAmount, grandTotal,
+      applyDiscount, removeDiscount,
+      addItem, removeItem, updateQuantity, clearCart,
+    }}>
       {children}
     </CartContext.Provider>
   )
@@ -142,8 +182,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
 export function useCart() {
   const context = useContext(CartContext)
-  if (!context) {
-    throw new Error("useCart must be used within CartProvider")
-  }
+  if (!context) throw new Error("useCart must be used within CartProvider")
   return context
 }

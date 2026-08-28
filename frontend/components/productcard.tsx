@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
+import { Heart } from "lucide-react";
+import { useWishlist } from "@/lib/wishlist-context";
 
 type Product = {
   id: number;
@@ -30,6 +31,9 @@ export default function ProductCard({
   onAdded?: (item: AddedPayload) => void;
 }) {
   const router = useRouter();
+  const { toggleItem, isInWishlist } = useWishlist();
+  const isLiked = isInWishlist(product.product_id ?? String(product.id))
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("th-TH", {
       style: "currency",
@@ -48,9 +52,7 @@ export default function ProductCard({
 
     const variantId = product.variant_id ?? String(product.id);
     const token = localStorage.getItem("token");
-    const user = JSON.parse(
-      localStorage.getItem("user") || "{}"
-    );
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
 
     if (!token || !user.id) {
       alert("กรุณาเข้าสู่ระบบก่อนเพิ่มสินค้า");
@@ -59,21 +61,18 @@ export default function ProductCard({
     }
 
     try {
-      const res = await fetch(
-        "http://localhost:5000/cart/add",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            variant_id: variantId,
-            quantity: 1,
-          }),
-        }
-      );
+      const res = await fetch("http://localhost:5000/cart/add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          variant_id: variantId,
+          quantity: 1,
+        }),
+      });
 
       const data = await res.json();
 
@@ -83,22 +82,28 @@ export default function ProductCard({
       }
 
       if (onAdded) {
-        onAdded({
-          name: product.name,
-          name_en: product.name_en,
-          price: product.price,
-        });
+        onAdded({ name: product.name, name_en: product.name_en, price: product.price });
       } else {
         alert(data.message || "เพิ่มสินค้าสำเร็จ");
       }
 
-      window.dispatchEvent(
-        new Event("cartUpdated")
-      );
+      window.dispatchEvent(new Event("cartUpdated"));
     } catch (err) {
       console.error("Add to cart error:", err);
       alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
     }
+  };
+
+  const handleToggleWishlist = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleItem({
+      id: product.product_id ?? String(product.id),  // ← ใช้ product_id ก่อน
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      category: product.category,
+    });
   };
 
   const cardInner = (
@@ -111,14 +116,28 @@ export default function ProductCard({
           className="h-full w-full object-cover"
         />
 
+        {/* Heart button */}
+        <div className="absolute right-3 top-3">
+          <button
+            onClick={handleToggleWishlist}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-md opacity-0 transition-opacity group-hover:opacity-100"
+            aria-label={isLiked ? "ลบออกจาก Wishlist" : "เพิ่มใน Wishlist"}
+          >
+            <Heart
+              className={`h-4 w-4 transition-colors ${
+                isLiked ? "fill-red-500 text-red-500" : "text-gray-400"
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Add to cart button */}
         <div className="absolute bottom-3 left-3 right-3 translate-y-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <button
             onClick={handleAddToCart}
             disabled={soldOut}
             className={`w-full rounded-lg py-2 text-white ${
-              soldOut
-                ? "cursor-not-allowed bg-black/40"
-                : "bg-black"
+              soldOut ? "cursor-not-allowed bg-black/40" : "bg-black"
             }`}
           >
             {soldOut ? "สินค้าหมด · Sold out" : "เพิ่มลงตะกร้า · Add to cart"}
@@ -135,9 +154,7 @@ export default function ProductCard({
           <p className="line-clamp-1 text-xs text-[#b0a495]">{product.name_en}</p>
         )}
 
-        <p className="mt-1 text-lg font-bold">
-          {formatPrice(product.price)}
-        </p>
+        <p className="mt-1 text-lg font-bold">{formatPrice(product.price)}</p>
 
         <p className={`text-sm ${soldOut ? "font-semibold text-red-600" : "text-[#9a8a7a]"}`}>
           {soldOut ? "สินค้าหมด" : "มีสินค้า"}

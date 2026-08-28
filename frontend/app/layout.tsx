@@ -12,6 +12,7 @@ import Navbarsub from "@/components/navbarsub";
 import Footer from "@/components/footer";
 import { CartProvider } from "@/lib/cart-context";
 import ChatWidget from "@/components/ChatWidget";
+import { WishlistProvider } from "@/lib/wishlist-context"
 
 const notoSerifThai = Noto_Serif_Thai({
   subsets: ["thai", "latin"],
@@ -56,17 +57,19 @@ export default function RootLayout({
 }) {
   return (
     <html
-      lang="th"
+      lang="th" suppressHydrationWarning
       className={`${notoSerifThai.variable} ${notoSansThai.variable} ${ibmPlexSansThai.variable} ${ibmPlexMono.variable} ${fraunces.variable}`}
     >
       <body>
-        <CartProvider>
-          <Navbar />
-          {/* <Navbarsub /> */}
-          {children}
-          <Footer />
-          <ChatWidget />
-        </CartProvider>
+        <WishlistProvider>
+          <CartProvider>
+            <Navbar />
+            {/* <Navbarsub /> */}
+            {children}
+            <Footer />
+            <ChatWidget />
+          </CartProvider>
+        </WishlistProvider>
       </body>
     </html>
   );

@@ -1,4 +1,5 @@
 const db = require("../db");
+const { getValidDiscount } = require("./discountControllers");
 
 const VALID_ORDER_STATUSES = [
   "pending",
@@ -32,6 +33,7 @@ const createOrder = async (req, res) => {
       province,
       postalCode,
       payment_method,
+      discount_code,
     } = req.body;
 
     const name = `${firstName || ""} ${lastName || ""}`.trim();
@@ -60,11 +62,6 @@ const createOrder = async (req, res) => {
       });
     }
 
-    // Check availability and decrement stock. A "set" item (variant_id
-    // present as set_variant_id in set_components) has no independent
-    // stock of its own — it draws from its real component variants, so
-    // decrementing here also keeps any other set sharing that component
-    // correct (recomputed automatically by the DB trigger).
     for (const item of cartItems) {
       const setComponentsResult = await client.query(
         `SELECT component_variant_id, quantity FROM set_components WHERE set_variant_id = $1`,
@@ -116,10 +113,25 @@ const createOrder = async (req, res) => {
     });
 
     const shippingFee = subtotal >= 1500 ? 0 : 50;
-    const totalPrice = subtotal + shippingFee;
 
-    // Upsert into the user's one default address (shared with the profile
-    // page) instead of inserting a throwaway row every order.
+    // Discount is always re-validated and recalculated server-side here —
+    // never trust discount_amount from the client, since it can be edited
+    // via devtools before the request is sent.
+    let discountAmount = 0;
+    let appliedDiscountCodeId = null;
+
+    if (discount_code) {
+      const discountResult = await getValidDiscount(discount_code, subtotal, client);
+      if (discountResult.error) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: discountResult.error });
+      }
+      discountAmount = discountResult.discountAmount;
+      appliedDiscountCodeId = discountResult.discount.code_id;
+    }
+
+    const totalPrice = Math.max(0, subtotal - discountAmount) + shippingFee;
+
     const defaultAddressResult = await client.query(
       `SELECT a.address_id
        FROM user_addresses ua
@@ -187,9 +199,11 @@ const createOrder = async (req, res) => {
         shipping_snapshot,
         subtotal,
         shipping_fee,
+        discount_code,
+        discount_amount,
         total_price
       )
-      VALUES ($1,$2,$3,$4,$5,$6)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING order_id
       `,
       [
@@ -198,6 +212,8 @@ const createOrder = async (req, res) => {
         JSON.stringify(shippingSnapshot),
         subtotal,
         shippingFee,
+        discount_code || null,
+        discountAmount,
         totalPrice,
       ]
     );
@@ -247,6 +263,13 @@ const createOrder = async (req, res) => {
       ]
     );
 
+    if (appliedDiscountCodeId) {
+      await client.query(
+        `UPDATE discount_codes SET used_count = used_count + 1 WHERE code_id = $1`,
+        [appliedDiscountCodeId]
+      );
+    }
+
     await client.query(
       `
       DELETE FROM cart_items
@@ -266,6 +289,7 @@ const createOrder = async (req, res) => {
       order_id: orderId,
       subtotal,
       shippingFee,
+      discountAmount,
       totalPrice,
     });
 
@@ -281,105 +305,132 @@ const createOrder = async (req, res) => {
   }
 };
 
+// Shared: order_items joined with variants so each item also carries the
+// product_id it belongs to — needed for the review flow (reviews.product_id).
+async function itemsByOrderId(orderIds) {
+  const itemsResult = await db.query(
+    `
+    SELECT oi.*, v.product_id
+    FROM order_items oi
+    JOIN variants v ON v.variant_id = oi.variant_id
+    WHERE oi.order_id = ANY($1::int[])
+    `,
+    [orderIds]
+  );
+
+  const map = {};
+  itemsResult.rows.forEach((item) => {
+    if (!map[item.order_id]) map[item.order_id] = [];
+    map[item.order_id].push({
+      productId: item.product_id,
+      name: item.product_name,
+      variant: item.variant_desc,
+      qty: item.quantity,
+      price: Number(item.unit_price),
+    });
+  });
+  return map;
+}
+
+async function itemsForOrder(orderId) {
+  const itemsResult = await db.query(
+    `
+    SELECT oi.*, v.product_id
+    FROM order_items oi
+    JOIN variants v ON v.variant_id = oi.variant_id
+    WHERE oi.order_id = $1
+    `,
+    [orderId]
+  );
+
+  return itemsResult.rows.map((item) => ({
+    productId: item.product_id,
+    name: item.product_name,
+    variant: item.variant_desc,
+    qty: item.quantity,
+    price: Number(item.unit_price),
+  }));
+}
+
+function formatOrderRow(o, items) {
+  const snap = o.shipping_snapshot || {};
+  const recipient = snap.recipient_name || o.recipient_name;
+  const phone = snap.phone || o.phone;
+  const addressLine1 = snap.address_line1 || o.address_line1;
+  const addressLine2 = snap.address_line2 || o.address_line2;
+  const province = snap.province || o.province;
+  const postalCode = snap.postal_code || o.postal_code;
+
+  return {
+    id: o.order_id,
+    customer: recipient,
+    phone,
+    address: [addressLine1, addressLine2, province, postalCode]
+      .filter(Boolean)
+      .join(" "),
+    items: items || [],
+    subtotal: Number(o.subtotal),
+    shippingFee: Number(o.shipping_fee),
+    discountCode: o.discount_code || null,
+    discountAmount: o.discount_amount != null ? Number(o.discount_amount) : 0,
+    total: Number(o.total_price),
+    status: o.status,
+    paymentStatus: o.payment_status,
+    paymentSlipUrl: o.payment_slip_url,
+    paymentMethod: o.payment_method,
+    trackingNumber: o.tracking_number,
+    notes: o.notes,
+    date: o.ordered_at,
+  };
+}
+
+const ORDER_SELECT = `
+  SELECT
+    o.order_id,
+    o.user_id,
+    o.status,
+    o.payment_status,
+    o.payment_slip_url,
+    o.subtotal,
+    o.shipping_fee,
+    o.discount_code,
+    o.discount_amount,
+    o.total_price,
+    o.tracking_number,
+    o.notes,
+    o.ordered_at,
+    o.updated_at,
+    o.shipping_snapshot,
+    a.recipient_name,
+    a.phone,
+    a.address_line1,
+    a.address_line2,
+    a.province,
+    a.postal_code,
+    pm.method AS payment_method,
+    pm.amount AS payment_amount
+  FROM orders o
+  JOIN addresses a ON a.address_id = o.address_id
+  LEFT JOIN payments pm ON pm.order_id = o.order_id
+`;
+
 // ---- Customer: list the logged-in user's own orders ----
 const getMyOrders = async (req, res) => {
   try {
     const user_id = req.user.id;
 
     const ordersResult = await db.query(
-      `
-      SELECT
-        o.order_id,
-        o.user_id,
-        o.status,
-        o.payment_status,
-        o.payment_slip_url,
-        o.subtotal,
-        o.shipping_fee,
-        o.total_price,
-        o.tracking_number,
-        o.notes,
-        o.ordered_at,
-        o.updated_at,
-        o.shipping_snapshot,
-        a.recipient_name,
-        a.phone,
-        a.address_line1,
-        a.address_line2,
-        a.province,
-        a.postal_code,
-        pm.method AS payment_method,
-        pm.amount AS payment_amount
-      FROM orders o
-      JOIN addresses a ON a.address_id = o.address_id
-      LEFT JOIN payments pm ON pm.order_id = o.order_id
-      WHERE o.user_id = $1
-      ORDER BY o.ordered_at DESC
-      `,
+      `${ORDER_SELECT} WHERE o.user_id = $1 ORDER BY o.ordered_at DESC`,
       [user_id]
     );
 
     const orders = ordersResult.rows;
-
     if (orders.length === 0) {
       return res.json([]);
     }
 
-    const orderIds = orders.map((o) => o.order_id);
-
-    const itemsResult = await db.query(
-      `
-      SELECT *
-      FROM order_items
-      WHERE order_id = ANY($1::int[])
-      `,
-      [orderIds]
-    );
-
-    const itemsByOrder = {};
-
-    itemsResult.rows.forEach((item) => {
-      if (!itemsByOrder[item.order_id]) {
-        itemsByOrder[item.order_id] = [];
-      }
-      itemsByOrder[item.order_id].push({
-        name: item.product_name,
-        variant: item.variant_desc,
-        qty: item.quantity,
-        price: Number(item.unit_price),
-      });
-    });
-
-    const formatted = orders.map((o) => {
-      const snap = o.shipping_snapshot || {};
-      const recipient = snap.recipient_name || o.recipient_name;
-      const phone = snap.phone || o.phone;
-      const addressLine1 = snap.address_line1 || o.address_line1;
-      const addressLine2 = snap.address_line2 || o.address_line2;
-      const province = snap.province || o.province;
-      const postalCode = snap.postal_code || o.postal_code;
-      return {
-        id: o.order_id,
-        customer: recipient,
-        phone,
-        address: [addressLine1, addressLine2, province, postalCode]
-          .filter(Boolean)
-          .join(" "),
-        items: itemsByOrder[o.order_id] || [],
-        subtotal: Number(o.subtotal),
-        shippingFee: Number(o.shipping_fee),
-        total: Number(o.total_price),
-        status: o.status,
-        paymentStatus: o.payment_status,
-        paymentSlipUrl: o.payment_slip_url,
-        paymentMethod: o.payment_method,
-        trackingNumber: o.tracking_number,
-        notes: o.notes,
-        date: o.ordered_at,
-      };
-    });
-
-    res.json(formatted);
+    const itemsMap = await itemsByOrderId(orders.map((o) => o.order_id));
+    res.json(orders.map((o) => formatOrderRow(o, itemsMap[o.order_id])));
   } catch (err) {
     console.log(err);
 
@@ -396,34 +447,7 @@ const getMyOrderById = async (req, res) => {
     const user_id = req.user.id;
 
     const orderResult = await db.query(
-      `
-      SELECT
-        o.order_id,
-        o.user_id,
-        o.status,
-        o.payment_status,
-        o.payment_slip_url,
-        o.subtotal,
-        o.shipping_fee,
-        o.total_price,
-        o.tracking_number,
-        o.notes,
-        o.ordered_at,
-        o.updated_at,
-        o.shipping_snapshot,
-        a.recipient_name,
-        a.phone,
-        a.address_line1,
-        a.address_line2,
-        a.province,
-        a.postal_code,
-        pm.method AS payment_method,
-        pm.amount AS payment_amount
-      FROM orders o
-      JOIN addresses a ON a.address_id = o.address_id
-      LEFT JOIN payments pm ON pm.order_id = o.order_id
-      WHERE o.order_id = $1 AND o.user_id = $2
-      `,
+      `${ORDER_SELECT} WHERE o.order_id = $1 AND o.user_id = $2`,
       [id, user_id]
     );
 
@@ -433,48 +457,8 @@ const getMyOrderById = async (req, res) => {
       });
     }
 
-    const itemsResult = await db.query(
-      `
-      SELECT *
-      FROM order_items
-      WHERE order_id = $1
-      `,
-      [id]
-    );
-
-    const o = orderResult.rows[0];
-    const snap = o.shipping_snapshot || {};
-    const recipient = snap.recipient_name || o.recipient_name;
-    const phone = snap.phone || o.phone;
-    const addressLine1 = snap.address_line1 || o.address_line1;
-    const addressLine2 = snap.address_line2 || o.address_line2;
-    const province = snap.province || o.province;
-    const postalCode = snap.postal_code || o.postal_code;
-
-    res.json({
-      id: o.order_id,
-      customer: recipient,
-      phone,
-      address: [addressLine1, addressLine2, province, postalCode]
-        .filter(Boolean)
-        .join(" "),
-      items: itemsResult.rows.map((item) => ({
-        name: item.product_name,
-        variant: item.variant_desc,
-        qty: item.quantity,
-        price: Number(item.unit_price),
-      })),
-      subtotal: Number(o.subtotal),
-      shippingFee: Number(o.shipping_fee),
-      total: Number(o.total_price),
-      status: o.status,
-      paymentStatus: o.payment_status,
-      paymentSlipUrl: o.payment_slip_url,
-      paymentMethod: o.payment_method,
-      trackingNumber: o.tracking_number,
-      notes: o.notes,
-      date: o.ordered_at,
-    });
+    const items = await itemsForOrder(id);
+    res.json(formatOrderRow(orderResult.rows[0], items));
   } catch (err) {
     console.log(err);
 
@@ -487,98 +471,15 @@ const getMyOrderById = async (req, res) => {
 // ---- Admin: list all orders (with items, address, payment info) ----
 const getAllOrders = async (req, res) => {
   try {
-    const ordersResult = await db.query(
-      `
-      SELECT
-        o.order_id,
-        o.user_id,
-        o.status,
-        o.payment_status,
-        o.payment_slip_url,
-        o.subtotal,
-        o.shipping_fee,
-        o.total_price,
-        o.tracking_number,
-        o.notes,
-        o.ordered_at,
-        o.updated_at,
-        o.shipping_snapshot,
-        a.recipient_name,
-        a.phone,
-        a.address_line1,
-        a.address_line2,
-        a.province,
-        a.postal_code,
-        pm.method AS payment_method,
-        pm.amount AS payment_amount
-      FROM orders o
-      JOIN addresses a ON a.address_id = o.address_id
-      LEFT JOIN payments pm ON pm.order_id = o.order_id
-      ORDER BY o.ordered_at DESC
-      `
-    );
+    const ordersResult = await db.query(`${ORDER_SELECT} ORDER BY o.ordered_at DESC`);
 
     const orders = ordersResult.rows;
-
     if (orders.length === 0) {
       return res.json([]);
     }
 
-    const orderIds = orders.map((o) => o.order_id);
-
-    const itemsResult = await db.query(
-      `
-      SELECT *
-      FROM order_items
-      WHERE order_id = ANY($1::int[])
-      `,
-      [orderIds]
-    );
-
-    const itemsByOrder = {};
-
-    itemsResult.rows.forEach((item) => {
-      if (!itemsByOrder[item.order_id]) {
-        itemsByOrder[item.order_id] = [];
-      }
-      itemsByOrder[item.order_id].push({
-        name: item.product_name,
-        variant: item.variant_desc,
-        qty: item.quantity,
-        price: Number(item.unit_price),
-      });
-    });
-
-    const formatted = orders.map((o) => {
-      const snap = o.shipping_snapshot || {};
-      const recipient = snap.recipient_name || o.recipient_name;
-      const phone = snap.phone || o.phone;
-      const addressLine1 = snap.address_line1 || o.address_line1;
-      const addressLine2 = snap.address_line2 || o.address_line2;
-      const province = snap.province || o.province;
-      const postalCode = snap.postal_code || o.postal_code;
-      return {
-        id: o.order_id,
-        customer: recipient,
-        phone,
-        address: [addressLine1, addressLine2, province, postalCode]
-          .filter(Boolean)
-          .join(" "),
-        items: itemsByOrder[o.order_id] || [],
-        subtotal: Number(o.subtotal),
-        shippingFee: Number(o.shipping_fee),
-        total: Number(o.total_price),
-        status: o.status,
-        paymentStatus: o.payment_status,
-        paymentSlipUrl: o.payment_slip_url,
-        paymentMethod: o.payment_method,
-        trackingNumber: o.tracking_number,
-        notes: o.notes,
-        date: o.ordered_at,
-      };
-    });
-
-    res.json(formatted);
+    const itemsMap = await itemsByOrderId(orders.map((o) => o.order_id));
+    res.json(orders.map((o) => formatOrderRow(o, itemsMap[o.order_id])));
   } catch (err) {
     console.log(err);
 
@@ -593,37 +494,7 @@ const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const orderResult = await db.query(
-      `
-      SELECT
-        o.order_id,
-        o.user_id,
-        o.status,
-        o.payment_status,
-        o.payment_slip_url,
-        o.subtotal,
-        o.shipping_fee,
-        o.total_price,
-        o.tracking_number,
-        o.notes,
-        o.ordered_at,
-        o.updated_at,
-        o.shipping_snapshot,
-        a.recipient_name,
-        a.phone,
-        a.address_line1,
-        a.address_line2,
-        a.province,
-        a.postal_code,
-        pm.method AS payment_method,
-        pm.amount AS payment_amount
-      FROM orders o
-      JOIN addresses a ON a.address_id = o.address_id
-      LEFT JOIN payments pm ON pm.order_id = o.order_id
-      WHERE o.order_id = $1
-      `,
-      [id]
-    );
+    const orderResult = await db.query(`${ORDER_SELECT} WHERE o.order_id = $1`, [id]);
 
     if (orderResult.rows.length === 0) {
       return res.status(404).json({
@@ -631,48 +502,8 @@ const getOrderById = async (req, res) => {
       });
     }
 
-    const itemsResult = await db.query(
-      `
-      SELECT *
-      FROM order_items
-      WHERE order_id = $1
-      `,
-      [id]
-    );
-
-    const o = orderResult.rows[0];
-    const snap = o.shipping_snapshot || {};
-    const recipient = snap.recipient_name || o.recipient_name;
-    const phone = snap.phone || o.phone;
-    const addressLine1 = snap.address_line1 || o.address_line1;
-    const addressLine2 = snap.address_line2 || o.address_line2;
-    const province = snap.province || o.province;
-    const postalCode = snap.postal_code || o.postal_code;
-
-    res.json({
-      id: o.order_id,
-      customer: recipient,
-      phone,
-      address: [addressLine1, addressLine2, province, postalCode]
-        .filter(Boolean)
-        .join(" "),
-      items: itemsResult.rows.map((item) => ({
-        name: item.product_name,
-        variant: item.variant_desc,
-        qty: item.quantity,
-        price: Number(item.unit_price),
-      })),
-      subtotal: Number(o.subtotal),
-      shippingFee: Number(o.shipping_fee),
-      total: Number(o.total_price),
-      status: o.status,
-      paymentStatus: o.payment_status,
-      paymentSlipUrl: o.payment_slip_url,
-      paymentMethod: o.payment_method,
-      trackingNumber: o.tracking_number,
-      notes: o.notes,
-      date: o.ordered_at,
-    });
+    const items = await itemsForOrder(id);
+    res.json(formatOrderRow(orderResult.rows[0], items));
   } catch (err) {
     console.log(err);
 
@@ -682,7 +513,7 @@ const getOrderById = async (req, res) => {
   }
 };
 
-// ---- Admin: update order status (pending / shipping / completed / cancelled) ----
+// ---- Admin: update order status (pending / confirmed / shipped / delivered / cancelled / refunded) ----
 const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -753,9 +584,6 @@ const updatePaymentStatus = async (req, res) => {
       });
     }
 
-    // Keep the payments row's own status/paid_at in sync — previously only
-    // orders.payment_status changed, leaving payments stuck at 'pending'/NULL
-    // forever even after an order was confirmed paid.
     if (payment_status === "paid") {
       await client.query(
         `UPDATE payments SET status = 'success', paid_at = NOW() WHERE order_id = $1`,
