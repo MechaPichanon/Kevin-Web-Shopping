@@ -1,4 +1,5 @@
 const db = require("../db");
+const { getValidDiscount } = require("./discountControllers");
 
 const VALID_ORDER_STATUSES = [
   "pending",
@@ -32,6 +33,7 @@ const createOrder = async (req, res) => {
       province,
       postalCode,
       payment_method,
+      discount_code,
     } = req.body;
 
     const name = `${firstName || ""} ${lastName || ""}`.trim();
@@ -111,7 +113,24 @@ const createOrder = async (req, res) => {
     });
 
     const shippingFee = subtotal >= 1500 ? 0 : 50;
-    const totalPrice = subtotal + shippingFee;
+
+    // Discount is always re-validated and recalculated server-side here —
+    // never trust discount_amount from the client, since it can be edited
+    // via devtools before the request is sent.
+    let discountAmount = 0;
+    let appliedDiscountCodeId = null;
+
+    if (discount_code) {
+      const discountResult = await getValidDiscount(discount_code, subtotal, client);
+      if (discountResult.error) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: discountResult.error });
+      }
+      discountAmount = discountResult.discountAmount;
+      appliedDiscountCodeId = discountResult.discount.code_id;
+    }
+
+    const totalPrice = Math.max(0, subtotal - discountAmount) + shippingFee;
 
     const defaultAddressResult = await client.query(
       `SELECT a.address_id
@@ -180,9 +199,11 @@ const createOrder = async (req, res) => {
         shipping_snapshot,
         subtotal,
         shipping_fee,
+        discount_code,
+        discount_amount,
         total_price
       )
-      VALUES ($1,$2,$3,$4,$5,$6)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING order_id
       `,
       [
@@ -191,6 +212,8 @@ const createOrder = async (req, res) => {
         JSON.stringify(shippingSnapshot),
         subtotal,
         shippingFee,
+        discount_code || null,
+        discountAmount,
         totalPrice,
       ]
     );
@@ -240,6 +263,13 @@ const createOrder = async (req, res) => {
       ]
     );
 
+    if (appliedDiscountCodeId) {
+      await client.query(
+        `UPDATE discount_codes SET used_count = used_count + 1 WHERE code_id = $1`,
+        [appliedDiscountCodeId]
+      );
+    }
+
     await client.query(
       `
       DELETE FROM cart_items
@@ -259,6 +289,7 @@ const createOrder = async (req, res) => {
       order_id: orderId,
       subtotal,
       shippingFee,
+      discountAmount,
       totalPrice,
     });
 
@@ -340,6 +371,8 @@ function formatOrderRow(o, items) {
     items: items || [],
     subtotal: Number(o.subtotal),
     shippingFee: Number(o.shipping_fee),
+    discountCode: o.discount_code || null,
+    discountAmount: o.discount_amount != null ? Number(o.discount_amount) : 0,
     total: Number(o.total_price),
     status: o.status,
     paymentStatus: o.payment_status,
@@ -360,6 +393,8 @@ const ORDER_SELECT = `
     o.payment_slip_url,
     o.subtotal,
     o.shipping_fee,
+    o.discount_code,
+    o.discount_amount,
     o.total_price,
     o.tracking_number,
     o.notes,
