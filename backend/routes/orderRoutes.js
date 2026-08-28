@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { auth, requireAdmin } = require("../middleware/auth");
+const { auth, requireAdminOrStaff } = require("../middleware/auth");
 const { upload } = require("../middleware/upload");
 
 const {
@@ -22,10 +22,10 @@ router.post("/:id/payment-slip", upload.single("slip"), uploadPaymentSlip);
 router.get("/my", auth, getMyOrders);
 router.get("/my/:id", auth, getMyOrderById);
 
-// Admin
-router.get("/admin", auth, requireAdmin, getAllOrders);
-router.get("/admin/:id", auth, requireAdmin, getOrderById);
-router.patch("/admin/:id/status", auth, requireAdmin, updateOrderStatus);
-router.patch("/admin/:id/payment-status", auth, requireAdmin, updatePaymentStatus);
+// Admin + staff — staff run fulfillment (status) and payment verification
+router.get("/admin", auth, requireAdminOrStaff, getAllOrders);
+router.get("/admin/:id", auth, requireAdminOrStaff, getOrderById);
+router.patch("/admin/:id/status", auth, requireAdminOrStaff, updateOrderStatus);
+router.patch("/admin/:id/payment-status", auth, requireAdminOrStaff, updatePaymentStatus);
 
 module.exports = router;

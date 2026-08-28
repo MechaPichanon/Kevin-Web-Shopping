@@ -252,7 +252,11 @@ export default function Navbar() {
               <div className="flex items-center space-x-3">
 
                 <Link
-                  href={user.role === "admin" ? "/admin" : "/profile"}
+                  href={
+                    user.role === "admin" || user.role === "staff"
+                      ? "/admin"
+                      : "/profile"
+                  }
                   className="text-[#5a4a3d]"
                 >
                   {user.username}

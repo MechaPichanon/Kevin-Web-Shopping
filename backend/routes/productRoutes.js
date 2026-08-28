@@ -21,6 +21,8 @@ const {
 
 const { getProductReviews } = require("../controllers/reviewControllers")
 
+const { auth, requireAdmin, requireAdminOrStaff } = require("../middleware/auth")
+
 const router = express.Router()
 
 // Literal routes must stay above the "/:productId" wildcard below,
@@ -34,28 +36,35 @@ router.get("/:productId", getProductById)
 
 const { upload } = require("../middleware/upload")
 
+// Write routes — admin + staff may add/edit; only admin may delete a product.
 router.post(
   "/",
+  auth,
+  requireAdminOrStaff,
   upload.single("image"),
   addProduct
 )
 
 router.put(
   "/:productId",
+  auth,
+  requireAdminOrStaff,
   upload.single("image"),
   updateProduct
 )
 
 router.delete(
   "/:productId",
+  auth,
+  requireAdmin,
   deleteProduct
 )
 
 // Product image endpoints (color-keyed, H&M-style)
 router.get("/:productId/images", getProductImages)
-router.post("/:productId/images", upload.single("image"), addProductImage)
-router.delete("/:productId/images/:imageId", deleteProductImage)
-router.put("/:productId/images/:imageId/primary", setPrimaryImage)
+router.post("/:productId/images", auth, requireAdminOrStaff, upload.single("image"), addProductImage)
+router.delete("/:productId/images/:imageId", auth, requireAdminOrStaff, deleteProductImage)
+router.put("/:productId/images/:imageId/primary", auth, requireAdminOrStaff, setPrimaryImage)
 
 router.get("/:productId/reviews", getProductReviews)
 

@@ -21,6 +21,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
+// Product write routes now require a JWT (auth + admin/staff). Mutations here
+// previously sent no Authorization header.
+function authHeaders(): HeadersInit {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
@@ -345,17 +352,18 @@ export default function AdminProductsPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [isAdmin] = useState(() => {
-    if (typeof window === "undefined") return false
+  const [role] = useState<string>(() => {
+    if (typeof window === "undefined") return ""
     const user = localStorage.getItem("user")
-    if (!user) return false
+    if (!user) return ""
     try {
-      const r = JSON.parse(user).role
-      return r === "admin" || r === "staff"
+      return JSON.parse(user).role ?? ""
     } catch {
-      return false
+      return ""
     }
   })
+  const isAdmin = role === "admin" || role === "staff"
+  const isStaff = role === "staff"
 
   const [products, setProducts] = useState<ProductRow[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -715,7 +723,7 @@ export default function AdminProductsPage() {
     try {
       const res = await fetch(
         `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images`,
-        { method: "POST", body: fd }
+        { method: "POST", body: fd, headers: authHeaders() }
       )
       if (!res.ok) { alert("อัพโหลดไม่สำเร็จ"); return }
       setImgUploadFile(null)
@@ -733,7 +741,7 @@ export default function AdminProductsPage() {
     if (!confirm("ลบรูปนี้?")) return
     await fetch(
       `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}`,
-      { method: "DELETE" }
+      { method: "DELETE", headers: authHeaders() }
     )
     fetchProductImages(editingProduct.product_id)
   }
@@ -742,7 +750,7 @@ export default function AdminProductsPage() {
     if (!editingProduct) return
     await fetch(
       `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}/primary`,
-      { method: "PUT" }
+      { method: "PUT", headers: authHeaders() }
     )
     fetchProductImages(editingProduct.product_id)
   }
@@ -843,12 +851,13 @@ export default function AdminProductsPage() {
       if (editingProduct) {
         res = await fetch(
           `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}`,
-          { method: "PUT", body: fd }
+          { method: "PUT", body: fd, headers: authHeaders() }
         )
       } else {
         res = await fetch("http://localhost:5000/products", {
           method: "POST",
           body: fd,
+          headers: authHeaders(),
         })
       }
       if (!res.ok) {
@@ -877,7 +886,7 @@ export default function AdminProductsPage() {
       setIsDeleting(true)
       const res = await fetch(
         `http://localhost:5000/products/${encodeURIComponent(deleteTarget.product_id)}`,
-        { method: "DELETE" }
+        { method: "DELETE", headers: authHeaders() }
       )
       if (!res.ok) {
         const data = await res.json()
@@ -996,7 +1005,7 @@ export default function AdminProductsPage() {
               </div>
               <div>
                 <span className="font-semibold">BosButter</span>
-                <p className="text-xs text-white/60">Admin Panel</p>
+                <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
               </div>
             </Link>
             <Button
@@ -1010,7 +1019,10 @@ export default function AdminProductsPage() {
           </div>
 
           <nav className="flex-1 space-y-1 p-4">
-            {NAV_ITEMS.map((item) => (
+            {(isStaff
+              ? NAV_ITEMS.filter((i) => i.href !== "/admin/users" && i.href !== "/admin/settings")
+              : NAV_ITEMS
+            ).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -1235,15 +1247,17 @@ export default function AdminProductsPage() {
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => setDeleteTarget(product)}
-                                title="ลบ"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {!isStaff && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => setDeleteTarget(product)}
+                                  title="ลบ"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1405,7 +1419,7 @@ export default function AdminProductsPage() {
 
                 {/* Action buttons */}
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {editingProduct && (
+                  {editingProduct && !isStaff && (
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(editingProduct)}

@@ -40,18 +40,8 @@ export default function Footer() {
             <h4 className="font-medium text-footer-foreground">ช่วยเหลือ</h4>
             <ul className="mt-2 space-y-1 text-sm text-footer-muted">
               <li>
-                <a href="#" className="hover:text-footer-foreground">
-                  ติดต่อเรา
-                </a>
-              </li>
-              <li>
-                <a href="#" className="hover:text-footer-foreground">
-                  เงื่อนไขการใช้งาน
-                </a>
-              </li>
-              <li>
-                <a href="#" className="hover:text-footer-foreground">
-                  นโยบายความเป็นส่วนตัว
+                <a href="/policy" className="hover:text-footer-foreground">
+                  นโยบายร้าน
                 </a>
               </li>
             </ul>

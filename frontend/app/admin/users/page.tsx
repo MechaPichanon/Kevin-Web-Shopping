@@ -76,7 +76,7 @@ export default function AdminUsersPage() {
         if (user) {
             const parsed = JSON.parse(user)
 
-            if (parsed.role === "admin" || parsed.role === "staff") {
+            if (parsed.role === "admin") {
                 setIsAdmin(true)
                 fetchUsers()
             } else {

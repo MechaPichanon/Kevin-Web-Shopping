@@ -52,6 +52,22 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// Public — footer "policy" link. No auth: same as GET /products.
+app.get("/policies", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT policy_type, content_en, content_th, updated_at
+       FROM store_policies
+       WHERE is_active = TRUE
+       ORDER BY policy_id`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("POLICIES GET ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.use(
   "/uploads",
   express.static(
@@ -84,29 +100,7 @@ app.use("/products", productRoutes)
 /* ======================
    JWT Middleware
 ====================== */
-const { auth, requireAdmin } = require("./middleware/auth");
-
-// Dashboard KPI routes are readable by admin AND staff (the frontend's own
-// admin-area guard already allows both) — kept separate from requireAdmin,
-// which is admin-only and shared by order/product management routes.
-async function requireAdminOrStaff(req, res, next) {
-  try {
-    const result = await pool.query(
-      "SELECT role, is_active FROM users WHERE id = $1",
-      [req.user.id]
-    );
-    const user = result.rows[0];
-
-    if (!user || !["admin", "staff"].includes(user.role) || user.is_active === false) {
-      return res.status(403).json({ error: "Admin access required" });
-    }
-
-    next();
-  } catch (err) {
-    console.error("ADMIN OR STAFF CHECK ERROR:", err.message);
-    res.status(500).json({ error: "Server error" });
-  }
-}
+const { auth, requireAdmin, requireAdminOrStaff } = require("./middleware/auth");
 
 // Thailand has no DST, so a plain locale-string round-trip is enough to get
 // "today" in Asia/Bangkok regardless of the container's own TZ (UTC).
@@ -446,6 +440,37 @@ app.put("/users/:id", auth, requireAdmin, async (req, res) => {
   }
 });
 
+// Admin-only — edits SHIPPING/RETURN/PAYMENT text from /admin/settings.
+app.put("/policies/:policyType", auth, requireAdmin, async (req, res) => {
+  try {
+    const { policyType } = req.params;
+    const { content_en, content_th } = req.body;
+
+    if (typeof content_en !== "string" || typeof content_th !== "string") {
+      return res.status(400).json({ error: "content_en and content_th are required" });
+    }
+
+    const result = await pool.query(
+      `UPDATE store_policies
+       SET content_en = $1,
+           content_th = $2,
+           updated_at = NOW()
+       WHERE policy_type = $3
+       RETURNING policy_type, content_en, content_th, updated_at`,
+      [content_en, content_th, policyType]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Policy not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("POLICY UPDATE ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.delete("/users/:id", auth, requireAdmin, async (req, res) => {
   try {
     if (Number(req.params.id) === req.user.id) {
@@ -515,7 +540,19 @@ app.get("/admin/stats", auth, requireAdminOrStaff, async (req, res) => {
       [today, yesterday, monthStart, prevMonthStart, prevMonthEnd]
     );
 
-    res.json(result.rows[0]);
+    const stats = result.rows[0];
+
+    // Staff see the dashboard but not revenue/profit figures.
+    if (req.userRole === "staff") {
+      for (const key of [
+        "sales", "sales_yesterday", "sales_month", "sales_prev_month",
+        "profit", "profit_yesterday",
+      ]) {
+        delete stats[key];
+      }
+    }
+
+    res.json(stats);
   } catch (err) {
     console.error("ADMIN STATS ERROR:", err.message);
     res.status(500).json({ error: "Server error" });
@@ -526,7 +563,7 @@ app.get("/admin/stats", auth, requireAdminOrStaff, async (req, res) => {
 // dashboard chart can show a current-vs-previous-period comparison. Gaps
 // (days with no orders) are filled with 0 via generate_series rather than
 // left absent, so the chart doesn't silently drop points.
-app.get("/admin/revenue-daily", auth, requireAdminOrStaff, async (req, res) => {
+app.get("/admin/revenue-daily", auth, requireAdmin, async (req, res) => {
   try {
     const { today } = getBangkokDateParts();
 
@@ -598,6 +635,119 @@ app.get("/admin/orders/recent", auth, requireAdminOrStaff, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("ADMIN RECENT ORDERS ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Downloadable daily report (admin dashboard) — always "today" in Bangkok
+// time, matching how every other "today" stat on the dashboard is computed.
+app.get("/admin/reports/daily", auth, requireAdmin, async (req, res) => {
+  try {
+    const { today } = getBangkokDateParts();
+
+    const [summaryResult, bestSellersResult, ordersResult, outOfStockResult] = await Promise.all([
+      pool.query(
+        `
+        SELECT
+          COALESCE((SELECT SUM(total_price) FROM orders
+            WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
+              AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales,
+          (SELECT COUNT(*) FROM orders
+            WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date)::integer AS orders,
+          (SELECT COUNT(*) FROM users
+            WHERE (created_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date)::integer AS "newUsers",
+          COALESCE((
+            SELECT SUM((oi.unit_price - v.cost_price) * oi.quantity)
+            FROM order_items oi
+            JOIN orders o ON o.order_id = oi.order_id
+            JOIN variants v ON v.variant_id = oi.variant_id
+            WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
+              AND o.status NOT IN ('cancelled','refunded')
+              AND v.cost_price IS NOT NULL
+          ), 0)::numeric AS profit
+        `,
+        [today]
+      ),
+      pool.query(
+        `
+        SELECT
+          p.product_id, p.product_name, p.product_name_th,
+          SUM(oi.quantity)::integer AS qty_sold,
+          SUM(oi.unit_price * oi.quantity)::numeric AS revenue
+        FROM order_items oi
+        JOIN orders o ON o.order_id = oi.order_id
+        JOIN variants v ON v.variant_id = oi.variant_id
+        JOIN products p ON p.product_id = v.product_id
+        WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
+          AND o.status NOT IN ('cancelled','refunded')
+        GROUP BY p.product_id, p.product_name, p.product_name_th
+        ORDER BY qty_sold DESC
+        LIMIT 10
+        `,
+        [today]
+      ),
+      pool.query(
+        `
+        SELECT
+          o.order_id AS id,
+          COALESCE(NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''), u.username) AS customer,
+          o.total_price AS total,
+          o.status,
+          o.payment_status,
+          o.ordered_at
+        FROM orders o
+        JOIN users u ON u.id = o.user_id
+        WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
+        ORDER BY o.ordered_at ASC
+        `,
+        [today]
+      ),
+      pool.query(`
+        SELECT
+          v.variant_id, v.size, v.color, v.color_th,
+          p.product_id, p.product_name, p.product_name_th
+        FROM variants v
+        JOIN products p ON p.product_id = v.product_id
+        WHERE v.is_active = TRUE AND p.is_active = TRUE AND v.stock = 0
+        ORDER BY p.product_name ASC
+      `),
+    ]);
+
+    const summaryRow = summaryResult.rows[0];
+    const sales = Number(summaryRow.sales);
+    const orders = summaryRow.orders;
+
+    const statusBreakdown = {};
+    const paymentBreakdown = {};
+    for (const o of ordersResult.rows) {
+      statusBreakdown[o.status] = (statusBreakdown[o.status] || 0) + 1;
+      paymentBreakdown[o.payment_status] = (paymentBreakdown[o.payment_status] || 0) + 1;
+    }
+
+    const incompleteOrders = ordersResult.rows.filter(
+      (o) => o.status === "pending" || o.payment_status === "unpaid" || o.payment_status === "pending_verification"
+    );
+
+    res.json({
+      date: today,
+      summary: {
+        sales,
+        profit: Number(summaryRow.profit),
+        orders,
+        newUsers: summaryRow.newUsers,
+        avgOrderValue: orders > 0 ? sales / orders : 0,
+      },
+      statusBreakdown,
+      paymentBreakdown,
+      needsAttention: {
+        incompleteOrders,
+        outOfStock: outOfStockResult.rows,
+      },
+      bestSellers: bestSellersResult.rows,
+      orders: ordersResult.rows,
+    });
+  } catch (err) {
+    console.error("ADMIN DAILY REPORT ERROR:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 });

@@ -32,6 +32,7 @@ async function requireAdmin(req, res, next) {
       return res.status(403).json({ error: "Admin access required" });
     }
 
+    req.userRole = user.role;
     next();
   } catch (err) {
     console.error("ADMIN CHECK ERROR:", err.message);
@@ -39,4 +40,29 @@ async function requireAdmin(req, res, next) {
   }
 }
 
-module.exports = { auth, requireAdmin };
+// admin AND staff — used by dashboard KPI reads and by product/order
+// management routes that staff are allowed to run. requireAdmin stays
+// admin-only (user management, store policy). Sets req.userRole so handlers
+// can trim their response for staff without another query.
+async function requireAdminOrStaff(req, res, next) {
+  try {
+    const result = await pool.query(
+      "SELECT role, is_active FROM users WHERE id = $1",
+      [req.user.id]
+    );
+
+    const user = result.rows[0];
+
+    if (!user || !["admin", "staff"].includes(user.role) || user.is_active === false) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    req.userRole = user.role;
+    next();
+  } catch (err) {
+    console.error("ADMIN OR STAFF CHECK ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+}
+
+module.exports = { auth, requireAdmin, requireAdminOrStaff };

@@ -397,6 +397,30 @@ Pillow
 python-multipart
 ```
 
+## Store policy page
+
+The footer's ช่วยเหลือ (Help) column previously had 3 dead (`href="#"`) links; it's
+now a single link, "นโยบายร้าน" (Store Policies), pointing at `/policy`
+(`frontend/app/policy/page.tsx`). That page client-fetches the new public
+`GET /policies` endpoint (`backend/server.js`, no auth — same public pattern as
+`GET /products`), which reads the existing `store_policies` table
+(SHIPPING/RETURN/PAYMENT rows) — previously only consumed by the Python chatbot
+for RAG answers, never exposed to the storefront UI. Both language columns
+(`content_en`, `content_th`) are returned; the page renders `content_th` with
+`whitespace-pre-line` since the seed content uses `\n- ` bullet formatting.
+
+**Encoding bug found and fixed while building this:** `store_policies.content_en`
+/`content_th` in the DB had every non-ASCII character (Thai text, en-dashes)
+replaced with literal `?` — the seed data was corrupted at insert time, almost
+certainly because `seed_database.sql` was originally applied via a Windows host
+`psql` client without a UTF-8 client encoding. The source SQL file itself was
+correct. Fixed by re-running just the `store_policies` upsert block (it was
+already `ON CONFLICT (policy_type) DO UPDATE`, so this was a safe no-side-effect
+re-seed) from **inside** the postgres container, where `client_encoding` is
+UTF8 by default. If any *other* seeded table's Thai text also looks like `?`
+garbage, it likely has the same root cause — re-seed that table from inside the
+container rather than from a Windows host `psql`.
+
 ## Admin dashboard KPIs
 
 `frontend/app/admin/page.tsx` shows sales (today + month-to-date), profit, order/user
@@ -428,6 +452,47 @@ tooltip), backed by `backend/server.js`'s `GET /admin/stats` and the new
   figures). This is a separate inline check, not the shared `requireAdmin`
   middleware (which is admin-only and used by order/product management
   routes) — widening that would have loosened those too.
+
+### Downloadable daily report
+
+The admin dashboard header has a "ดาวน์โหลดรายงานวันนี้" button (`handleDownloadDailyReport`
+in `frontend/app/admin/page.tsx`) that builds a client-side PDF for "today" (Asia/Bangkok)
+via `backend/server.js`'s `GET /admin/reports/daily` (same `auth, requireAdminOrStaff` guard
+as the other `/admin/*` KPI routes).
+
+- **Scope is always today** — no date picker/param; matches the dashboard's other "today" KPIs.
+- **Response shape:** `{ date, summary: { sales, profit, orders, newUsers, avgOrderValue },
+  statusBreakdown, paymentBreakdown, needsAttention: { incompleteOrders, outOfStock },
+  bestSellers: [...], orders: [...] }`. `summary` reuses the same sales/profit/orders
+  definitions as `/admin/stats` (same cancelled/refunded exclusion). `bestSellers` is a new
+  query (top 10 by qty sold that day, not the all-time `/products/best-sellers` the dashboard's
+  own "best sellers" widget uses). `orders` is every order placed that day (id, customer,
+  total, status, payment_status, ordered_at) — no `LIMIT 10` like `/admin/orders/recent`.
+- **`statusBreakdown`/`paymentBreakdown`** are `{ [value]: count }` maps computed in JS from
+  the already-fetched `orders` rows (no extra query) — only keys that actually occurred that
+  day are present, not every possible enum value.
+- **`needsAttention.outOfStock`** is a new query: active variants of active products with
+  `stock = 0` (strictly zero — a separate, stricter concept from the dashboard's existing
+  `/admin/low-stock` widget, which flags `stock < 5`).
+- **`needsAttention.incompleteOrders`** is filtered from the already-fetched `orders` rows
+  (no extra query): today's orders where `status = 'pending'` or
+  `payment_status IN ('unpaid', 'pending_verification')`. Scoped to **today only**, by
+  design — it does not surface older unresolved orders from previous days.
+- **PDF headline**: the first line of the PDF (below the header band) is a single bold
+  sentence combining sales, order count, and the attention count (`incompleteOrders.length +
+  outOfStock.length`) — the actual "read the business in 5 seconds" payload; everything
+  below it (summary boxes, breakdowns, alert lists, tables) is supporting detail.
+- **PDF generation** reuses the jsPDF + Sarabun-Thai-font pattern already built for order
+  receipts (`handleDownloadReceipt` in `frontend/app/orders/page.tsx`) — dynamic
+  `import("jspdf")`, `/fonts/Sarabun-{Regular,Bold}.ttf` loaded via `fetch` +
+  `addFileToVFS`/`addFont`. The font-loading block is duplicated rather than shared between
+  the two call sites (kept small on purpose, not worth a shared module at this scale).
+  No `jspdf-autotable` — tables/alert lists are drawn manually with a page-break check
+  (`ensureSpace`), same as the receipt code.
+- Explicitly **not** included: product reviews (this report is sales/orders only — a
+  separate "review" reading was considered and ruled out with the user), payment-method
+  breakdown, coupon/discount usage, new-vs-returning customer split, and refund/return
+  tracking — kept out to keep the report scannable and within bachelor's-thesis scope.
 
 ## Key env vars
 

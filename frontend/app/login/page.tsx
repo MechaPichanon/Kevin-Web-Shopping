@@ -47,7 +47,7 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify(data.user));
       window.dispatchEvent(new Event("login"));
 
-      if (data.user?.role === "admin") {
+      if (data.user?.role === "admin" || data.user?.role === "staff") {
         router.push("/admin");
       } else {
         router.push("/profile");

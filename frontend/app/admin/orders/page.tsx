@@ -137,6 +137,7 @@ export default function AdminOrdersPage() {
   const router = useRouter()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isStaff, setIsStaff] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -156,11 +157,12 @@ export default function AdminOrdersPage() {
       return
     }
     const parsed = JSON.parse(user)
-    if (parsed.role !== "admin") {
+    if (parsed.role !== "admin" && parsed.role !== "staff") {
       router.push("/login")
       return
     }
     setIsAdmin(true)
+    setIsStaff(parsed.role === "staff")
     setAdminEmail(parsed.email ?? "")
 
     fetchOrders()
@@ -248,7 +250,7 @@ export default function AdminOrdersPage() {
               </div>
               <div>
                 <span className="font-semibold">BosButter</span>
-                <p className="text-xs text-white/60">Admin Panel</p>
+                <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
               </div>
             </Link>
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsSidebarOpen(false)}>
@@ -257,7 +259,10 @@ export default function AdminOrdersPage() {
           </div>
 
           <nav className="flex-1 space-y-1 p-4">
-            {navItems.map((item) => (
+            {(isStaff
+              ? navItems.filter((i) => i.href !== "/admin/users" && i.href !== "/admin/settings")
+              : navItems
+            ).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -276,11 +281,11 @@ export default function AdminOrdersPage() {
           <div className="border-t border-border p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-medium text-primary">A</span>
+                <span className="text-sm font-medium text-primary">{isStaff ? "S" : "A"}</span>
               </div>
               <div className="flex-1">
                 <span className="font-semibold">BosButter</span>
-                <p className="text-xs text-white/60">Admin Panel</p>
+                <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
               </div>
               <Button variant="ghost" size="icon" onClick={handleLogout}>
                 <LogOut className="h-4 w-4" />

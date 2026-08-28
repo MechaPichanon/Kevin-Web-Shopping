@@ -47,6 +47,52 @@ export type LowStockItem = {
   stock: number
 }
 
+export type DailyReportOrder = {
+  id: number | string
+  customer: string
+  total: number
+  status: string
+  payment_status: string
+  ordered_at: string
+}
+
+export type DailyReportBestSeller = {
+  product_id: string
+  product_name: string
+  product_name_th?: string
+  qty_sold: number
+  revenue: number
+}
+
+export type DailyReportOutOfStockItem = {
+  variant_id: string
+  product_id: string
+  product_name: string
+  product_name_th?: string
+  size: string
+  color: string
+  color_th?: string
+}
+
+export type DailyReport = {
+  date: string
+  summary: {
+    sales: number
+    profit: number
+    orders: number
+    newUsers: number
+    avgOrderValue: number
+  }
+  statusBreakdown: Record<string, number>
+  paymentBreakdown: Record<string, number>
+  needsAttention: {
+    incompleteOrders: DailyReportOrder[]
+    outOfStock: DailyReportOutOfStockItem[]
+  }
+  bestSellers: DailyReportBestSeller[]
+  orders: DailyReportOrder[]
+}
+
 // ⚠️ Assumes the login page stores the JWT under localStorage key "token".
 function authHeaders(): HeadersInit {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
@@ -94,5 +140,14 @@ export async function fetchLowStock(): Promise<LowStockItem[]> {
     headers: authHeaders(),
   })
   if (!res.ok) throw new Error("โหลดสินค้าใกล้หมดสต็อกไม่สำเร็จ")
+  return res.json()
+}
+
+export async function fetchDailyReport(): Promise<DailyReport> {
+  const res = await fetch(`${BACKEND_URL}/admin/reports/daily`, {
+    cache: "no-store",
+    headers: authHeaders(),
+  })
+  if (!res.ok) throw new Error("โหลดรายงานประจำวันไม่สำเร็จ")
   return res.json()
 }
