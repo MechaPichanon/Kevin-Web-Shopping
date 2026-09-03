@@ -16,11 +16,19 @@ import {
     Edit,
     Trash2,
     Save,
+    Plus,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog"
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
@@ -69,6 +77,11 @@ export default function AdminUsersPage() {
 
     const [editingUser, setEditingUser] = useState<User | null>(null)
     const [selectedUser, setSelectedUser] = useState<User | null>(null)
+
+    const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
+    const [staffForm, setStaffForm] = useState({ username: "", email: "", password: "" })
+    const [isCreatingStaff, setIsCreatingStaff] = useState(false)
+    const [addStaffError, setAddStaffError] = useState<string | null>(null)
 
     useEffect(() => {
         const user = localStorage.getItem("user")
@@ -187,6 +200,44 @@ export default function AdminUsersPage() {
             setEditingUser(null)
         } catch (error) {
             console.error(error)
+        }
+    }
+
+    const handleAddStaff = async () => {
+        if (!staffForm.username || !staffForm.email || !staffForm.password) {
+            setAddStaffError("กรอกข้อมูลไม่ครบ")
+            return
+        }
+
+        setIsCreatingStaff(true)
+        setAddStaffError(null)
+
+        try {
+            const token = localStorage.getItem("token")
+            const res = await fetch(`${API_BASE_URL}/users`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(staffForm),
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                throw new Error(data.error || "เพิ่มพนักงานไม่สำเร็จ")
+            }
+
+            setIsAddStaffOpen(false)
+            setStaffForm({ username: "", email: "", password: "" })
+            fetchUsers()
+        } catch (error) {
+            setAddStaffError(
+                error instanceof Error ? error.message : "เพิ่มพนักงานไม่สำเร็จ"
+            )
+        } finally {
+            setIsCreatingStaff(false)
         }
     }
 
@@ -329,6 +380,14 @@ export default function AdminUsersPage() {
                                 }
                             />
                         </div>
+
+                        <Button
+                            onClick={() => setIsAddStaffOpen(true)}
+                            className="gap-2 bg-[#8b5e3c] text-white hover:bg-[#5b3a29]"
+                        >
+                            <Plus className="h-4 w-4" />
+                            เพิ่มพนักงาน
+                        </Button>
                     </div>
 
                     {/* Edit User Form */}
@@ -555,6 +614,79 @@ export default function AdminUsersPage() {
                     </Card>
                 </main>
             </div>
+
+            <Dialog
+                open={isAddStaffOpen}
+                onOpenChange={(open) => {
+                    setIsAddStaffOpen(open)
+                    if (!open) {
+                        setStaffForm({ username: "", email: "", password: "" })
+                        setAddStaffError(null)
+                    }
+                }}
+            >
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>เพิ่มพนักงาน</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-foreground">
+                                Username
+                            </label>
+                            <Input
+                                value={staffForm.username}
+                                onChange={(e) =>
+                                    setStaffForm({ ...staffForm, username: e.target.value })
+                                }
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-foreground">
+                                อีเมล
+                            </label>
+                            <Input
+                                type="email"
+                                value={staffForm.email}
+                                onChange={(e) =>
+                                    setStaffForm({ ...staffForm, email: e.target.value })
+                                }
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-foreground">
+                                รหัสผ่าน
+                            </label>
+                            <Input
+                                type="password"
+                                value={staffForm.password}
+                                onChange={(e) =>
+                                    setStaffForm({ ...staffForm, password: e.target.value })
+                                }
+                            />
+                        </div>
+
+                        {addStaffError && (
+                            <p className="text-sm text-destructive">{addStaffError}</p>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsAddStaffOpen(false)}
+                        >
+                            ยกเลิก
+                        </Button>
+                        <Button onClick={handleAddStaff} disabled={isCreatingStaff}>
+                            {isCreatingStaff ? "กำลังบันทึก..." : "เพิ่มพนักงาน"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

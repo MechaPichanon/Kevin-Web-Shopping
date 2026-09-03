@@ -413,6 +413,45 @@ app.get("/users", auth, requireAdmin, async (req, res) => {
   }
 });
 
+app.post("/users", auth, requireAdmin, async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: "กรอกข้อมูลไม่ครบ" });
+    }
+
+    const check = await pool.query(
+      "SELECT email, username FROM users WHERE email = $1 OR username = $2",
+      [email, username]
+    );
+
+    if (check.rows.length > 0) {
+      if (check.rows.some((r) => r.email === email)) {
+        return res.status(400).json({ error: "Email นี้ถูกใช้แล้ว" });
+      }
+      return res.status(400).json({ error: "Username นี้ถูกใช้แล้ว" });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO users (username, email, password, role)
+       VALUES ($1, $2, $3, 'staff')
+       RETURNING id, username, email, first_name, last_name, phone, role, is_active, created_at`,
+      [username, email, hash]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("CREATE STAFF ERROR:", err.message);
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "Username หรือ Email นี้ถูกใช้แล้ว" });
+    }
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.put("/users/:id", auth, requireAdmin, async (req, res) => {
   try {
     const { username, email, first_name, last_name, phone, role, is_active } = req.body;

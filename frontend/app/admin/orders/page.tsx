@@ -28,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   fetchOrders,
   updateOrderStatusApi,
@@ -109,6 +110,28 @@ const getPaymentText = (status?: string) => {
   }
 }
 
+const getSlipStatusColor = (status: string) => {
+  switch (status) {
+    case "approved":
+      return "bg-green-100 text-green-800"
+    case "rejected":
+      return "bg-red-100 text-red-800"
+    default:
+      return "bg-yellow-100 text-yellow-800"
+  }
+}
+
+const getSlipStatusText = (status: string) => {
+  switch (status) {
+    case "approved":
+      return "อนุมัติแล้ว"
+    case "rejected":
+      return "ไม่ถูกต้อง"
+    default:
+      return "รอตรวจสอบ"
+  }
+}
+
 const customerInitial = (name: string) => (name || "?").trim().charAt(0).toUpperCase()
 
 const avatarPalette = [
@@ -145,6 +168,9 @@ export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [adminEmail, setAdminEmail] = useState("")
+  const [rejectReason, setRejectReason] = useState("")
+  const [paymentActionError, setPaymentActionError] = useState<string | null>(null)
+  const [isPaymentActionBusy, setIsPaymentActionBusy] = useState(false)
 
   useEffect(() => {
     // ⚠️ Assumes login stores the JWT under "token" and the user object
@@ -171,26 +197,40 @@ export default function AdminOrdersPage() {
       .finally(() => setIsLoading(false))
   }, [router])
 
+  // Seed the reject-reason box from whatever the server already has for the
+  // selected order (so the admin can edit / re-send it).
+  useEffect(() => {
+    setRejectReason(selectedOrder?.paymentRejectReason ?? "")
+    setPaymentActionError(null)
+  }, [selectedOrder?.id])
+
   const handleLogout = () => {
     localStorage.removeItem("user")
     localStorage.removeItem("token")
     router.push("/login")
   }
 
-  const updatePaymentStatus = async (orderId: number, newPaymentStatus: string) => {
-    // optimistic update
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, paymentStatus: newPaymentStatus } : o))
-    )
-    if (selectedOrder?.id === orderId) {
-      setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus })
-    }
+  // The server now mutates payment_slips rows the client can't synthesise, so
+  // this refetches instead of patching optimistically.
+  const updatePaymentStatus = async (
+    orderId: number,
+    newPaymentStatus: string,
+    reason?: string
+  ) => {
+    setIsPaymentActionBusy(true)
+    setPaymentActionError(null)
     try {
-      await updatePaymentStatusApi(orderId, newPaymentStatus)
+      await updatePaymentStatusApi(orderId, newPaymentStatus, reason)
+      const fresh = await fetchOrders()
+      setOrders(fresh)
+      setSelectedOrder(fresh.find((o) => o.id === orderId) ?? null)
     } catch (err) {
       console.error(err)
-      // rollback by re-fetching if the update failed server-side
-      fetchOrders().then(setOrders).catch(() => {})
+      setPaymentActionError(
+        err instanceof Error ? err.message : "อัปเดตสถานะการชำระเงินไม่สำเร็จ"
+      )
+    } finally {
+      setIsPaymentActionBusy(false)
     }
   }
 
@@ -460,7 +500,8 @@ export default function AdminOrdersPage() {
                                       >
                                         {getStatusText(order.status)}
                                       </span>
-                                      {order.paymentStatus === "pending_verification" && (
+                                      {(order.paymentStatus === "pending_verification" ||
+                                        order.paymentStatus === "rejected") && (
                                         <span
                                           className={`inline-flex w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${getPaymentColor(
                                             order.paymentStatus
@@ -613,40 +654,98 @@ export default function AdminOrdersPage() {
                             </span>
                           </div>
 
-                          {selectedOrder.paymentSlipUrl && (
-                            <a
-                              href={selectedOrder.paymentSlipUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-3 block"
-                            >
-                              <img
-                                src={selectedOrder.paymentSlipUrl}
-                                alt="สลิปการโอนเงิน"
-                                className="max-h-64 w-full rounded-lg border border-border object-contain"
-                              />
-                            </a>
-                          )}
+                          {(() => {
+                            const slips =
+                              selectedOrder.slips && selectedOrder.slips.length > 0
+                                ? selectedOrder.slips
+                                : selectedOrder.paymentSlipUrl
+                                ? [
+                                    {
+                                      url: selectedOrder.paymentSlipUrl,
+                                      status: selectedOrder.paymentStatus,
+                                      rejectReason: null,
+                                      uploadedAt: "",
+                                    },
+                                  ]
+                                : []
+                            if (slips.length === 0) return null
+                            return (
+                              <div className="mt-3 space-y-3">
+                                {slips.map((slip, i) => (
+                                  <div key={i} className="rounded-lg border border-border p-2">
+                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                      <span className="text-xs text-muted-foreground">
+                                        {slip.uploadedAt
+                                          ? new Date(slip.uploadedAt).toLocaleString("th-TH")
+                                          : `สลิป #${i + 1}`}
+                                      </span>
+                                      <span
+                                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getSlipStatusColor(
+                                          slip.status
+                                        )}`}
+                                      >
+                                        {getSlipStatusText(slip.status)}
+                                      </span>
+                                    </div>
+                                    <a href={slip.url} target="_blank" rel="noopener noreferrer" className="block">
+                                      <img
+                                        src={slip.url}
+                                        alt="สลิปการโอนเงิน"
+                                        className="max-h-64 w-full rounded-lg border border-border object-contain"
+                                      />
+                                    </a>
+                                    {slip.rejectReason && (
+                                      <p className="mt-2 text-xs leading-relaxed text-destructive">
+                                        เหตุผล: {slip.rejectReason}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })()}
 
-                          {selectedOrder.paymentStatus === "pending_verification" && (
-                            <div className="mt-3 grid grid-cols-2 gap-2">
-                              <Button
-                                size="sm"
-                                className="gap-2 bg-green-600 text-white hover:bg-green-700"
-                                onClick={() => updatePaymentStatus(selectedOrder.id, "paid")}
-                              >
-                                <CheckCircle className="h-4 w-4" />
-                                ยืนยันการชำระ
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-2 border-red-200 text-destructive hover:text-destructive"
-                                onClick={() => updatePaymentStatus(selectedOrder.id, "rejected")}
-                              >
-                                <XCircle className="h-4 w-4" />
-                                สลิปไม่ถูกต้อง
-                              </Button>
+                          {(selectedOrder.paymentStatus === "pending_verification" ||
+                            selectedOrder.paymentStatus === "rejected") && (
+                            <div className="mt-3 space-y-2">
+                              <Textarea
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                placeholder="เหตุผลที่สลิปไม่ถูกต้อง (จะแสดงให้ลูกค้าเห็น)"
+                                className="min-h-20 text-sm"
+                              />
+                              {paymentActionError && (
+                                <p className="text-xs text-destructive">{paymentActionError}</p>
+                              )}
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                  size="sm"
+                                  disabled={isPaymentActionBusy}
+                                  className="gap-2 bg-green-600 text-white hover:bg-green-700"
+                                  onClick={() => updatePaymentStatus(selectedOrder.id, "paid")}
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                  ยืนยันการชำระ
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={isPaymentActionBusy}
+                                  className="gap-2 border-red-200 text-destructive hover:text-destructive"
+                                  onClick={() =>
+                                    updatePaymentStatus(
+                                      selectedOrder.id,
+                                      "rejected",
+                                      rejectReason.trim()
+                                    )
+                                  }
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                  {selectedOrder.paymentStatus === "rejected"
+                                    ? "ส่งเหตุผลอีกครั้ง"
+                                    : "สลิปไม่ถูกต้อง"}
+                                </Button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -659,23 +758,46 @@ export default function AdminOrdersPage() {
                             </div>
                             <h4 className="text-sm font-semibold text-foreground">อัปเดตสถานะ</h4>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {statusUpdateOptions.map((opt) => {
-                              const isActive = selectedOrder.status === opt.value
-                              return (
-                                <Button
-                                  key={opt.value}
-                                  variant={isActive ? "default" : "outline"}
-                                  size="sm"
-                                  className="gap-2"
-                                  onClick={() => updateOrderStatus(selectedOrder.id, opt.value)}
-                                >
-                                  <opt.icon className="h-4 w-4" />
-                                  {opt.label}
-                                </Button>
-                              )
-                            })}
-                          </div>
+                          {(() => {
+                            // cancelled / refunded are terminal server-side (stock + discount
+                            // already returned) — the backend 409s on any move out, so lock
+                            // the buttons instead of letting the admin click into a silent failure.
+                            const isTerminal = ["cancelled", "refunded"].includes(selectedOrder.status)
+                            return (
+                              <>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {statusUpdateOptions.map((opt) => {
+                                    const isActive = selectedOrder.status === opt.value
+                                    return (
+                                      <Button
+                                        key={opt.value}
+                                        variant={isActive ? "default" : "outline"}
+                                        size="sm"
+                                        className="gap-2"
+                                        disabled={isTerminal}
+                                        onClick={() => {
+                                          if (
+                                            opt.value === "cancelled" &&
+                                            !window.confirm("ยกเลิกคำสั่งซื้อนี้? สต็อกสินค้าจะถูกคืน")
+                                          )
+                                            return
+                                          updateOrderStatus(selectedOrder.id, opt.value)
+                                        }}
+                                      >
+                                        <opt.icon className="h-4 w-4" />
+                                        {opt.label}
+                                      </Button>
+                                    )
+                                  })}
+                                </div>
+                                {isTerminal && (
+                                  <p className="mt-2 text-xs text-muted-foreground">
+                                    คำสั่งซื้อที่ยกเลิก/คืนเงินแล้วไม่สามารถเปลี่ยนสถานะได้
+                                  </p>
+                                )}
+                              </>
+                            )
+                          })()}
 
                           {selectedOrder.trackingNumber && (
                             <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2.5">

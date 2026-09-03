@@ -265,6 +265,8 @@
     payment_slip_url  TEXT          DEFAULT NULL,  -- customer-uploaded transfer slip image
     tracking_number   VARCHAR(100)  DEFAULT NULL,
     notes             TEXT          DEFAULT NULL,
+    discount_code     TEXT          DEFAULT NULL,
+    discount_amount   NUMERIC       NOT NULL DEFAULT 0,
     ordered_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_orders_status         CHECK (status         IN ('pending','confirmed','shipped','delivered','cancelled','refunded')),
@@ -317,6 +319,25 @@
 
   CREATE INDEX IF NOT EXISTS payments_order_id_idx ON payments (order_id);
 
+  -- payment_slips — history of customer-uploaded transfer slips (one row per
+  -- upload, never deleted). Each row carries its own admin verdict + reason.
+  -- orders.payment_slip_url mirrors the newest slip_url here for the order views.
+  CREATE TABLE IF NOT EXISTS payment_slips (
+    slip_id       SERIAL       PRIMARY KEY,
+    order_id      INTEGER      NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+    slip_url      TEXT         NOT NULL,
+    status        VARCHAR(20)  NOT NULL DEFAULT 'pending_verification',
+    reject_reason TEXT         DEFAULT NULL,
+    reviewed_by   INTEGER      DEFAULT NULL REFERENCES users(id),
+    reviewed_at   TIMESTAMPTZ  DEFAULT NULL,
+    uploaded_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_payment_slips_status
+      CHECK (status IN ('pending_verification','approved','rejected'))
+  );
+
+  CREATE INDEX IF NOT EXISTS payment_slips_order_id_idx       ON payment_slips (order_id);
+  CREATE INDEX IF NOT EXISTS payment_slips_order_uploaded_idx ON payment_slips (order_id, uploaded_at DESC);
+
   -- ════════════════════════════════════════
   -- REVIEWS & PROMOTIONS
   -- ════════════════════════════════════════
@@ -351,6 +372,16 @@
     expires_at     TIMESTAMPTZ   DEFAULT NULL,   -- NULL = no expiry
     is_active      BOOLEAN       NOT NULL DEFAULT TRUE
   );
+
+  -- wishlist — products a user has saved (many-to-many users <-> products)
+  CREATE TABLE IF NOT EXISTS wishlist (
+    user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id VARCHAR(20) NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
+    added_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, product_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS wishlist_product_id_idx ON wishlist (product_id);
 
   -- ════════════════════════════════════════
   -- VECTOR / AI TABLES

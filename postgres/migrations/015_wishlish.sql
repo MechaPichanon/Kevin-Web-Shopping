@@ -19,5 +19,5 @@ CREATE TABLE IF NOT EXISTS wishlist (
 );
 
 -- Helps when finding users who saved a particular product.
-CREATE INDEX IF NOT EXISTS wishlists_product_id_idx
-  ON wishlists (product_id);
+CREATE INDEX IF NOT EXISTS wishlist_product_id_idx
+  ON wishlist (product_id);

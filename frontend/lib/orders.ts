@@ -9,6 +9,13 @@ export type OrderItem = {
   price: number
 }
 
+export type PaymentSlip = {
+  url: string
+  status: string // pending_verification | approved | rejected
+  rejectReason: string | null
+  uploadedAt: string
+}
+
 export type Order = {
   id: number
   customer: string
@@ -24,6 +31,8 @@ export type Order = {
   paymentMethod?: string
   trackingNumber?: string
   notes?: string
+  slips?: PaymentSlip[]
+  paymentRejectReason?: string | null
   date: string
 }
 
@@ -53,11 +62,18 @@ export async function updateOrderStatusApi(id: number, status: string): Promise<
   if (!res.ok) throw new Error("อัปเดตสถานะไม่สำเร็จ")
 }
 
-export async function updatePaymentStatusApi(id: number, paymentStatus: string): Promise<void> {
+export async function updatePaymentStatusApi(
+  id: number,
+  paymentStatus: string,
+  reason?: string
+): Promise<void> {
   const res = await fetch(`${API_BASE}/admin/${id}/payment-status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ payment_status: paymentStatus }),
+    body: JSON.stringify({
+      payment_status: paymentStatus,
+      ...(reason ? { reason } : {}),
+    }),
   })
   if (!res.ok) throw new Error("อัปเดตสถานะการชำระเงินไม่สำเร็จ")
 }

@@ -13,6 +13,8 @@ const {
   updateOrderStatus,
   updatePaymentStatus,
   uploadPaymentSlip,
+  customerReuploadPaymentSlip,
+  cancelMyOrder,
 } = require("../controllers/orderControllers");
 
 router.post("/create", createOrder);
@@ -21,6 +23,8 @@ router.post("/:id/payment-slip", upload.single("slip"), uploadPaymentSlip);
 // Customer — logged-in user's own orders
 router.get("/my", auth, getMyOrders);
 router.get("/my/:id", auth, getMyOrderById);
+router.post("/my/:id/payment-slip", auth, upload.single("slip"), customerReuploadPaymentSlip);
+router.patch("/my/:id/cancel", auth, cancelMyOrder);
 
 // Admin + staff — staff run fulfillment (status) and payment verification
 router.get("/admin", auth, requireAdminOrStaff, getAllOrders);

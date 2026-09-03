@@ -305,6 +305,52 @@ const createOrder = async (req, res) => {
   }
 };
 
+// ── Shared helpers: reverse the side effects of createOrder ────────────────
+// restoreOrderStock is the mirror image of the stock-decrement loop at the top
+// of createOrder. CONTRACT: the caller must already hold
+// `SELECT ... FROM orders WHERE order_id = $1 FOR UPDATE` in the same
+// transaction AND must only call this when the order is NOT already
+// 'cancelled' / 'refunded' — otherwise stock is inflated on a repeat call.
+async function restoreOrderStock(client, orderId) {
+  const { rows: items } = await client.query(
+    `SELECT variant_id, quantity FROM order_items WHERE order_id = $1`,
+    [orderId]
+  );
+
+  for (const item of items) {
+    const { rows: comps } = await client.query(
+      `SELECT component_variant_id, quantity FROM set_components WHERE set_variant_id = $1`,
+      [item.variant_id]
+    );
+
+    if (comps.length > 0) {
+      for (const comp of comps) {
+        await client.query(
+          `UPDATE variants SET stock = stock + $1 WHERE variant_id = $2`,
+          [comp.quantity * item.quantity, comp.component_variant_id]
+        );
+      }
+    } else {
+      await client.query(
+        `UPDATE variants SET stock = stock + $1 WHERE variant_id = $2`,
+        [item.quantity, item.variant_id]
+      );
+    }
+  }
+}
+
+// Give back one use of a discount code. orders.discount_code stores the raw
+// code text the customer typed; getValidDiscount (which did the increment)
+// resolves it as trim().toUpperCase() — match that exactly here or the
+// decrement silently no-ops. No-op when the order carried no code.
+async function restoreDiscountUse(client, discountCode) {
+  if (!discountCode || !discountCode.trim()) return;
+  await client.query(
+    `UPDATE discount_codes SET used_count = GREATEST(used_count - 1, 0) WHERE code = $1`,
+    [discountCode.trim().toUpperCase()]
+  );
+}
+
 // Shared: order_items joined with variants so each item also carries the
 // product_id it belongs to — needed for the review flow (reviews.product_id).
 async function itemsByOrderId(orderIds) {
@@ -352,7 +398,41 @@ async function itemsForOrder(orderId) {
   }));
 }
 
-function formatOrderRow(o, items) {
+// Payment-slip history for one or more orders (oldest → newest). Fetched
+// separately, not JOINed into ORDER_SELECT, to avoid fanning out order rows.
+async function slipsByOrderId(orderIds) {
+  const result = await db.query(
+    `
+    SELECT order_id, slip_url, status, reject_reason, uploaded_at
+    FROM payment_slips
+    WHERE order_id = ANY($1::int[])
+    ORDER BY uploaded_at ASC, slip_id ASC
+    `,
+    [orderIds]
+  );
+
+  const map = {};
+  result.rows.forEach((s) => {
+    if (!map[s.order_id]) map[s.order_id] = [];
+    map[s.order_id].push(s);
+  });
+  return map;
+}
+
+async function slipsForOrder(orderId) {
+  const result = await db.query(
+    `
+    SELECT order_id, slip_url, status, reject_reason, uploaded_at
+    FROM payment_slips
+    WHERE order_id = $1
+    ORDER BY uploaded_at ASC, slip_id ASC
+    `,
+    [orderId]
+  );
+  return result.rows;
+}
+
+function formatOrderRow(o, items, slips) {
   const snap = o.shipping_snapshot || {};
   const recipient = snap.recipient_name || o.recipient_name;
   const phone = snap.phone || o.phone;
@@ -380,6 +460,19 @@ function formatOrderRow(o, items) {
     paymentMethod: o.payment_method,
     trackingNumber: o.tracking_number,
     notes: o.notes,
+    slips: (slips || []).map((s) => ({
+      url: s.slip_url,
+      status: s.status,
+      rejectReason: s.reject_reason,
+      uploadedAt: s.uploaded_at,
+    })),
+    // Only surfaced while the order is actually in the rejected state — a later
+    // approved slip must not leave a stale reason showing on a paid order.
+    paymentRejectReason:
+      o.payment_status === "rejected"
+        ? [...(slips || [])].reverse().find((s) => s.status === "rejected")
+            ?.reject_reason || null
+        : null,
     date: o.ordered_at,
   };
 }
@@ -429,8 +522,14 @@ const getMyOrders = async (req, res) => {
       return res.json([]);
     }
 
-    const itemsMap = await itemsByOrderId(orders.map((o) => o.order_id));
-    res.json(orders.map((o) => formatOrderRow(o, itemsMap[o.order_id])));
+    const orderIds = orders.map((o) => o.order_id);
+    const itemsMap = await itemsByOrderId(orderIds);
+    const slipsMap = await slipsByOrderId(orderIds);
+    res.json(
+      orders.map((o) =>
+        formatOrderRow(o, itemsMap[o.order_id], slipsMap[o.order_id])
+      )
+    );
   } catch (err) {
     console.log(err);
 
@@ -458,7 +557,8 @@ const getMyOrderById = async (req, res) => {
     }
 
     const items = await itemsForOrder(id);
-    res.json(formatOrderRow(orderResult.rows[0], items));
+    const slips = await slipsForOrder(id);
+    res.json(formatOrderRow(orderResult.rows[0], items, slips));
   } catch (err) {
     console.log(err);
 
@@ -478,8 +578,14 @@ const getAllOrders = async (req, res) => {
       return res.json([]);
     }
 
-    const itemsMap = await itemsByOrderId(orders.map((o) => o.order_id));
-    res.json(orders.map((o) => formatOrderRow(o, itemsMap[o.order_id])));
+    const orderIds = orders.map((o) => o.order_id);
+    const itemsMap = await itemsByOrderId(orderIds);
+    const slipsMap = await slipsByOrderId(orderIds);
+    res.json(
+      orders.map((o) =>
+        formatOrderRow(o, itemsMap[o.order_id], slipsMap[o.order_id])
+      )
+    );
   } catch (err) {
     console.log(err);
 
@@ -503,7 +609,8 @@ const getOrderById = async (req, res) => {
     }
 
     const items = await itemsForOrder(id);
-    res.json(formatOrderRow(orderResult.rows[0], items));
+    const slips = await slipsForOrder(id);
+    res.json(formatOrderRow(orderResult.rows[0], items, slips));
   } catch (err) {
     console.log(err);
 
@@ -515,6 +622,8 @@ const getOrderById = async (req, res) => {
 
 // ---- Admin: update order status (pending / confirmed / shipped / delivered / cancelled / refunded) ----
 const updateOrderStatus = async (req, res) => {
+  const client = await db.connect();
+
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -525,29 +634,61 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    const result = await db.query(
-      `
-      UPDATE orders
-      SET status = $2, updated_at = NOW()
-      WHERE order_id = $1
-      RETURNING order_id
-      `,
-      [id, status]
+    await client.query("BEGIN");
+
+    const current = await client.query(
+      `SELECT status, discount_code FROM orders WHERE order_id = $1 FOR UPDATE`,
+      [id]
     );
 
-    if (result.rows.length === 0) {
+    if (current.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         error: "Order Not Found",
       });
     }
 
+    const wasReversed = ["cancelled", "refunded"].includes(current.rows[0].status);
+    const nowReversed = ["cancelled", "refunded"].includes(status);
+
+    // cancelled / refunded are terminal: stock and the discount use have already
+    // been handed back, so moving back to pending/etc. would be a lie and would
+    // let the restock run a second time on the next cancel. Refuse it.
+    if (wasReversed && !nowReversed) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "คำสั่งซื้อที่ยกเลิก/คืนเงินแล้ว ไม่สามารถเปลี่ยนสถานะได้",
+      });
+    }
+
+    // First transition into cancelled/refunded: hand stock + discount use back.
+    // The wasReversed guard above means this runs at most once per order.
+    if (nowReversed && !wasReversed) {
+      await restoreOrderStock(client, id);
+      await restoreDiscountUse(client, current.rows[0].discount_code);
+      await client.query(
+        `UPDATE payments SET status = 'failed' WHERE order_id = $1`,
+        [id]
+      );
+    }
+
+    await client.query(
+      `UPDATE orders SET status = $2, updated_at = NOW() WHERE order_id = $1`,
+      [id, status]
+    );
+
+    await client.query("COMMIT");
+
     res.json({ success: true });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.log(err);
 
     res.status(500).json({
       error: "Server Error",
     });
+  } finally {
+    client.release();
   }
 };
 
@@ -557,7 +698,7 @@ const updatePaymentStatus = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { payment_status } = req.body;
+    const { payment_status, reason } = req.body;
 
     if (!VALID_PAYMENT_STATUSES.includes(payment_status)) {
       return res.status(400).json({
@@ -596,6 +737,38 @@ const updatePaymentStatus = async (req, res) => {
       );
     }
 
+    // Record the verdict on the most recent slip. Re-rejecting an already
+    // rejected order just overwrites reject_reason — this is how the admin
+    // "sends more detail" to the customer.
+    if (payment_status === "paid" || payment_status === "rejected") {
+      const latestSlip = await client.query(
+        `SELECT slip_id FROM payment_slips
+         WHERE order_id = $1
+         ORDER BY uploaded_at DESC, slip_id DESC
+         LIMIT 1`,
+        [id]
+      );
+
+      if (latestSlip.rows.length > 0) {
+        const slipId = latestSlip.rows[0].slip_id;
+        if (payment_status === "rejected") {
+          await client.query(
+            `UPDATE payment_slips
+             SET status = 'rejected', reject_reason = $2, reviewed_by = $3, reviewed_at = NOW()
+             WHERE slip_id = $1`,
+            [slipId, reason ?? null, req.user.id]
+          );
+        } else {
+          await client.query(
+            `UPDATE payment_slips
+             SET status = 'approved', reviewed_by = $2, reviewed_at = NOW()
+             WHERE slip_id = $1`,
+            [slipId, req.user.id]
+          );
+        }
+      }
+    }
+
     await client.query("COMMIT");
 
     res.json({ success: true });
@@ -611,8 +784,10 @@ const updatePaymentStatus = async (req, res) => {
   }
 };
 
-// ---- Customer: upload a payment slip for an existing order ----
+// ---- Customer: upload a payment slip for an existing order (checkout flow) ----
 const uploadPaymentSlip = async (req, res) => {
+  const client = await db.connect();
+
   try {
     const { id } = req.params;
 
@@ -624,33 +799,194 @@ const uploadPaymentSlip = async (req, res) => {
 
     const slipUrl = `http://localhost:5000/uploads/${req.file.filename}`;
 
-    const result = await db.query(
+    await client.query("BEGIN");
+
+    const orderResult = await client.query(
+      `SELECT status, payment_status FROM orders WHERE order_id = $1 FOR UPDATE`,
+      [id]
+    );
+
+    if (orderResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Order Not Found" });
+    }
+
+    const { status, payment_status } = orderResult.rows[0];
+    if (
+      ["paid", "refunded"].includes(payment_status) ||
+      ["confirmed", "shipped", "delivered", "cancelled", "refunded"].includes(status)
+    ) {
+      await client.query("ROLLBACK");
+      return res
+        .status(409)
+        .json({ error: "ไม่สามารถอัปโหลดสลิปสำหรับคำสั่งซื้อนี้ได้" });
+    }
+
+    await client.query(
+      `INSERT INTO payment_slips (order_id, slip_url) VALUES ($1, $2)`,
+      [id, slipUrl]
+    );
+
+    await client.query(
       `
       UPDATE orders
       SET payment_slip_url = $2, payment_status = 'pending_verification', updated_at = NOW()
       WHERE order_id = $1
-      RETURNING order_id, payment_slip_url, payment_status
       `,
       [id, slipUrl]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: "Order Not Found",
-      });
-    }
+    await client.query("COMMIT");
 
     res.json({
       success: true,
-      payment_slip_url: result.rows[0].payment_slip_url,
-      payment_status: result.rows[0].payment_status,
+      payment_slip_url: slipUrl,
+      payment_status: "pending_verification",
     });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.log(err);
 
     res.status(500).json({
       error: "Server Error",
     });
+  } finally {
+    client.release();
+  }
+};
+
+// ---- Customer: re-upload a slip after the previous one was rejected ----
+const customerReuploadPaymentSlip = async (req, res) => {
+  const client = await db.connect();
+
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No slip file uploaded" });
+    }
+
+    const slipUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+
+    await client.query("BEGIN");
+
+    const orderResult = await client.query(
+      `SELECT user_id, payment_status FROM orders WHERE order_id = $1 FOR UPDATE`,
+      [id]
+    );
+
+    if (orderResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Order Not Found" });
+    }
+
+    if (orderResult.rows[0].user_id !== req.user.id) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    if (orderResult.rows[0].payment_status !== "rejected") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "อัปโหลดสลิปใหม่ได้เฉพาะเมื่อสลิปถูกปฏิเสธ",
+      });
+    }
+
+    // New history row; the earlier rejected slip(s) stay on record.
+    await client.query(
+      `INSERT INTO payment_slips (order_id, slip_url) VALUES ($1, $2)`,
+      [id, slipUrl]
+    );
+
+    await client.query(
+      `
+      UPDATE orders
+      SET payment_slip_url = $2, payment_status = 'pending_verification', updated_at = NOW()
+      WHERE order_id = $1
+      `,
+      [id, slipUrl]
+    );
+
+    await client.query(
+      `UPDATE payments SET status = 'pending' WHERE order_id = $1`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ success: true, payment_status: "pending_verification" });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// ---- Customer: cancel own order (restores stock + one discount-code use) ----
+const cancelMyOrder = async (req, res) => {
+  const client = await db.connect();
+
+  try {
+    const { id } = req.params;
+
+    await client.query("BEGIN");
+
+    const orderResult = await client.query(
+      `SELECT user_id, status, payment_status, discount_code
+       FROM orders WHERE order_id = $1 FOR UPDATE`,
+      [id]
+    );
+
+    if (orderResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Order Not Found" });
+    }
+
+    const order = orderResult.rows[0];
+
+    if (order.user_id !== req.user.id) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const cancellable =
+      order.status === "pending" &&
+      ["unpaid", "pending_verification", "rejected"].includes(order.payment_status);
+
+    if (!cancellable) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "คำสั่งซื้อนี้ไม่สามารถยกเลิกได้" });
+    }
+
+    await restoreOrderStock(client, id);
+    await restoreDiscountUse(client, order.discount_code);
+
+    await client.query(
+      `UPDATE orders SET status = 'cancelled', updated_at = NOW() WHERE order_id = $1`,
+      [id]
+    );
+    await client.query(
+      `UPDATE payments SET status = 'failed' WHERE order_id = $1`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ success: true });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.log(err);
+
+    res.status(500).json({
+      error: "Server Error",
+    });
+  } finally {
+    client.release();
   }
 };
 
@@ -663,4 +999,6 @@ module.exports = {
   updateOrderStatus,
   updatePaymentStatus,
   uploadPaymentSlip,
+  customerReuploadPaymentSlip,
+  cancelMyOrder,
 };

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ChevronDown, Package, Clock, CheckCircle2, Truck, AlertCircle, Download, Star } from "lucide-react"
+import { ChevronDown, Package, Clock, CheckCircle2, Truck, AlertCircle, Download, Star, Upload, Ban } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -36,6 +36,8 @@ type Order = {
   paymentMethod?: string
   trackingNumber?: string
   notes?: string
+  slips?: { url: string; status: string; rejectReason: string | null; uploadedAt: string }[]
+  paymentRejectReason?: string | null
   date: string
 }
 
@@ -90,8 +92,16 @@ const getPaymentStatusLabel = (status: string) => {
     case "paid": return "ชำระแล้ว"
     case "pending_verification": return "รอการยืนยัน"
     case "unpaid": return "ยังไม่ชำระ"
-    case "rejected": return "ปฏิเสธ"
+    case "rejected": return "สลิปไม่ถูกต้อง"
     default: return status
+  }
+}
+
+const getSlipBadge = (status: string) => {
+  switch (status) {
+    case "approved": return { label: "อนุมัติแล้ว", cls: "bg-green-100 text-green-800" }
+    case "rejected": return { label: "ไม่ถูกต้อง", cls: "bg-red-100 text-red-800" }
+    default: return { label: "รอตรวจสอบ", cls: "bg-yellow-100 text-yellow-800" }
   }
 }
 
@@ -111,9 +121,17 @@ export default function OrdersPage() {
   const [pageError, setPageError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
-  // ── slip dialog ──
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [isSlipDialogOpen, setIsSlipDialogOpen] = useState(false)
+  // ── slip preview dialog (any slip, current or historical) ──
+  const [slipPreviewUrl, setSlipPreviewUrl] = useState<string | null>(null)
+
+  // ── re-upload after a rejected slip (one order at a time) ──
+  const [reupload, setReupload] = useState<{
+    orderId: number; file: File | null; preview: string; error: string; busy: boolean
+  }>({ orderId: 0, file: null, preview: "", error: "", busy: false })
+
+  // ── cancel-order confirm ──
+  const [cancelTarget, setCancelTarget] = useState<number | null>(null)
+  const [cancelState, setCancelState] = useState<{ error: string; busy: boolean }>({ error: "", busy: false })
 
   // ── review dialog ──
   const [reviewedKeys, setReviewedKeys] = useState<Set<string>>(new Set())
@@ -122,6 +140,20 @@ export default function OrdersPage() {
   const [reviewComment, setReviewComment] = useState("")
   const [reviewError, setReviewError] = useState("")
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+
+  // Re-fetch just the orders list (used after re-upload / cancel).
+  const loadOrders = async () => {
+    const token = getToken()
+    if (!token) { router.push("/login"); return }
+    try {
+      const res = await fetch(`${API}/orders/my`, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      if (data.error) setPageError(data.error)
+      else setOrders(data)
+    } catch {
+      setPageError("ไม่สามารถโหลดคำสั่งซื้อได้")
+    }
+  }
 
   // ── โหลด order list + สถานะที่รีวิวไปแล้ว ──
   useEffect(() => {
@@ -156,9 +188,71 @@ export default function OrdersPage() {
     })
   }
 
-  const handleViewSlip = (order: Order) => {
-    setSelectedOrder(order)
-    setIsSlipDialogOpen(true)
+  const handleViewSlip = (url: string) => setSlipPreviewUrl(url)
+
+  const handleReuploadFile = (e: React.ChangeEvent<HTMLInputElement>, orderId: number) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      setReupload({ orderId, file: null, preview: "", error: "กรุณาอัปโหลดไฟล์รูปภาพเท่านั้น", busy: false })
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setReupload({ orderId, file: null, preview: "", error: "ขนาดไฟล์ต้องไม่เกิน 5MB", busy: false })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () =>
+      setReupload({ orderId, file, preview: reader.result as string, error: "", busy: false })
+    reader.readAsDataURL(file)
+  }
+
+  const submitReupload = async (orderId: number) => {
+    if (reupload.orderId !== orderId || !reupload.file) return
+    const token = getToken()
+    if (!token) { router.push("/login"); return }
+    setReupload((p) => ({ ...p, busy: true, error: "" }))
+    try {
+      const fd = new FormData()
+      fd.append("slip", reupload.file)
+      const res = await fetch(`${API}/orders/my/${orderId}/payment-slip`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setReupload((p) => ({ ...p, busy: false, error: data.error || "อัปโหลดสลิปไม่สำเร็จ" }))
+        return
+      }
+      setReupload({ orderId: 0, file: null, preview: "", error: "", busy: false })
+      await loadOrders()
+    } catch {
+      setReupload((p) => ({ ...p, busy: false, error: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้" }))
+    }
+  }
+
+  const confirmCancel = async () => {
+    if (cancelTarget == null) return
+    const token = getToken()
+    if (!token) { router.push("/login"); return }
+    setCancelState({ error: "", busy: true })
+    try {
+      const res = await fetch(`${API}/orders/my/${cancelTarget}/cancel`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCancelState({ error: data.error || "ยกเลิกคำสั่งซื้อไม่สำเร็จ", busy: false })
+        return
+      }
+      setCancelTarget(null)
+      setCancelState({ error: "", busy: false })
+      await loadOrders()
+    } catch {
+      setCancelState({ error: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้", busy: false })
+    }
   }
 
   const openReview = (orderId: number, item: OrderItem) => {
@@ -533,11 +627,104 @@ export default function OrdersPage() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => handleViewSlip(order)}
+                                    onClick={() => handleViewSlip(order.paymentSlipUrl!)}
                                     className="gap-2 w-full"
                                   >
                                     ดูสลิปการโอนเงิน
                                   </Button>
+                                </div>
+                              )}
+
+                              {order.paymentStatus === "rejected" && (
+                                <div className="pt-3 border-t border-border space-y-3">
+                                  <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+                                    <p className="text-sm font-medium text-destructive">สลิปไม่ถูกต้อง</p>
+                                    <p className="mt-1 text-sm text-foreground">
+                                      {order.paymentRejectReason ||
+                                        "แอดมินแจ้งว่าสลิปไม่ถูกต้อง กรุณาอัปโหลดสลิปใหม่"}
+                                    </p>
+                                  </div>
+
+                                  <div>
+                                    <input
+                                      id={`reupload-${order.id}`}
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(e) => handleReuploadFile(e, order.id)}
+                                    />
+                                    <label
+                                      htmlFor={`reupload-${order.id}`}
+                                      className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm hover:bg-muted"
+                                    >
+                                      <Upload className="h-4 w-4" />
+                                      เลือกสลิปใหม่
+                                    </label>
+
+                                    {reupload.orderId === order.id && reupload.preview && (
+                                      <img
+                                        src={reupload.preview}
+                                        alt="ตัวอย่างสลิปใหม่"
+                                        className="mt-3 max-h-48 w-full rounded-lg border border-border object-contain"
+                                      />
+                                    )}
+                                    {reupload.orderId === order.id && reupload.error && (
+                                      <p className="mt-2 text-sm text-destructive">{reupload.error}</p>
+                                    )}
+
+                                    <Button
+                                      className="mt-3 w-full gap-2"
+                                      disabled={
+                                        reupload.orderId !== order.id || !reupload.file || reupload.busy
+                                      }
+                                      onClick={() => submitReupload(order.id)}
+                                    >
+                                      {reupload.busy ? "กำลังอัปโหลด..." : "อัปโหลดสลิปใหม่"}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {order.slips && order.slips.length > 1 && (
+                                <div className="pt-3 border-t border-border">
+                                  <p className="mb-2 text-sm font-medium text-foreground">ประวัติสลิป</p>
+                                  <div className="space-y-2">
+                                    {order.slips.map((slip, i) => {
+                                      const badge = getSlipBadge(slip.status)
+                                      return (
+                                        <div
+                                          key={i}
+                                          className="flex items-center gap-3 rounded-lg border border-border p-2"
+                                        >
+                                          <img
+                                            src={slip.url}
+                                            alt={`สลิป ${i + 1}`}
+                                            className="h-14 w-14 flex-none cursor-pointer rounded object-cover"
+                                            onClick={() => handleViewSlip(slip.url)}
+                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <span
+                                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${badge.cls}`}
+                                              >
+                                                {badge.label}
+                                              </span>
+                                              {slip.uploadedAt && (
+                                                <span className="text-xs text-muted-foreground">
+                                                  {new Date(slip.uploadedAt).toLocaleDateString("th-TH")}
+                                                </span>
+                                              )}
+                                            </div>
+                                            {slip.rejectReason && (
+                                              <p className="mt-1 text-xs text-destructive">
+                                                {slip.rejectReason}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -555,6 +742,20 @@ export default function OrdersPage() {
                                 ดาวน์โหลดใบเสร็จ
                               </Button>
                             )}
+                            {order.status === "pending" &&
+                              ["unpaid", "pending_verification", "rejected"].includes(order.paymentStatus) && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setCancelTarget(order.id)
+                                    setCancelState({ error: "", busy: false })
+                                  }}
+                                  className="gap-2 border-red-200 text-destructive hover:text-destructive"
+                                >
+                                  <Ban className="h-4 w-4" />
+                                  ยกเลิกคำสั่งซื้อ
+                                </Button>
+                              )}
                           </div>
                         </div>
                       </>
@@ -603,25 +804,52 @@ export default function OrdersPage() {
       </Dialog>
 
       {/* Slip Dialog */}
-      <Dialog open={isSlipDialogOpen} onOpenChange={setIsSlipDialogOpen}>
+      <Dialog open={Boolean(slipPreviewUrl)} onOpenChange={(open) => !open && setSlipPreviewUrl(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>สลิปการโอนเงิน</DialogTitle>
           </DialogHeader>
-          {selectedOrder?.paymentSlipUrl && (
-            <div className="space-y-4">
-              <img
-                src={selectedOrder.paymentSlipUrl}
-                alt="Payment slip"
-                className="w-full rounded-lg border border-border"
-              />
-              <p className="text-sm text-muted-foreground">
-                หมายเลขคำสั่ง: {selectedOrder.id}
-              </p>
-            </div>
+          {slipPreviewUrl && (
+            <img
+              src={slipPreviewUrl}
+              alt="Payment slip"
+              className="w-full rounded-lg border border-border"
+            />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirm Dialog */}
+      <Dialog open={cancelTarget != null} onOpenChange={(open) => !open && setCancelTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ยกเลิกคำสั่งซื้อ</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              ยืนยันการยกเลิก? สต็อกสินค้าจะถูกคืนและไม่สามารถกู้คืนคำสั่งซื้อได้
+            </p>
+            {cancelState.error && <p className="text-sm text-destructive">{cancelState.error}</p>}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelState.busy}
+              >
+                ไม่ยกเลิก
+              </Button>
+              <Button
+                className="flex-1 bg-destructive text-white hover:bg-destructive/90"
+                onClick={confirmCancel}
+                disabled={cancelState.busy}
+              >
+                {cancelState.busy ? "กำลังยกเลิก..." : "ยืนยันยกเลิก"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
   )
-} 
+}

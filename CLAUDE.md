@@ -179,7 +179,7 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
 
 ### Schema files
 
-- `postgres/init/01_schema.sql` — auto-runs on fresh volume (complete schema, all 16 tables)
+- `postgres/init/01_schema.sql` — auto-runs on fresh volume (complete schema, all 17 tables)
 - `postgres/migrations/` — numbered incremental migrations (`002_` through `014_`)
   - `005_new_ecommerce_schema.sql` — migrates an existing DB from old schema → new schema
   - `006_add_thai_fields.sql` — Thai name/description columns + store_policies table
@@ -189,6 +189,21 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
   - `010_product_sets.sql` — adds "product sets" (bundles, e.g. shirt + shorts sold together at a flat discounted price). Widens `variants.size` to `VARCHAR(100)` (a set-variant stores a synthesized combo label there, e.g. "Shirt (M) + Shorts (32)" — longer than the old 10-char size code). Adds `set_components(set_variant_id, component_variant_id, quantity)`, mapping a set's variant (a normal `variants` row on a `products` row with `category='set'`) to the real, standalone-sellable variants it bundles. A set's `stock` is never entered manually — it's derived via a trigger as `MIN(component.stock / quantity)` across its components, and recomputed automatically whenever a component's stock changes (including from an order). Admin-side, the backend (`addProduct`/`updateProduct` in `productControllers.js`) rejects creating/editing a set option whose picked components don't all share the same `pattern` — a set may never bundle mismatched patterns (e.g. a pattern-A shirt with a pattern-B short); sizes stay independent per component (a "pinned combo" — the admin picks one specific size per item per set option, not a combinatorial size matrix). `orderControllers.js` (`createOrder`) now checks stock and decrements it at order time — for a set item this decrements each component's stock instead of the set's own (which was previously a gap: no order ever touched `variants.stock` at all).
   - `011_user_addresses_junction.sql` — makes users↔addresses genuinely many-to-many (e.g. family members sharing one saved address) via a new `user_addresses(user_id, address_id, is_default, added_at)` join table, backfilled from existing `addresses.user_id` rows. `addresses.user_id` is kept as-is (now just the original creator, informational) — nothing that already queried it breaks. No "add an existing address to my account" UI/endpoint exists yet — out of scope for now (no saved-address UI exists on either side today).
   - `014_payment_slip.sql` — adds `orders.payment_slip_url` (TEXT), implementing the slip-upload half of the flow `docs/payment_verification_recommendations.md` scoped out. Customer-facing `POST /orders/:id/payment-slip` (`orderControllers.js` `uploadPaymentSlip`, reuses the same multer/`uploads/` pattern as product images) stores the slip and flips `orders.payment_status` to `pending_verification`; checkout now shows a real PromptPay QR (`payment.js`'s `POST /promptpay`, mounted at `/payment` in `server.js` — previously dead code, and required npm packages `qrcode`/`promptpay-qr` that weren't even in `package.json`) and an upload step before the final "awaiting verification" screen. Admin's existing confirm/reject buttons (`admin/orders/page.tsx`) are now reachable and show the uploaded slip image. `updatePaymentStatus` also now syncs the matching `payments` row's `status`/`paid_at` (previously only `orders.payment_status` changed, so `payments.status` stayed `'pending'` forever even for confirmed orders) and validates `status`/`payment_status` against an allow-list (400 instead of an opaque 500 on a bad value). `/orders/admin/*` routes now require `auth, requireAdmin` (previously fully unauthenticated) via the extracted `backend/middleware/auth.js`.
+  - `015_wishlish.sql` — adds `wishlist(user_id, product_id, added_at)`, a many-to-many join table backing the new wishlist feature (`backend/controllers/wishlistControllers.js`, `frontend/app/wishlist/page.tsx`, `frontend/lib/wishlist-context.tsx`). Came in via merge from the friend's frontend branch with a bug: the file created the table as `wishlist` (singular, matching the controller's queries) but its `CREATE INDEX` targeted a nonexistent `wishlists` (plural) table — fixed to reference `wishlist` before applying.
+  - `016_order_addcolumn.sql` — adds `orders.discount_code` (TEXT) and `orders.discount_amount` (NUMERIC, default 0), backing the new discount-code feature (`backend/controllers/discountControllers.js`).
+  - `017_payment_slips.sql` — adds `payment_slips(slip_id, order_id, slip_url, status, reject_reason, reviewed_by, reviewed_at, uploaded_at)`, a per-upload history table backing the payment-slip **rejection & re-submission loop** (see the subsection below). One row per customer slip upload — rows are never deleted, so a rejected slip stays on record after the customer sends a new one. `orders.payment_slip_url` is kept as a plain mirror of the newest slip's URL so the existing customer/admin order views work unchanged. Backfilled: one row per existing order that already had a `payment_slip_url` (status derived from the order's `payment_status`). No CHECK-constraint change on `orders` — `rejected` was already allowed since `009_`.
+
+### Payment-slip rejection & re-submission loop
+
+Previously an admin rejecting a slip was a dead end: `orders.payment_status = 'rejected'`, no reason recorded, no customer recovery, stock never returned. Now:
+
+- **`updatePaymentStatus`** (`PATCH /orders/admin/:id/payment-status`) takes an optional `reason` in the body. On `rejected` it writes `status='rejected' + reject_reason + reviewed_by + reviewed_at` onto the **latest** `payment_slips` row (keeping the existing `orders.payment_status` + `payments.status='failed'` sync). On `paid` it marks that row `approved`. Re-rejecting an already-rejected order just overwrites `reject_reason` — this is how the admin "sends more detail".
+- **`POST /orders/my/:id/payment-slip`** (`customerReuploadPaymentSlip`, `auth` + ownership check) — customer re-upload from order history. Allowed **only** when `payment_status='rejected'`. Inserts a new `payment_slips` row (old rows untouched), re-mirrors `orders.payment_slip_url`, sets `payment_status='pending_verification'`, resets `payments.status='pending'`. The original checkout upload endpoint `POST /orders/:id/payment-slip` is unchanged except it now also writes a `payment_slips` row and refuses (409) once the order is paid/shipped/cancelled.
+- **`PATCH /orders/my/:id/cancel`** (`cancelMyOrder`, `auth` + ownership check) — customer cancels their own order. Allowed only while `status='pending'` AND `payment_status IN ('unpaid','pending_verification','rejected')`. Restores stock and reverses one discount-code use, sets `status='cancelled'`, `payments.status='failed'`.
+- **Behaviour change:** admin `updateOrderStatus` (`PATCH /orders/admin/:id/status`) now also restores stock + reverses the discount-code use + sets `payments.status='failed'` the first time an order moves into `cancelled`/`refunded` (it was previously a pure label change — a latent bug). `cancelled`/`refunded` are now **terminal** — trying to move an order back out of them returns 409 — so the restock runs at most once per order (a customer-cancel then admin re-cancel can't double-restock).
+- New shared helpers in `orderControllers.js`: `restoreOrderStock(client, orderId)` (exact reverse of `createOrder`'s decrement loop — handles set components; relies on `trg_variants_stock_cascade` for derived set stock) and `restoreDiscountUse(client, discountCode)`. **Caller contract:** hold `SELECT … FROM orders WHERE order_id=$1 FOR UPDATE` in the same transaction and only call when the order is not already `cancelled`/`refunded`.
+- Order read responses (`formatOrderRow`) gain `slips: [{url, status, rejectReason, uploadedAt}]` (oldest→newest) and `paymentRejectReason` (latest rejected slip's reason). Fetched via a separate `slipsByOrderId`/`slipsForOrder` query, **not** a JOIN into `ORDER_SELECT` (a one-to-many JOIN would fan out order rows).
+- Frontend for this loop is built: customer `frontend/app/orders/page.tsx` shows the reject reason + a re-upload control (`POST /orders/my/:id/payment-slip` with the auth token) + a "ยกเลิกคำสั่งซื้อ" button (confirm dialog → `PATCH /orders/my/:id/cancel`) + a read-only "ประวัติสลิป" list; admin `frontend/app/admin/orders/page.tsx` has a reason `<Textarea>` (seeded from `paymentRejectReason`, re-usable while already rejected — button relabels to "ส่งเหตุผลอีกครั้ง") and a per-slip history list replacing the single `<img>`; `frontend/lib/orders.ts` `updatePaymentStatusApi` now takes an optional `reason`. The admin payment confirm/reject handler switched from optimistic update to refetch (server mutates `payment_slips`).
 
 ### users table — backward-compat note
 
@@ -235,9 +250,9 @@ fixed so there is exactly one "default" address per user, shared by both flows:
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/015_description.sql` (next number is `015`).
+1. Create `postgres/migrations/018_description.sql` (next number is `018`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/015_description.sql`
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/018_description.sql`
 4. Mirror the change in `postgres/init/01_schema.sql`.
 
 ### Full seed (fresh Docker volume)
@@ -269,6 +284,9 @@ psql "$DATABASE_URL" -f postgres/migrations/011_user_addresses_junction.sql
 psql "$DATABASE_URL" -f postgres/migrations/012_cleanup_addresses.sql
 psql "$DATABASE_URL" -f postgres/migrations/013_drop_users_address.sql
 psql "$DATABASE_URL" -f postgres/migrations/014_payment_slip.sql
+psql "$DATABASE_URL" -f postgres/migrations/015_wishlish.sql
+psql "$DATABASE_URL" -f postgres/migrations/016_order_addcolumn.sql
+psql "$DATABASE_URL" -f postgres/migrations/017_payment_slips.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -511,7 +529,7 @@ FASTAPI_BASE_URL=http://localhost:8000
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `015_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `018_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`

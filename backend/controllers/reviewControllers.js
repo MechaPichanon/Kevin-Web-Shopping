@@ -122,4 +122,4 @@ const getMyReviewedItems = async (req, res) => {
   }
 };
 
-module.exports = { getProductReviews, createReview, getMyReviewedItems }ห
+module.exports = { getProductReviews, createReview, getMyReviewedItems };
