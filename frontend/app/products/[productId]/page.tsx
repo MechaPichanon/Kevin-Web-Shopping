@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { colorToHex } from "@/lib/color-map";
+import { useLang } from "@/lib/language-context";
 
 type Variant = {
   variant_id: string;
@@ -64,18 +65,19 @@ type ReviewsResponse = {
   reviews: Review[];
 };
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("th-TH", {
-    style: "currency",
-    currency: "THB",
-    minimumFractionDigits: 0,
-  }).format(price);
-
 const starRow = (n: number) => "★★★★★☆☆☆☆☆".slice(5 - n, 10 - n);
 
 export default function ProductDetailPage() {
   const { productId } = useParams<{ productId: string }>();
   const router = useRouter();
+  const { t, pick, locale } = useLang();
+
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "THB",
+      minimumFractionDigits: 0,
+    }).format(price);
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [images, setImages] = useState<ProductImage[]>([]);
@@ -207,12 +209,12 @@ export default function ProductDetailPage() {
     if (!selectedVariant) {
       setAddToCartMessage({
         type: "error",
-        text: "กรุณาเลือกไซซ์ก่อนเพิ่มลงตะกร้า",
+        text: t("detail.selectSizeFirst"),
       });
       return;
     }
     if (selectedVariant.stock === 0) {
-      setAddToCartMessage({ type: "error", text: "สินค้าหมด" });
+      setAddToCartMessage({ type: "error", text: t("product.soldOut") });
       return;
     }
 
@@ -243,21 +245,21 @@ export default function ProductDetailPage() {
       if (!res.ok) {
         setAddToCartMessage({
           type: "error",
-          text: data.error || "เพิ่มสินค้าไม่สำเร็จ",
+          text: t("detail.addToCartFailed"),
         });
         return;
       }
 
       setAddToCartMessage({
         type: "success",
-        text: data.message || "เพิ่มลงตะกร้าแล้ว",
+        text: t("detail.addedToCart"),
       });
       window.dispatchEvent(new Event("cartUpdated"));
     } catch (err) {
       console.error("Add to cart error:", err);
       setAddToCartMessage({
         type: "error",
-        text: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้",
+        text: t("detail.connectionError"),
       });
     }
   };
@@ -265,7 +267,7 @@ export default function ProductDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#b89f8d] px-6 py-8 text-black">
-        กำลังโหลด...
+        {t("detail.loading")}
       </div>
     );
   }
@@ -273,9 +275,9 @@ export default function ProductDetailPage() {
   if (notFound || !product) {
     return (
       <div className="min-h-screen bg-[#b89f8d] px-6 py-8 text-black">
-        <p className="mb-4">ไม่พบสินค้า</p>
+        <p className="mb-4">{t("detail.notFound")}</p>
         <Link href="/products" className="text-blue-700 underline">
-          กลับไปหน้าสินค้าทั้งหมด
+          {t("detail.backToProducts")}
         </Link>
       </div>
     );
@@ -285,9 +287,9 @@ export default function ProductDetailPage() {
 
   const stockLabel = (() => {
     if (!selectedVariant) return null;
-    if (selectedVariant.stock === 0) return "สินค้าหมด";
-    if (selectedVariant.stock <= 5) return `เหลือ ${selectedVariant.stock} ชิ้น`;
-    return "มีสินค้า";
+    if (selectedVariant.stock === 0) return t("product.soldOut");
+    if (selectedVariant.stock <= 5) return t("detail.stockLeft", { n: selectedVariant.stock });
+    return t("product.inStock");
   })();
   const stockColor =
     selectedVariant && selectedVariant.stock > 0 ? "#2f7d4f" : "#b23b3b";
@@ -295,32 +297,32 @@ export default function ProductDetailPage() {
   const measurementLines: string[] = [];
   if (selectedVariant?.chest_min != null && selectedVariant?.chest_max != null) {
     measurementLines.push(
-      `รอบอก ${Number(selectedVariant.chest_min)}–${Number(
+      `${t("detail.chest")} ${Number(selectedVariant.chest_min)}–${Number(
         selectedVariant.chest_max
-      )} นิ้ว`
+      )} ${t("detail.inches")}`
     );
   }
   if (selectedVariant?.waist_min != null && selectedVariant?.waist_max != null) {
     measurementLines.push(
-      `รอบเอว ${Number(selectedVariant.waist_min)}–${Number(
+      `${t("detail.waist")} ${Number(selectedVariant.waist_min)}–${Number(
         selectedVariant.waist_max
-      )} นิ้ว`
+      )} ${t("detail.inches")}`
     );
   }
 
   const specs = [
-    { label: "หมวดหมู่", value: product.category_th || product.category },
-    product.sub_category_th
-      ? { label: "หมวดหมู่ย่อย", value: product.sub_category_th }
+    { label: t("detail.category"), value: pick(product.category_th, product.category) },
+    product.sub_category
+      ? { label: t("detail.subCategory"), value: pick(product.sub_category_th, product.sub_category) }
       : null,
-    selectedVariant?.pattern_th
-      ? { label: "ลวดลาย", value: selectedVariant.pattern_th }
+    selectedVariant?.pattern
+      ? { label: t("detail.pattern"), value: pick(selectedVariant.pattern_th, selectedVariant.pattern) }
       : null,
-    selectedVariant?.sleeve_th
-      ? { label: "แขนเสื้อ", value: selectedVariant.sleeve_th }
+    selectedVariant?.sleeve
+      ? { label: t("detail.sleeve"), value: pick(selectedVariant.sleeve_th, selectedVariant.sleeve) }
       : null,
-    selectedVariant?.collar_th
-      ? { label: "คอเสื้อ", value: selectedVariant.collar_th }
+    selectedVariant?.collar
+      ? { label: t("detail.collar"), value: pick(selectedVariant.collar_th, selectedVariant.collar) }
       : null,
   ].filter((s): s is { label: string; value: string } => s !== null);
 
@@ -332,17 +334,17 @@ export default function ProductDetailPage() {
         {/* breadcrumb */}
         <nav className="mb-5 flex flex-wrap items-center gap-2 text-sm text-black/60">
           <Link href="/" className="hover:text-black">
-            หน้าแรก
+            {t("detail.home")}
           </Link>
           <span>/</span>
           <Link href="/products" className="hover:text-black">
-            {product.category_th || product.category}
+            {pick(product.category_th, product.category)}
           </Link>
-          {product.sub_category_th && (
+          {product.sub_category && (
             <>
               <span>/</span>
               <span className="font-medium text-black">
-                {product.sub_category_th}
+                {pick(product.sub_category_th, product.sub_category)}
               </span>
             </>
           )}
@@ -356,8 +358,7 @@ export default function ProductDetailPage() {
                 src={activeImage?.image_url || "https://placehold.co/600x800"}
                 alt={
                   activeImage?.alt_text ||
-                  product.product_name_th ||
-                  product.product_name
+                  pick(product.product_name_th, product.product_name)
                 }
                 className="h-full w-full object-cover"
               />
@@ -366,14 +367,14 @@ export default function ProductDetailPage() {
                 <>
                   <button
                     onClick={goPrev}
-                    aria-label="ก่อนหน้า"
+                    aria-label={t("detail.prev")}
                     className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 shadow"
                   >
                     ‹
                   </button>
                   <button
                     onClick={goNext}
-                    aria-label="ถัดไป"
+                    aria-label={t("detail.next")}
                     className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 shadow"
                   >
                     ›
@@ -411,16 +412,17 @@ export default function ProductDetailPage() {
           {/* info panel */}
           <div className="rounded-xl border border-black/10 bg-white p-6">
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-black/50">
-              {product.category_th || product.category}
-              {product.sub_category_th ? ` · ${product.sub_category_th}` : ""}
+              {pick(product.category_th, product.category)}
+              {product.sub_category ? ` · ${pick(product.sub_category_th, product.sub_category)}` : ""}
             </div>
 
             <h1 className="mb-1 text-2xl font-bold leading-tight">
-              {product.product_name_th || product.product_name}
+              {pick(product.product_name_th, product.product_name)}
             </h1>
-            {product.product_name_th && (
+            {pick(product.product_name, product.product_name_th) !==
+              pick(product.product_name_th, product.product_name) && (
               <div className="mb-4 text-sm text-black/50">
-                {product.product_name}
+                {pick(product.product_name, product.product_name_th)}
               </div>
             )}
 
@@ -430,10 +432,10 @@ export default function ProductDetailPage() {
               </div>
               <span className="text-sm text-black/55">
                 {reviewsData && reviewsData.review_count > 0
-                  ? `${reviewsData.avg_rating.toFixed(1)} · ${
-                      reviewsData.review_count
-                    } รีวิว`
-                  : "ยังไม่มีรีวิว"}
+                  ? `${reviewsData.avg_rating.toFixed(1)} · ${t("detail.reviewCount", {
+                      n: reviewsData.review_count,
+                    })}`
+                  : t("detail.noReviews")}
               </span>
             </div>
 
@@ -456,10 +458,12 @@ export default function ProductDetailPage() {
             {/* color */}
             <div className="mb-5">
               <div className="mb-2 flex items-baseline justify-between">
-                <span className="text-sm font-semibold">สี</span>
+                <span className="text-sm font-semibold">{t("detail.color")}</span>
                 <span className="text-sm text-black/60">
-                  {colors.find((c) => c.color === selectedColor)?.color_th ||
-                    selectedColor}
+                  {pick(
+                    colors.find((c) => c.color === selectedColor)?.color_th,
+                    selectedColor
+                  )}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -467,8 +471,8 @@ export default function ProductDetailPage() {
                   <button
                     key={c.color}
                     onClick={() => handleColorSelect(c.color)}
-                    aria-label={c.color_th || c.color}
-                    title={c.color_th || c.color}
+                    aria-label={pick(c.color_th, c.color)}
+                    title={pick(c.color_th, c.color)}
                     className="grid h-[38px] w-[38px] place-items-center rounded-full bg-white p-[3px]"
                     style={{
                       border:
@@ -493,7 +497,7 @@ export default function ProductDetailPage() {
             {/* size */}
             <div className="mb-3">
               <div className="mb-2 flex items-baseline justify-between">
-                <span className="text-sm font-semibold">ไซซ์</span>
+                <span className="text-sm font-semibold">{t("detail.size")}</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {allSizes.map((size) => {
@@ -533,7 +537,7 @@ export default function ProductDetailPage() {
               <div className="flex flex-none items-center overflow-hidden rounded-lg border border-black/15">
                 <button
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  aria-label="ลด"
+                  aria-label={t("detail.decrease")}
                   className="h-12 w-10 bg-white text-lg"
                 >
                   −
@@ -545,7 +549,7 @@ export default function ProductDetailPage() {
                   onClick={() =>
                     setQuantity((q) => Math.min(maxQuantity, q + 1))
                   }
-                  aria-label="เพิ่ม"
+                  aria-label={t("detail.increase")}
                   className="h-12 w-10 bg-white text-lg"
                 >
                   +
@@ -561,7 +565,7 @@ export default function ProductDetailPage() {
                     : "cursor-pointer bg-black text-white"
                 }`}
               >
-                เพิ่มลงตะกร้า
+                {t("product.addToCart")}
               </button>
             </div>
 
@@ -581,10 +585,10 @@ export default function ProductDetailPage() {
 
         {/* description */}
         <div className="mt-8 rounded-xl border border-black/10 bg-white p-7">
-          <h2 className="mb-3 text-lg font-bold">รายละเอียดสินค้า</h2>
+          <h2 className="mb-3 text-lg font-bold">{t("detail.details")}</h2>
           {(product.description_th || product.description) && (
             <p className="mb-4 max-w-[760px] text-[15px] leading-relaxed text-black/80">
-              {product.description_th || product.description}
+              {pick(product.description_th, product.description)}
             </p>
           )}
           {specs.length > 0 && (
@@ -602,18 +606,18 @@ export default function ProductDetailPage() {
         {/* reviews */}
         <div className="mt-5 rounded-xl border border-black/10 bg-white p-7">
           <div className="mb-5 flex items-baseline gap-3">
-            <h2 className="text-lg font-bold">รีวิวจากลูกค้า</h2>
+            <h2 className="text-lg font-bold">{t("detail.reviews")}</h2>
             {reviewsData && reviewsData.review_count > 0 && (
               <span className="text-sm text-black/55">
-                {reviewsData.avg_rating.toFixed(1)} · {reviewsData.review_count}{" "}
-                รีวิว
+                {reviewsData.avg_rating.toFixed(1)} ·{" "}
+                {t("detail.reviewCount", { n: reviewsData.review_count })}
               </span>
             )}
           </div>
 
           {!reviewsData || reviewsData.review_count === 0 ? (
             <p className="text-sm text-black/55">
-              ยังไม่มีรีวิวสำหรับสินค้านี้
+              {t("detail.noReviewsForItem")}
             </p>
           ) : (
             <div className="flex flex-col gap-4">

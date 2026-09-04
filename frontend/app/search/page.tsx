@@ -5,15 +5,23 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Filter, Grid3X3, LayoutGrid } from "lucide-react";
 import ProductCard from "@/components/productcard";
 import { Slider } from "@/components/ui/slider";
+import { useLang } from "@/lib/language-context";
 
 const DEFAULT_MAX_PRICE = 5000;
 
-const priceRanges = [
-  { id: "under-500", name: "ต่ำกว่า 500 · Under ฿500", min: 0, max: 500 },
+const priceRanges: {
+  id: string;
+  name?: string;
+  labelKey?: "products.priceUnder" | "products.priceAndUp";
+  labelNum?: number;
+  min: number;
+  max: number;
+}[] = [
+  { id: "under-500", labelKey: "products.priceUnder", labelNum: 500, min: 0, max: 500 },
   { id: "500-1000", name: "฿500 – 1,000", min: 500, max: 1000 },
   { id: "1000-2000", name: "฿1,000 – 2,000", min: 1000, max: 2000 },
   { id: "2000-3000", name: "฿2,000 – 3,000", min: 2000, max: 3000 },
-  { id: "over-3000", name: "มากกว่า 3,000 · & up", min: 3000, max: 999999 },
+  { id: "over-3000", labelKey: "products.priceAndUp", labelNum: 3000, min: 3000, max: 999999 },
 ];
 
 type SubCategoryItem = {
@@ -46,16 +54,17 @@ type ToastItem = {
   price: number;
 };
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("th-TH", {
-    style: "currency",
-    currency: "THB",
-    maximumFractionDigits: 0,
-  }).format(price);
-
 function SearchResults() {
   const searchParams = useSearchParams();
   const search = searchParams.get("q") || "";
+  const { t, pick, locale } = useLang();
+
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "THB",
+      maximumFractionDigits: 0,
+    }).format(price);
 
   const [products, setProducts] = useState<ProductApi[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
@@ -169,12 +178,12 @@ function SearchResults() {
     <div className="min-h-screen bg-[#b89f8d] px-6 py-8">
       {/* Header */}
       <div className="mb-1">
-        <h1 className="text-3xl font-bold text-black">ผลการค้นหา</h1>
-        <div className="text-sm text-black/55">Search Results</div>
+        <h1 className="text-3xl font-bold text-black">{t("search.title")}</h1>
+        <div className="text-sm text-black/55">{t("search.subtitle")}</div>
       </div>
 
       <p className="mb-6 text-sm text-black/70">
-        พบสินค้า {filteredProducts.length} รายการสำหรับ &quot;{search}&quot; · {filteredProducts.length} results for &quot;{search}&quot;
+        {t("search.resultsCount", { n: filteredProducts.length, q: search })}
       </p>
 
       <div className="flex flex-col items-start gap-8 lg:flex-row">
@@ -182,12 +191,11 @@ function SearchResults() {
         <aside className="w-full flex-none rounded-2xl border border-black/10 bg-[#ece2d6] p-5 shadow-sm lg:sticky lg:top-24 lg:w-64">
           <div className="mb-4 flex items-center gap-2">
             <Filter size={16} />
-            <span className="text-sm font-semibold">ตัวกรอง</span>
-            <span className="text-xs text-black/45">Filters</span>
+            <span className="text-sm font-semibold">{t("products.filters")}</span>
           </div>
 
           <div className="mb-2.5 flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-black/50">
-            หมวดหมู่ <span className="font-medium">Category</span>
+            {t("products.category")}
           </div>
 
           <div className="mb-2 flex flex-col gap-1">
@@ -195,14 +203,7 @@ function SearchResults() {
               onClick={() => handleCategorySelect("all")}
               className={categoryButtonClass(selectedCategory === "all")}
             >
-              <span className="text-sm">ทั้งหมด</span>
-              <span
-                className={`text-[11px] ${
-                  selectedCategory === "all" ? "text-white/65" : "text-black/45"
-                }`}
-              >
-                All
-              </span>
+              <span className="text-sm">{t("products.all")}</span>
             </button>
 
             {visibleCategories.map((cat) => {
@@ -217,7 +218,7 @@ function SearchResults() {
                     onClick={() => handleCategorySelect(cat.category)}
                     className={categoryButtonClass(active)}
                   >
-                    <span className="text-sm">{cat.category_th}</span>
+                    <span className="text-sm">{pick(cat.category_th, cat.category)}</span>
                     <span
                       className={`text-[11px] ${
                         active ? "text-white/65" : "text-black/45"
@@ -233,8 +234,7 @@ function SearchResults() {
                         onClick={() => setSelectedSubCategory("all")}
                         className={subButtonClass(selectedSubCategory === "all")}
                       >
-                        <span className="text-[13px]">ทั้งหมด</span>
-                        <span className="text-[11px] text-black/40">All</span>
+                        <span className="text-[13px]">{t("products.all")}</span>
                       </button>
 
                       {visibleSubCategories.map((sub) => {
@@ -245,7 +245,7 @@ function SearchResults() {
                             onClick={() => setSelectedSubCategory(sub.sub_category)}
                             className={subButtonClass(subActive)}
                           >
-                            <span className="text-[13px]">{sub.sub_category_th}</span>
+                            <span className="text-[13px]">{pick(sub.sub_category_th, sub.sub_category)}</span>
                             <span className="text-[11px] text-black/40">{sub.sub_category}</span>
                           </button>
                         );
@@ -261,13 +261,13 @@ function SearchResults() {
 
           <div className="mb-3.5 flex items-baseline justify-between">
             <span className="flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-black/50">
-              ช่วงราคา <span className="font-medium">Price</span>
+              {t("products.priceLabel")}
             </span>
             <button
               onClick={() => setPriceRange([0, priceLimit])}
               className="text-xs font-medium text-black/50 underline"
             >
-              ล้าง / Clear
+              {t("products.clear")}
             </button>
           </div>
 
@@ -302,7 +302,9 @@ function SearchResults() {
                   }
                   className={presetButtonClass(active)}
                 >
-                  {range.name}
+                  {range.labelKey
+                    ? t(range.labelKey, { n: (range.labelNum ?? 0).toLocaleString() })
+                    : range.name}
                 </button>
               );
             })}
@@ -313,11 +315,11 @@ function SearchResults() {
         <div className="min-w-0 flex-1">
           <div className="mb-4 flex items-center justify-end gap-2">
             <span className="mr-auto text-sm text-black/60">
-              {filteredProducts.length} รายการ
+              {t("products.itemsFound", { n: filteredProducts.length })}
             </span>
 
             <button
-              title="3 คอลัมน์ / 3 columns"
+              title={t("products.columns3")}
               onClick={() => setGridCols(3)}
               className={densityButtonClass(gridCols === 3)}
             >
@@ -325,7 +327,7 @@ function SearchResults() {
             </button>
 
             <button
-              title="4 คอลัมน์ / 4 columns"
+              title={t("products.columns4")}
               onClick={() => setGridCols(4)}
               className={densityButtonClass(gridCols === 4)}
             >
@@ -349,11 +351,11 @@ function SearchResults() {
                     id: Number(p.variant_id?.replace(/\D/g, "") || "0"),
                     product_id: p.product_id,
                     variant_id: p.variant_id,
-                    name: p.product_name_th || p.product_name,
-                    name_en: p.product_name_th ? p.product_name : undefined,
+                    name: pick(p.product_name_th, p.product_name),
+                    name_en: pick(p.product_name, p.product_name_th),
                     price: Number(p.price),
                     stock: Number(p.stock),
-                    category: p.category_th || p.category,
+                    category: pick(p.category_th, p.category),
                     image: p.image_url || "https://placehold.co/600x800",
                   }}
                 />
@@ -362,10 +364,10 @@ function SearchResults() {
           ) : (
             <div className="py-16 text-center text-black/60">
               <p className="mb-1.5 text-base font-semibold">
-                ไม่พบสินค้า · No products found
+                {t("products.noneFound")}
               </p>
               <p className="text-sm">
-                ลองปรับตัวกรองหรือช่วงราคาใหม่ / Try adjusting your filters
+                {t("products.adjustFilters")}
               </p>
             </div>
           )}
@@ -385,7 +387,7 @@ function SearchResults() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 text-[11px] font-semibold text-emerald-600">
-            เพิ่มลงตะกร้าแล้ว · Added to cart
+            {t("products.addedToCart")}
           </div>
           <div className="truncate text-sm font-semibold">{toast?.name}</div>
           {toast?.name_en && (

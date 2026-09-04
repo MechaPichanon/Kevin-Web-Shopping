@@ -7,8 +7,12 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { getToken } from "@/lib/auth"
 import { useRouter } from "next/navigation"
+import { useLang } from "@/lib/language-context"
+import { th as thDict, type TranslationKey } from "@/lib/i18n/dictionaries"
 
 const API = "http://localhost:5000"
+
+type TFn = (key: TranslationKey, vars?: Record<string, string | number>) => string
 
 // ─────────────────────────────────────────────
 // Types (same struct as the admin orders view — backend/controllers/orderControllers.js)
@@ -76,32 +80,34 @@ const getPaymentStatusColor = (status: string) => {
   }
 }
 
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case "pending": return "กำลังดำเนินการ"
-    case "shipped": return "กำลังจัดส่ง"
-    case "confirmed": return "ยืนยันแล้ว"
-    case "delivered": return "สำเร็จ"
-    case "cancelled": return "ยกเลิก"
-    default: return status
-  }
+const ORDER_STATUS_KEYS: Record<string, TranslationKey> = {
+  pending: "orders.os.pending",
+  confirmed: "orders.os.confirmed",
+  shipped: "orders.os.shipped",
+  delivered: "orders.os.delivered",
+  cancelled: "orders.os.cancelled",
+  refunded: "orders.os.refunded",
 }
 
-const getPaymentStatusLabel = (status: string) => {
-  switch (status) {
-    case "paid": return "ชำระแล้ว"
-    case "pending_verification": return "รอการยืนยัน"
-    case "unpaid": return "ยังไม่ชำระ"
-    case "rejected": return "สลิปไม่ถูกต้อง"
-    default: return status
-  }
+const PAYMENT_STATUS_KEYS: Record<string, TranslationKey> = {
+  paid: "orders.ps.paid",
+  pending_verification: "orders.ps.pending_verification",
+  unpaid: "orders.ps.unpaid",
+  rejected: "orders.ps.rejected",
+  refunded: "orders.ps.refunded",
 }
 
-const getSlipBadge = (status: string) => {
+const getStatusLabel = (status: string, t: TFn) =>
+  ORDER_STATUS_KEYS[status] ? t(ORDER_STATUS_KEYS[status]) : status
+
+const getPaymentStatusLabel = (status: string, t: TFn) =>
+  PAYMENT_STATUS_KEYS[status] ? t(PAYMENT_STATUS_KEYS[status]) : status
+
+const getSlipBadge = (status: string, t: TFn) => {
   switch (status) {
-    case "approved": return { label: "อนุมัติแล้ว", cls: "bg-green-100 text-green-800" }
-    case "rejected": return { label: "ไม่ถูกต้อง", cls: "bg-red-100 text-red-800" }
-    default: return { label: "รอตรวจสอบ", cls: "bg-yellow-100 text-yellow-800" }
+    case "approved": return { label: t("orders.slip.approved"), cls: "bg-green-100 text-green-800" }
+    case "rejected": return { label: t("orders.slip.rejected"), cls: "bg-red-100 text-red-800" }
+    default: return { label: t("orders.slip.pending"), cls: "bg-yellow-100 text-yellow-800" }
   }
 }
 
@@ -114,6 +120,7 @@ const reviewKey = (orderId: number, productId: string) => `${orderId}:${productI
 // ─────────────────────────────────────────────
 export default function OrdersPage() {
   const router = useRouter()
+  const { t, locale } = useLang()
 
   const [orders, setOrders] = useState<Order[]>([])
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set())
@@ -151,7 +158,7 @@ export default function OrdersPage() {
       if (data.error) setPageError(data.error)
       else setOrders(data)
     } catch {
-      setPageError("ไม่สามารถโหลดคำสั่งซื้อได้")
+      setPageError(t("orders.loadError"))
     }
   }
 
@@ -176,8 +183,9 @@ export default function OrdersPage() {
           )
         }
       })
-      .catch(() => setPageError("ไม่สามารถโหลดคำสั่งซื้อได้"))
+      .catch(() => setPageError(t("orders.loadError")))
       .finally(() => setIsLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
   const toggleOrderExpanded = (orderId: number) => {
@@ -194,11 +202,11 @@ export default function OrdersPage() {
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith("image/")) {
-      setReupload({ orderId, file: null, preview: "", error: "กรุณาอัปโหลดไฟล์รูปภาพเท่านั้น", busy: false })
+      setReupload({ orderId, file: null, preview: "", error: t("orders.slipImageOnly"), busy: false })
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      setReupload({ orderId, file: null, preview: "", error: "ขนาดไฟล์ต้องไม่เกิน 5MB", busy: false })
+      setReupload({ orderId, file: null, preview: "", error: t("orders.slipTooLarge"), busy: false })
       return
     }
     const reader = new FileReader()
@@ -222,13 +230,13 @@ export default function OrdersPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setReupload((p) => ({ ...p, busy: false, error: data.error || "อัปโหลดสลิปไม่สำเร็จ" }))
+        setReupload((p) => ({ ...p, busy: false, error: data.error || t("orders.slipUploadFailed") }))
         return
       }
       setReupload({ orderId: 0, file: null, preview: "", error: "", busy: false })
       await loadOrders()
     } catch {
-      setReupload((p) => ({ ...p, busy: false, error: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้" }))
+      setReupload((p) => ({ ...p, busy: false, error: t("orders.connectionError") }))
     }
   }
 
@@ -244,14 +252,14 @@ export default function OrdersPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setCancelState({ error: data.error || "ยกเลิกคำสั่งซื้อไม่สำเร็จ", busy: false })
+        setCancelState({ error: data.error || t("orders.cancelFailed"), busy: false })
         return
       }
       setCancelTarget(null)
       setCancelState({ error: "", busy: false })
       await loadOrders()
     } catch {
-      setCancelState({ error: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้", busy: false })
+      setCancelState({ error: t("orders.connectionError"), busy: false })
     }
   }
 
@@ -283,13 +291,13 @@ export default function OrdersPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setReviewError(data.error || "ส่งรีวิวไม่สำเร็จ")
+        setReviewError(data.error || t("orders.reviewFailed"))
         return
       }
       setReviewedKeys((prev) => new Set(prev).add(reviewKey(reviewItem.orderId, reviewItem.productId)))
       setReviewItem(null)
     } catch {
-      setReviewError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้")
+      setReviewError(t("orders.connectionError"))
     } finally {
       setIsSubmittingReview(false)
     }
@@ -361,8 +369,12 @@ export default function OrdersPage() {
     doc.setFont("Sarabun", "normal")
     doc.setTextColor(60, 60, 60)
     doc.setFontSize(8.5)
+    // Receipt is always rendered in Thai (formal document, bundled Sarabun font).
+    const thPaymentLabel = PAYMENT_STATUS_KEYS[order.paymentStatus]
+      ? thDict[PAYMENT_STATUS_KEYS[order.paymentStatus]]
+      : order.paymentStatus
     doc.text("สถานะ:", W - margin - 75, y + 18)
-    doc.text(getPaymentStatusLabel(order.paymentStatus), W - margin - 5, y + 18, { align: "right" })
+    doc.text(thPaymentLabel, W - margin - 5, y + 18, { align: "right" })
     doc.text("วิธีชำระเงิน:", W - margin - 75, y + 26)
     doc.text(order.paymentMethod || "-", W - margin - 5, y + 26, { align: "right" })
 
@@ -441,7 +453,7 @@ export default function OrdersPage() {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground">กำลังโหลด...</p>
+        <p className="text-muted-foreground">{t("common.loading")}</p>
       </div>
     )
   }
@@ -452,8 +464,8 @@ export default function OrdersPage() {
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="font-serif text-3xl font-bold text-foreground">คำสั่งซื้อของฉัน</h1>
-            <p className="mt-2 text-muted-foreground">ติดตามและจัดการคำสั่งซื้อของคุณ</p>
+            <h1 className="font-serif text-3xl font-bold text-foreground">{t("orders.title")}</h1>
+            <p className="mt-2 text-muted-foreground">{t("orders.subtitle")}</p>
           </div>
 
           {pageError && (
@@ -471,12 +483,12 @@ export default function OrdersPage() {
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
               >
-                {f === "all" && `ทั้งหมด (${orders.length})`}
-                {f === "pending" && `กำลังดำเนินการ (${countOf("pending")})`}
-                {f === "shipped" && `กำลังจัดส่ง (${countOf("shipped")})`}
-                {f === "confirmed" && `ยืนยันแล้ว (${countOf("confirmed")})`}
-                {f === "delivered" && `สำเร็จ (${countOf("delivered")})`}
-                {f === "cancelled" && `ยกเลิก (${countOf("cancelled")})`}
+                {f === "all" && `${t("orders.filterAll")} (${orders.length})`}
+                {f === "pending" && `${t("orders.os.pending")} (${countOf("pending")})`}
+                {f === "shipped" && `${t("orders.os.shipped")} (${countOf("shipped")})`}
+                {f === "confirmed" && `${t("orders.os.confirmed")} (${countOf("confirmed")})`}
+                {f === "delivered" && `${t("orders.os.delivered")} (${countOf("delivered")})`}
+                {f === "cancelled" && `${t("orders.os.cancelled")} (${countOf("cancelled")})`}
               </button>
             ))}
           </div>
@@ -485,10 +497,10 @@ export default function OrdersPage() {
           {filteredOrders.length === 0 ? (
             <div className="rounded-xl border border-border bg-card p-12 text-center">
               <Package className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h2 className="mt-4 text-lg font-semibold text-foreground">ไม่มีคำสั่งซื้อ</h2>
-              <p className="mt-2 text-muted-foreground">คุณยังไม่มีคำสั่งซื้อในหมวดหมู่นี้</p>
+              <h2 className="mt-4 text-lg font-semibold text-foreground">{t("orders.emptyTitle")}</h2>
+              <p className="mt-2 text-muted-foreground">{t("orders.emptyHint")}</p>
               <Button className="mt-6" asChild>
-                <a href="/products">ไปซื้อสินค้า</a>
+                <a href="/products">{t("orders.goShopping")}</a>
               </Button>
             </div>
           ) : (
@@ -509,27 +521,27 @@ export default function OrdersPage() {
                             <span className="font-semibold text-foreground">#{order.id}</span>
                             <Badge className={`${getStatusColor(order.status)} flex items-center gap-1`}>
                               {getStatusIcon(order.status)}
-                              {getStatusLabel(order.status)}
+                              {getStatusLabel(order.status, t)}
                             </Badge>
                             <Badge className={getPaymentStatusColor(order.paymentStatus)}>
-                              {getPaymentStatusLabel(order.paymentStatus)}
+                              {getPaymentStatusLabel(order.paymentStatus, t)}
                             </Badge>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-muted-foreground mt-3">
                             <div>
-                              <span className="text-xs uppercase tracking-wide">วันที่สั่ง</span>
+                              <span className="text-xs uppercase tracking-wide">{t("orders.orderedAt")}</span>
                               <p className="text-foreground font-medium">
-                                {new Date(order.date).toLocaleDateString("th-TH", {
+                                {new Date(order.date).toLocaleDateString(locale, {
                                   year: "numeric", month: "short", day: "numeric",
                                 })}
                               </p>
                             </div>
                             <div>
-                              <span className="text-xs uppercase tracking-wide">จำนวนสินค้า</span>
-                              <p className="text-foreground font-medium">{order.items.length} รายการ</p>
+                              <span className="text-xs uppercase tracking-wide">{t("orders.itemCount")}</span>
+                              <p className="text-foreground font-medium">{t("orders.itemsUnit", { n: order.items.length })}</p>
                             </div>
                             <div>
-                              <span className="text-xs uppercase tracking-wide">ยอดรวม</span>
+                              <span className="text-xs uppercase tracking-wide">{t("orders.total")}</span>
                               <p className="text-foreground font-medium">฿{Number(order.total).toFixed(2)}</p>
                             </div>
                           </div>
@@ -548,7 +560,7 @@ export default function OrdersPage() {
                         <div className="p-6 space-y-6">
                           {/* Items */}
                           <div>
-                            <h3 className="font-semibold text-foreground mb-3">สินค้าในคำสั่ง</h3>
+                            <h3 className="font-semibold text-foreground mb-3">{t("orders.itemsInOrder")}</h3>
                             <div className="space-y-2">
                               {order.items.map((item, idx) => (
                                 <div
@@ -560,21 +572,21 @@ export default function OrdersPage() {
                                     {item.variant && item.variant !== "-" && (
                                       <p className="text-xs text-muted-foreground">{item.variant}</p>
                                     )}
-                                    <p className="text-sm text-muted-foreground">จำนวน: {item.qty}</p>
+                                    <p className="text-sm text-muted-foreground">{t("orders.qtyLabel", { n: item.qty })}</p>
                                   </div>
                                   <div className="flex items-center gap-3">
                                     <div className="text-right">
                                       <p className="text-foreground font-medium">
                                         ฿{(item.qty * Number(item.price)).toFixed(2)}
                                       </p>
-                                      <p className="text-sm text-muted-foreground">฿{Number(item.price).toFixed(2)}/ชิ้น</p>
+                                      <p className="text-sm text-muted-foreground">฿{Number(item.price).toFixed(2)}{t("orders.perPiece")}</p>
                                     </div>
                                     {order.status === "confirmed" && item.productId && (
                                       reviewedKeys.has(reviewKey(order.id, item.productId)) ? (
-                                        <span className="text-sm font-medium text-muted-foreground">รีวิวแล้ว</span>
+                                        <span className="text-sm font-medium text-muted-foreground">{t("orders.reviewed")}</span>
                                       ) : (
                                         <Button size="sm" variant="outline" onClick={() => openReview(order.id, item)} className="gap-2">
-                                          <Star className="h-4 w-4" /> รีวิวสินค้า
+                                          <Star className="h-4 w-4" /> {t("orders.writeReview")}
                                         </Button>
                                       )
                                     )}
@@ -584,15 +596,15 @@ export default function OrdersPage() {
                             </div>
                             <div className="mt-4 pt-3 border-t border-border space-y-1">
                               <div className="flex justify-between text-sm text-muted-foreground">
-                                <span>ค่าสินค้า</span>
+                                <span>{t("orders.itemsCost")}</span>
                                 <span>฿{order.subtotal.toFixed(2)}</span>
                               </div>
                               <div className="flex justify-between text-sm text-muted-foreground">
-                                <span>ค่าจัดส่ง</span>
-                                <span>{order.shippingFee === 0 ? "ฟรี" : `฿${order.shippingFee.toFixed(2)}`}</span>
+                                <span>{t("orders.shippingCost")}</span>
+                                <span>{order.shippingFee === 0 ? t("orders.free") : `฿${order.shippingFee.toFixed(2)}`}</span>
                               </div>
                               <div className="flex justify-between font-semibold text-foreground pt-1 border-t border-border mt-1">
-                                <span>ยอดรวม</span>
+                                <span>{t("orders.grandTotal")}</span>
                                 <span className="text-lg">฿{order.total.toFixed(2)}</span>
                               </div>
                             </div>
@@ -600,7 +612,7 @@ export default function OrdersPage() {
 
                           {/* Delivery Info */}
                           <div>
-                            <h3 className="font-semibold text-foreground mb-3">ข้อมูลจัดส่ง</h3>
+                            <h3 className="font-semibold text-foreground mb-3">{t("orders.deliveryInfo")}</h3>
                             <div className="bg-muted/30 rounded-lg p-4 space-y-1">
                               <p className="text-foreground">{order.customer}</p>
                               <p className="text-muted-foreground">{order.phone}</p>
@@ -610,16 +622,16 @@ export default function OrdersPage() {
 
                           {/* Payment Info */}
                           <div>
-                            <h3 className="font-semibold text-foreground mb-3">ข้อมูลการชำระเงิน</h3>
+                            <h3 className="font-semibold text-foreground mb-3">{t("orders.paymentInfo")}</h3>
                             <div className="bg-muted/30 rounded-lg p-4 space-y-3">
                               <div className="flex justify-between">
-                                <span className="text-muted-foreground">วิธีชำระเงิน</span>
+                                <span className="text-muted-foreground">{t("orders.paymentMethod")}</span>
                                 <span className="text-foreground font-medium">{order.paymentMethod || "-"}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-muted-foreground">สถานะชำระเงิน</span>
+                                <span className="text-muted-foreground">{t("orders.paymentStatus")}</span>
                                 <span className={`font-medium ${getPaymentStatusColor(order.paymentStatus)} px-3 py-1 rounded-lg`}>
-                                  {getPaymentStatusLabel(order.paymentStatus)}
+                                  {getPaymentStatusLabel(order.paymentStatus, t)}
                                 </span>
                               </div>
                               {order.paymentSlipUrl && (
@@ -630,7 +642,7 @@ export default function OrdersPage() {
                                     onClick={() => handleViewSlip(order.paymentSlipUrl!)}
                                     className="gap-2 w-full"
                                   >
-                                    ดูสลิปการโอนเงิน
+                                    {t("orders.viewSlip")}
                                   </Button>
                                 </div>
                               )}
@@ -638,10 +650,9 @@ export default function OrdersPage() {
                               {order.paymentStatus === "rejected" && (
                                 <div className="pt-3 border-t border-border space-y-3">
                                   <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
-                                    <p className="text-sm font-medium text-destructive">สลิปไม่ถูกต้อง</p>
+                                    <p className="text-sm font-medium text-destructive">{t("orders.slipRejectedTitle")}</p>
                                     <p className="mt-1 text-sm text-foreground">
-                                      {order.paymentRejectReason ||
-                                        "แอดมินแจ้งว่าสลิปไม่ถูกต้อง กรุณาอัปโหลดสลิปใหม่"}
+                                      {order.paymentRejectReason || t("orders.slipRejectedDefault")}
                                     </p>
                                   </div>
 
@@ -658,13 +669,13 @@ export default function OrdersPage() {
                                       className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm hover:bg-muted"
                                     >
                                       <Upload className="h-4 w-4" />
-                                      เลือกสลิปใหม่
+                                      {t("orders.chooseNewSlip")}
                                     </label>
 
                                     {reupload.orderId === order.id && reupload.preview && (
                                       <img
                                         src={reupload.preview}
-                                        alt="ตัวอย่างสลิปใหม่"
+                                        alt={t("orders.newSlipPreview")}
                                         className="mt-3 max-h-48 w-full rounded-lg border border-border object-contain"
                                       />
                                     )}
@@ -679,7 +690,7 @@ export default function OrdersPage() {
                                       }
                                       onClick={() => submitReupload(order.id)}
                                     >
-                                      {reupload.busy ? "กำลังอัปโหลด..." : "อัปโหลดสลิปใหม่"}
+                                      {reupload.busy ? t("orders.uploading") : t("orders.reuploadSlip")}
                                     </Button>
                                   </div>
                                 </div>
@@ -687,10 +698,10 @@ export default function OrdersPage() {
 
                               {order.slips && order.slips.length > 1 && (
                                 <div className="pt-3 border-t border-border">
-                                  <p className="mb-2 text-sm font-medium text-foreground">ประวัติสลิป</p>
+                                  <p className="mb-2 text-sm font-medium text-foreground">{t("orders.slipHistory")}</p>
                                   <div className="space-y-2">
                                     {order.slips.map((slip, i) => {
-                                      const badge = getSlipBadge(slip.status)
+                                      const badge = getSlipBadge(slip.status, t)
                                       return (
                                         <div
                                           key={i}
@@ -698,7 +709,7 @@ export default function OrdersPage() {
                                         >
                                           <img
                                             src={slip.url}
-                                            alt={`สลิป ${i + 1}`}
+                                            alt={t("orders.slipN", { n: i + 1 })}
                                             className="h-14 w-14 flex-none cursor-pointer rounded object-cover"
                                             onClick={() => handleViewSlip(slip.url)}
                                           />
@@ -711,7 +722,7 @@ export default function OrdersPage() {
                                               </span>
                                               {slip.uploadedAt && (
                                                 <span className="text-xs text-muted-foreground">
-                                                  {new Date(slip.uploadedAt).toLocaleDateString("th-TH")}
+                                                  {new Date(slip.uploadedAt).toLocaleDateString(locale)}
                                                 </span>
                                               )}
                                             </div>
@@ -739,7 +750,7 @@ export default function OrdersPage() {
                                 className="gap-2"
                               >
                                 <Download className="h-4 w-4" />
-                                ดาวน์โหลดใบเสร็จ
+                                {t("orders.downloadReceipt")}
                               </Button>
                             )}
                             {order.status === "pending" &&
@@ -753,7 +764,7 @@ export default function OrdersPage() {
                                   className="gap-2 border-red-200 text-destructive hover:text-destructive"
                                 >
                                   <Ban className="h-4 w-4" />
-                                  ยกเลิกคำสั่งซื้อ
+                                  {t("orders.cancelOrder")}
                                 </Button>
                               )}
                           </div>
@@ -772,32 +783,32 @@ export default function OrdersPage() {
       <Dialog open={Boolean(reviewItem)} onOpenChange={(open) => !open && setReviewItem(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>รีวิว {reviewItem?.name}</DialogTitle>
+            <DialogTitle>{t("orders.reviewTitle", { name: reviewItem?.name ?? "" })}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
             <div>
-              <p className="mb-2 text-sm font-medium text-foreground">ให้คะแนนสินค้า</p>
-              <div className="flex gap-2" role="radiogroup" aria-label="คะแนนสินค้า">
+              <p className="mb-2 text-sm font-medium text-foreground">{t("orders.rateProduct")}</p>
+              <div className="flex gap-2" role="radiogroup" aria-label={t("orders.ratingAria")}>
                 {[1, 2, 3, 4, 5].map((rating) => (
-                  <button key={rating} type="button" onClick={() => setReviewRating(rating)} aria-label={`${rating} ดาว`} aria-pressed={reviewRating === rating}>
+                  <button key={rating} type="button" onClick={() => setReviewRating(rating)} aria-label={t("orders.starN", { n: rating })} aria-pressed={reviewRating === rating}>
                     <Star className={`h-8 w-8 transition-colors ${rating <= reviewRating ? "fill-primary text-primary" : "text-muted-foreground"}`} />
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <label htmlFor="review-comment" className="mb-2 block text-sm font-medium text-foreground">ความคิดเห็น</label>
+              <label htmlFor="review-comment" className="mb-2 block text-sm font-medium text-foreground">{t("orders.comment")}</label>
               <textarea
                 id="review-comment"
                 value={reviewComment}
                 onChange={(event) => setReviewComment(event.target.value)}
-                placeholder="บอกเล่าประสบการณ์การใช้งานของคุณ"
+                placeholder={t("orders.commentPlaceholder")}
                 className="min-h-28 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             {reviewError && <p className="text-sm text-destructive">{reviewError}</p>}
             <Button className="w-full" disabled={reviewRating === 0 || isSubmittingReview} onClick={submitReview}>
-              {isSubmittingReview ? "กำลังส่ง..." : "ส่งรีวิว"}
+              {isSubmittingReview ? t("orders.submittingReview") : t("orders.submitReview")}
             </Button>
           </div>
         </DialogContent>
@@ -807,7 +818,7 @@ export default function OrdersPage() {
       <Dialog open={Boolean(slipPreviewUrl)} onOpenChange={(open) => !open && setSlipPreviewUrl(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>สลิปการโอนเงิน</DialogTitle>
+            <DialogTitle>{t("orders.slipDialogTitle")}</DialogTitle>
           </DialogHeader>
           {slipPreviewUrl && (
             <img
@@ -823,11 +834,11 @@ export default function OrdersPage() {
       <Dialog open={cancelTarget != null} onOpenChange={(open) => !open && setCancelTarget(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>ยกเลิกคำสั่งซื้อ</DialogTitle>
+            <DialogTitle>{t("orders.cancelConfirmTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              ยืนยันการยกเลิก? สต็อกสินค้าจะถูกคืนและไม่สามารถกู้คืนคำสั่งซื้อได้
+              {t("orders.cancelConfirmBody")}
             </p>
             {cancelState.error && <p className="text-sm text-destructive">{cancelState.error}</p>}
             <div className="flex gap-2">
@@ -837,14 +848,14 @@ export default function OrdersPage() {
                 onClick={() => setCancelTarget(null)}
                 disabled={cancelState.busy}
               >
-                ไม่ยกเลิก
+                {t("orders.keepOrder")}
               </Button>
               <Button
                 className="flex-1 bg-destructive text-white hover:bg-destructive/90"
                 onClick={confirmCancel}
                 disabled={cancelState.busy}
               >
-                {cancelState.busy ? "กำลังยกเลิก..." : "ยืนยันยกเลิก"}
+                {cancelState.busy ? t("orders.cancelling") : t("orders.confirmCancel")}
               </Button>
             </div>
           </div>

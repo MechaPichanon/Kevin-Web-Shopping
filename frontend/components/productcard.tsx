@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Heart } from "lucide-react";
 import { useWishlist } from "@/lib/wishlist-context";
+import { useLang } from "@/lib/language-context";
 
 type Product = {
   id: number;
@@ -32,10 +33,11 @@ export default function ProductCard({
 }) {
   const router = useRouter();
   const { toggleItem, isInWishlist } = useWishlist();
+  const { t, locale } = useLang();
   const isLiked = isInWishlist(product.product_id ?? String(product.id))
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("th-TH", {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: "THB",
       minimumFractionDigits: 0,
@@ -55,7 +57,7 @@ export default function ProductCard({
     const user = JSON.parse(localStorage.getItem("user") || "{}");
 
     if (!token || !user.id) {
-      alert("กรุณาเข้าสู่ระบบก่อนเพิ่มสินค้า");
+      alert(t("product.loginRequired"));
       router.push("/login");
       return;
     }
@@ -77,20 +79,20 @@ export default function ProductCard({
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || "เพิ่มสินค้าไม่สำเร็จ");
+        alert(t("product.addToCartFailed"));
         return;
       }
 
       if (onAdded) {
         onAdded({ name: product.name, name_en: product.name_en, price: product.price });
       } else {
-        alert(data.message || "เพิ่มสินค้าสำเร็จ");
+        alert(t("product.addToCartSuccess"));
       }
 
       window.dispatchEvent(new Event("cartUpdated"));
     } catch (err) {
       console.error("Add to cart error:", err);
-      alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+      alert(t("product.connectionError"));
     }
   };
 
@@ -121,7 +123,7 @@ export default function ProductCard({
           <button
             onClick={handleToggleWishlist}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-md opacity-0 transition-opacity group-hover:opacity-100"
-            aria-label={isLiked ? "ลบออกจาก Wishlist" : "เพิ่มใน Wishlist"}
+            aria-label={isLiked ? t("product.removeFromWishlist") : t("product.addToWishlist")}
           >
             <Heart
               className={`h-4 w-4 transition-colors ${
@@ -140,7 +142,7 @@ export default function ProductCard({
               soldOut ? "cursor-not-allowed bg-black/40" : "bg-black"
             }`}
           >
-            {soldOut ? "สินค้าหมด · Sold out" : "เพิ่มลงตะกร้า · Add to cart"}
+            {soldOut ? t("product.soldOut") : t("product.addToCart")}
           </button>
         </div>
       </div>
@@ -150,14 +152,14 @@ export default function ProductCard({
         <h3 className="text-xs text-[#9a8a7a] uppercase">{product.category}</h3>
         <h3 className="line-clamp-2 font-medium">{product.name}</h3>
 
-        {product.name_en && (
+        {product.name_en && product.name_en !== product.name && (
           <p className="line-clamp-1 text-xs text-[#b0a495]">{product.name_en}</p>
         )}
 
         <p className="mt-1 text-lg font-bold">{formatPrice(product.price)}</p>
 
         <p className={`text-sm ${soldOut ? "font-semibold text-red-600" : "text-[#9a8a7a]"}`}>
-          {soldOut ? "สินค้าหมด" : "มีสินค้า"}
+          {soldOut ? t("product.soldOut") : t("product.inStock")}
         </p>
       </div>
     </>

@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getToken } from "@/lib/auth";
 import type { ShippingAddress } from "@/types/address";
+import { useLang } from "@/lib/language-context";
 
 // ─────────────────────────────────────────────
 // Types
@@ -54,11 +55,7 @@ const emptyForm: ProfileForm = {
 };
 
 const menuItems = [
-  { icon: Package, label: "คำสั่งซื้อของฉัน", href: "/orders" },
-  // { icon: Heart, label: "สินค้าที่ชอบ", href: "/wishlist", badge: "12" },
-  // { icon: CreditCard, label: "วิธีการชำระเงิน", href: "/payment-methods" },
-  // { icon: MapPin, label: "ที่อยู่จัดส่ง", href: "/addresses" },
-  // { icon: Lock, label: "เปลี่ยนรหัสผ่าน", href: "/change-password" },
+  { icon: Package, labelKey: "profile.myOrders" as const, href: "/orders" },
 ];
 
 // ─────────────────────────────────────────────
@@ -66,6 +63,7 @@ const menuItems = [
 // ─────────────────────────────────────────────
 export default function ProfilePage() {
   const router = useRouter();
+  const { t } = useLang();
 
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
 
@@ -119,7 +117,8 @@ export default function ProfilePage() {
           });
         }
       })
-      .catch(() => setProfileError("ไม่สามารถโหลดข้อมูลได้"));
+      .catch(() => setProfileError(t("profile.loadError")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // ─────────────────────────────────────────────
@@ -150,7 +149,7 @@ export default function ProfilePage() {
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        setProfileError(data.error || "บันทึกไม่สำเร็จ");
+        setProfileError(data.error || t("profile.saveFailed"));
         return;
       }
 
@@ -166,9 +165,9 @@ export default function ProfilePage() {
         postalCode: data.user.postalCode || "",
       });
       setIsEditing(false);
-      alert("บันทึกสำเร็จ");
+      alert(t("profile.saved"));
     } catch {
-      setProfileError("ไม่สามารถบันทึกข้อมูลได้");
+      setProfileError(t("profile.saveFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -198,11 +197,11 @@ export default function ProfilePage() {
     setPasswordSuccess("");
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError("รหัสผ่านใหม่ไม่ตรงกัน");
+      setPasswordError(t("profile.pwMismatch"));
       return;
     }
     if (passwordForm.newPassword.length < 6) {
-      setPasswordError("รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร");
+      setPasswordError(t("profile.pwTooShort"));
       return;
     }
 
@@ -225,14 +224,14 @@ export default function ProfilePage() {
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        setPasswordError(data.error || "เปลี่ยนรหัสผ่านไม่สำเร็จ");
+        setPasswordError(data.error || t("profile.pwChangeFailed"));
         return;
       }
 
-      setPasswordSuccess("เปลี่ยนรหัสผ่านสำเร็จ");
+      setPasswordSuccess(t("profile.pwChangeSuccess"));
       setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
     } catch {
-      setPasswordError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+      setPasswordError(t("profile.connectionError"));
     } finally {
       setIsChangingPassword(false);
     }
@@ -244,7 +243,7 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground">กำลังโหลด...</p>
+        <p className="text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
@@ -259,8 +258,8 @@ export default function ProfilePage() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="font-serif text-3xl font-bold text-foreground">บัญชีของฉัน</h1>
-            <p className="mt-2 text-muted-foreground">จัดการข้อมูลส่วนตัวและการตั้งค่าของคุณ</p>
+            <h1 className="font-serif text-3xl font-bold text-foreground">{t("profile.accountTitle")}</h1>
+            <p className="mt-2 text-muted-foreground">{t("profile.accountSubtitle")}</p>
           </div>
 
           <div className="grid gap-8 lg:grid-cols-4">
@@ -288,13 +287,13 @@ export default function ProfilePage() {
               <div className="space-y-2">
                 {menuItems.map((item) => (
                   <a
-                    key={item.label}
+                    key={item.href}
                     href={item.href}
                     className="flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-muted"
                   >
                     <div className="flex items-center gap-3">
                       <item.icon className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-sm font-medium text-foreground">{item.label}</span>
+                      <span className="text-sm font-medium text-foreground">{t(item.labelKey)}</span>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </a>
@@ -315,8 +314,8 @@ export default function ProfilePage() {
                       : "text-muted-foreground hover:text-foreground"
                       }`}
                   >
-                    {tab === "profile" && "ข้อมูลส่วนตัว"}
-                    {tab === "security" && "ความปลอดภัย"}
+                    {tab === "profile" && t("profile.tabProfile")}
+                    {tab === "security" && t("profile.tabSecurity")}
                   </button>
                 ))}
               </div>
@@ -325,19 +324,19 @@ export default function ProfilePage() {
               {activeTab === "profile" && (
                 <div className="rounded-xl border border-border bg-card p-6">
                   <div className="mb-6 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-foreground">ข้อมูลส่วนตัว</h3>
+                    <h3 className="text-lg font-semibold text-foreground">{t("profile.personalInfo")}</h3>
                     {!isEditing ? (
                       <Button variant="outline" onClick={() => setIsEditing(true)}>
-                        แก้ไขข้อมูล
+                        {t("profile.editInfo")}
                       </Button>
                     ) : (
                       <div className="flex gap-2">
                         <Button variant="ghost" onClick={handleCancelEdit} disabled={isSaving}>
-                          ยกเลิก
+                          {t("common.cancel")}
                         </Button>
                         <Button onClick={handleSave} disabled={isSaving} className="gap-2">
                           <Save className="h-4 w-4" />
-                          {isSaving ? "กำลังบันทึก..." : "บันทึก"}
+                          {isSaving ? t("profile.saving") : t("profile.save")}
                         </Button>
                       </div>
                     )}
@@ -350,7 +349,7 @@ export default function ProfilePage() {
                   <div className="grid gap-6 sm:grid-cols-2">
                     {/* ชื่อ */}
                     <div className="space-y-2">
-                      <Label htmlFor="firstName">ชื่อ</Label>
+                      <Label htmlFor="firstName">{t("profile.firstName")}</Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -365,7 +364,7 @@ export default function ProfilePage() {
 
                     {/* นามสกุล */}
                     <div className="space-y-2">
-                      <Label htmlFor="lastName">นามสกุล</Label>
+                      <Label htmlFor="lastName">{t("profile.lastName")}</Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -380,7 +379,7 @@ export default function ProfilePage() {
 
                     {/* อีเมล */}
                     <div className="space-y-2">
-                      <Label htmlFor="email">อีเมล</Label>
+                      <Label htmlFor="email">{t("profile.email")}</Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -396,7 +395,7 @@ export default function ProfilePage() {
 
                     {/* เบอร์โทร (กรองเฉพาะตัวเลข) */}
                     <div className="space-y-2">
-                      <Label htmlFor="phone">เบอร์โทรศัพท์</Label>
+                      <Label htmlFor="phone">{t("profile.phone")}</Label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -411,7 +410,7 @@ export default function ProfilePage() {
                     </div>
                     {/* ที่อยู่ */}
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="addressLine1">ที่อยู่</Label>
+                      <Label htmlFor="addressLine1">{t("profile.address")}</Label>
                       <div className="relative">
                         <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -420,14 +419,14 @@ export default function ProfilePage() {
                           onChange={(e) => handleChange("addressLine1", e.target.value)}
                           disabled={!isEditing || isSaving}
                           className="pl-10"
-                          placeholder="บ้านเลขที่ ถนน ตำบล/แขวง อำเภอ/เขต"
+                          placeholder={t("profile.addressPlaceholder")}
                         />
                       </div>
                     </div>
 
                     {/* ที่อยู่เพิ่มเติม (ไม่บังคับ) */}
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="addressLine2">ที่อยู่เพิ่มเติม (ถ้ามี)</Label>
+                      <Label htmlFor="addressLine2">{t("profile.addressLine2")}</Label>
                       <div className="relative">
                         <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -436,26 +435,26 @@ export default function ProfilePage() {
                           onChange={(e) => handleChange("addressLine2", e.target.value)}
                           disabled={!isEditing || isSaving}
                           className="pl-10"
-                          placeholder="ชั้น, ห้อง, อาคาร (ไม่บังคับ)"
+                          placeholder={t("profile.addressLine2Placeholder")}
                         />
                       </div>
                     </div>
 
                     {/* จังหวัด */}
                     <div className="space-y-2">
-                      <Label htmlFor="province">จังหวัด</Label>
+                      <Label htmlFor="province">{t("profile.province")}</Label>
                       <Input
                         id="province"
                         value={form.province}
                         onChange={(e) => handleChange("province", e.target.value)}
                         disabled={!isEditing || isSaving}
-                        placeholder="จังหวัด"
+                        placeholder={t("profile.province")}
                       />
                     </div>
 
                     {/* รหัสไปรษณีย์ */}
                     <div className="space-y-2">
-                      <Label htmlFor="postalCode">รหัสไปรษณีย์</Label>
+                      <Label htmlFor="postalCode">{t("profile.postalCode")}</Label>
                       <Input
                         id="postalCode"
                         value={form.postalCode}
@@ -474,7 +473,7 @@ export default function ProfilePage() {
                 <div className="space-y-6">
                   {/* เปลี่ยนรหัสผ่าน */}
                   <div className="rounded-xl border border-border bg-card p-6">
-                    <h3 className="mb-4 text-lg font-semibold text-foreground">เปลี่ยนรหัสผ่าน</h3>
+                    <h3 className="mb-4 text-lg font-semibold text-foreground">{t("profile.changePassword")}</h3>
 
                     {passwordError && (
                       <p className="mb-3 text-sm text-destructive">{passwordError}</p>
@@ -485,7 +484,7 @@ export default function ProfilePage() {
 
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="currentPassword">รหัสผ่านปัจจุบัน</Label>
+                        <Label htmlFor="currentPassword">{t("profile.currentPassword")}</Label>
                         <Input
                           id="currentPassword"
                           type="password"
@@ -496,7 +495,7 @@ export default function ProfilePage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="newPassword">รหัสผ่านใหม่</Label>
+                        <Label htmlFor="newPassword">{t("profile.newPassword")}</Label>
                         <Input
                           id="newPassword"
                           type="password"
@@ -507,7 +506,7 @@ export default function ProfilePage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="confirmPassword">ยืนยันรหัสผ่านใหม่</Label>
+                        <Label htmlFor="confirmPassword">{t("profile.confirmNewPassword")}</Label>
                         <Input
                           id="confirmPassword"
                           type="password"
@@ -522,7 +521,7 @@ export default function ProfilePage() {
                         onClick={handleChangePassword}
                         disabled={isChangingPassword}
                       >
-                        {isChangingPassword ? "กำลังอัปเดต..." : "อัปเดตรหัสผ่าน"}
+                        {isChangingPassword ? t("profile.updatingPassword") : t("profile.updatePassword")}
                       </Button>
                     </div>
                   </div>

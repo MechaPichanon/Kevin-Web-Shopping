@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useLang } from "@/lib/language-context";
 
 type CategoryItem = {
   category: string;
@@ -11,6 +12,7 @@ type CategoryItem = {
 
 export default function CategoryShowcase() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const { t, pick } = useLang();
 
   useEffect(() => {
     fetch("http://localhost:5000/products/categories")
@@ -42,9 +44,9 @@ export default function CategoryShowcase() {
     <section className="bg-[#ece2d6] py-16 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <h2 className="font-serif text-2xl font-semibold text-[#3d3025] sm:text-3xl">
-          หมวดหมู่สินค้า
+          {t("home.categoriesTitle")}
         </h2>
-        <p className="mt-1 font-mono text-xs text-[#9a8a7a]">Shop by category</p>
+        <p className="mt-1 font-mono text-xs text-[#9a8a7a]">{t("home.categoriesSubtitle")}</p>
 
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {categories.map((cat, i) => (
@@ -64,7 +66,7 @@ export default function CategoryShowcase() {
             >
               <div className="absolute bottom-0 left-0 right-0 flex flex-col p-[18px]">
                 <span className="font-serif text-xl font-semibold text-white">
-                  {cat.category_th}
+                  {pick(cat.category_th, cat.category)}
                 </span>
                 <span className="font-mono mt-0.5 text-[11px] text-white/80">
                   {cat.category}

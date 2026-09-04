@@ -7,6 +7,7 @@ import {
   IMAGE_SEARCH_STORAGE_KEY,
   type ImageSearchResult,
 } from "@/components/ImageSearchButton";
+import { useLang } from "@/lib/language-context";
 
 type StoredImageSearch = {
   previewSrc: string;
@@ -20,6 +21,7 @@ function formatPrice(price: number | null) {
 
 export default function ImageSearchResultsPage() {
   const router = useRouter();
+  const { t } = useLang();
   const [data, setData] = useState<StoredImageSearch | null>(null);
   const [notFound, setNotFound] = useState(false);
 
@@ -65,29 +67,29 @@ export default function ImageSearchResultsPage() {
         >
           <path d="M15 18l-6-6 6-6"></path>
         </svg>
-        Back to shop
+        {t("search.backToSearch")}
       </button>
 
       <div className="flex items-center gap-3.5 mb-7 bg-white border border-[#e0d5c8] rounded-2xl px-4.5 py-3.5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={data.previewSrc}
-          alt="Uploaded search photo"
+          alt={t("search.yourImage")}
           className="w-14 h-14 object-cover rounded-[10px] border border-[#e0d5c8]"
         />
         <div>
           <div className="text-xs text-[#8b6f5a] mb-0.5">
-            Visual search results for
+            {t("search.byImageSubtitle")}
           </div>
           <div className="text-[15px] font-bold text-[#3a2e22]">
-            your uploaded photo
+            {t("search.yourImage")}
           </div>
         </div>
       </div>
 
       {data.results.length === 0 ? (
         <p className="text-sm text-[#8b6f5a]">
-          No similar products found. Try a different photo.
+          {t("search.noImageResults")}
         </p>
       ) : (
         <div className="grid gap-6 grid-cols-2 lg:grid-cols-4">
@@ -105,7 +107,7 @@ export default function ImageSearchResultsPage() {
                   className="w-full h-full object-cover"
                 />
                 <span className="absolute top-2 left-2 bg-[#8b5e3c] text-white text-[10px] font-bold px-2 py-1 rounded-full">
-                  {Math.round(item.similarity * 100)}% match
+                  {t("search.matchScore", { n: Math.round(item.similarity * 100) })}
                 </span>
               </div>
               <div className="px-4 py-3.5">

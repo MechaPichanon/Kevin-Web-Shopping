@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { useLang } from "@/lib/language-context";
 
 export default function HeroBanner() {
+  const { t } = useLang();
+
   return (
     <section
       className="relative overflow-hidden py-24 sm:py-32"
@@ -14,23 +19,22 @@ export default function HeroBanner() {
     >
       <div className="relative mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
         <span className="font-mono text-xs font-medium uppercase tracking-[0.25em] text-[#8b6f5a]">
-          ร้านเควิน · Kevin
+          {t("hero.eyebrow")}
         </span>
 
         <h1 className="font-serif mt-4 text-4xl font-semibold text-[#3d3025] sm:text-6xl">
-          เสื้อผ้าคุณภาพดี
-          <br className="hidden sm:block" /> ราคาที่คุณเข้าถึงได้
+          {t("hero.title")}
         </h1>
 
         <p className="font-fraunces mx-auto mt-4 max-w-xl text-lg italic text-[#8b6f5a]">
-          Quality clothing at a price you can afford
+          {t("hero.subtitle")}
         </p>
 
         <Link
           href="/products"
           className="mt-8 inline-flex items-center gap-2 rounded-lg bg-[#8b5e3c] px-6 py-3 font-medium text-white transition hover:bg-[#7a5233]"
         >
-          ช้อปเลย · Shop now
+          {t("hero.cta")}
           <ArrowRight className="h-4 w-4" />
         </Link>
       </div>

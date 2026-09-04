@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useCart } from "@/lib/cart-context"
 import { colorToHex } from "@/lib/color-map"
+import { useLang } from "@/lib/language-context"
 type CartItem = {
     cart_item_id: number;
     quantity: number;
@@ -25,6 +26,7 @@ type CartItem = {
 
 export default function CartPage() {
     const [items, setItems] = useState<CartItem[]>([]);
+    const { t, pick, locale } = useLang();
 
     const loadCart = async () => {
         try {
@@ -106,7 +108,7 @@ export default function CartPage() {
         totalPrice + shippingFee;
 
     const formatPrice = (price: number) =>
-        new Intl.NumberFormat("th-TH", {
+        new Intl.NumberFormat(locale, {
             style: "currency",
             currency: "THB",
             minimumFractionDigits: 0,
@@ -115,22 +117,22 @@ export default function CartPage() {
     return (
         <div className="min-h-screen bg-[#b89f8d] p-8">
             <h1 className="mb-2 text-3xl font-bold">
-                ตะกร้าสินค้า
+                {t("cart.title")}
             </h1>
 
             <p className="mb-6">
-                {items.length} รายการ
+                {t("cart.itemsCount", { n: items.length })}
             </p>
 
             {items.length === 0 ? (
                 <div>
-                    ไม่มีสินค้าในตะกร้า
+                    {t("cart.emptyShort")}
 
                     <Link
                         href="/products"
                         className="ml-4 text-blue-500"
                     >
-                        เลือกซื้อสินค้า
+                        {t("cart.browse")}
                     </Link>
                 </div>
             ) : (
@@ -161,14 +163,14 @@ export default function CartPage() {
                                                 style={{ background: colorToHex(item.color_th || item.color) }}
                                             />
                                             <span>
-                                                สี / Color:{" "}
+                                                {t("cart.color")}:{" "}
                                                 <span className="font-medium text-[#5b3a29]">
-                                                    {item.color_th || item.color}
+                                                    {pick(item.color_th, item.color)}
                                                 </span>
                                             </span>
                                         </span>
                                         <span className="rounded-full border border-[#e4d6c8] bg-[#f0e7de] px-2.5 py-1 text-xs text-[#6B4A38]">
-                                            ไซซ์ / Size:{" "}
+                                            {t("cart.size")}:{" "}
                                             <span className="font-semibold text-[#5b3a29]">
                                                 {item.size}
                                             </span>
@@ -207,7 +209,7 @@ export default function CartPage() {
                                             onClick={() => removeItem(item.cart_item_id)}
                                         >
                                             <Trash2 className="h-3.5 w-3.5" />
-                                            <span className="text-xs">ลบ / Remove</span>
+                                            <span className="text-xs">{t("cart.remove")}</span>
                                         </Button>
                                     </div>
                                 </div>
@@ -220,13 +222,13 @@ export default function CartPage() {
                                             )}
                                         </div>
                                         <div className="mt-0.5 text-xs text-[#9a8571]">
-                                            {formatPrice(Number(item.price))} / ชิ้น
+                                            {formatPrice(Number(item.price))} {t("cart.perPiece")}
                                         </div>
                                     </div>
 
                                     {item.stock <= 3 && (
                                         <span className="rounded-md bg-[#f6e7dc] px-2 py-1 text-[11px] font-medium text-[#a8552f]">
-                                            เหลือ {item.stock} ชิ้น
+                                            {t("detail.stockLeft", { n: item.stock })}
                                         </span>
                                     )}
                                 </div>
@@ -238,28 +240,28 @@ export default function CartPage() {
                             className="inline-flex items-center gap-2 pt-1 text-sm font-medium text-[#6B4A38] hover:text-[#5b3a29]"
                         >
                             <ArrowRight className="h-4 w-4 rotate-180" />
-                            เลือกซื้อสินค้าต่อ / Continue shopping
+                            {t("cart.continueShopping")}
                         </Link>
                     </div>
 
                     <div className="sticky top-24 h-fit rounded-[18px] bg-[#fbf8f5] p-6 shadow-[0_10px_30px_rgba(91,58,41,0.14)]">
                         <h2 className="mb-4 text-lg font-bold text-[#5b3a29]">
-                            สรุปคำสั่งซื้อ / Order Summary
+                            {t("cart.orderSummary")}
                         </h2>
 
                         <div className="flex flex-col gap-[11px] text-sm">
                             <div className="flex justify-between text-[#6B4A38]">
-                                <span>ยอดรวมสินค้า / Subtotal</span>
+                                <span>{t("cart.subtotal")}</span>
                                 <span className="font-semibold text-[#5b3a29]">
                                     {formatPrice(totalPrice)}
                                 </span>
                             </div>
 
                             <div className="flex justify-between text-[#6B4A38]">
-                                <span>ค่าจัดส่ง / Shipping</span>
+                                <span>{t("cart.shipping")}</span>
                                 <span className="font-semibold text-[#5b3a29]">
                                     {shippingFee === 0
-                                        ? "ฟรี / Free"
+                                        ? t("cart.free")
                                         : formatPrice(shippingFee)}
                                 </span>
                             </div>
@@ -269,7 +271,7 @@ export default function CartPage() {
 
                         <div className="mb-5 flex items-baseline justify-between">
                             <span className="text-[15px] font-semibold text-[#5b3a29]">
-                                ยอดชำระทั้งหมด / Total
+                                {t("cart.total")}
                             </span>
                             <span className="text-2xl font-bold text-[#5b3a29]">
                                 {formatPrice(grandTotal)}
@@ -280,12 +282,12 @@ export default function CartPage() {
                             href="/checkout"
                             className="block w-full rounded-[13px] bg-[#8b5e3c] py-[15px] text-center text-[15px] font-semibold text-white shadow-[0_6px_16px_rgba(139,94,60,0.34)] transition-colors hover:bg-[#7a4f30]"
                         >
-                            ดำเนินการชำระเงิน / Checkout →
+                            {t("cart.checkout")} →
                         </Link>
 
                         <div className="mt-3.5 flex items-center justify-center gap-1.5 text-xs text-[#9a8571]">
                             <Lock className="h-3 w-3" />
-                            ชำระเงินปลอดภัย · Secure checkout
+                            {t("cart.secureCheckout")}
                         </div>
                     </div>
                 </div>

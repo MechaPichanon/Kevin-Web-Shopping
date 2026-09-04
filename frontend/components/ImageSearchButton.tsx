@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLang } from "@/lib/language-context";
 
 export type ImageSearchResult = {
   product_id: string;
@@ -15,6 +16,7 @@ export const IMAGE_SEARCH_STORAGE_KEY = "kevin_image_search_result";
 
 export default function ImageSearchButton() {
   const router = useRouter();
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<"dropzone" | "loading">("dropzone");
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -58,7 +60,7 @@ export default function ImageSearchButton() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "ค้นหาไม่สำเร็จ / Search failed");
+        setError(t("imageSearch.failed"));
         setPhase("dropzone");
         return;
       }
@@ -69,7 +71,7 @@ export default function ImageSearchButton() {
       setOpen(false);
       router.push("/search/by-image");
     } catch {
-      setError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ / Unable to reach server");
+      setError(t("imageSearch.connectionError"));
       setPhase("dropzone");
     }
   };
@@ -114,8 +116,8 @@ export default function ImageSearchButton() {
   return (
     <div className="relative" ref={panelRef}>
       <button
-        aria-label="Search by image"
-        title="Search by image"
+        aria-label={t("imageSearch.title")}
+        title={t("imageSearch.title")}
         onClick={toggleOpen}
         className={`p-2 rounded-full transition-colors text-[#8b6f5a] hover:bg-[#ece2d6] ${
           open ? "bg-[#ece2d6]" : "bg-transparent"
@@ -143,10 +145,10 @@ export default function ImageSearchButton() {
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-semibold text-[#3a2e22]">
-              Search by image
+              {t("imageSearch.title")}
             </span>
             <button
-              aria-label="Close"
+              aria-label={t("common.close")}
               onClick={closePanel}
               className="w-6 h-6 rounded-full text-[#8b6f5a] hover:bg-[#ece2d6] flex items-center justify-center transition-colors"
             >
@@ -176,7 +178,7 @@ export default function ImageSearchButton() {
               )}
               <div className="w-5 h-5 rounded-full border-[3px] border-[#ece2d6] border-t-[#8b5e3c] animate-spin mb-2.5"></div>
               <div className="text-[13px] text-[#8b6f5a] font-medium">
-                Searching for similar shirts...
+                {t("imageSearch.searching")}
               </div>
             </div>
           ) : (
@@ -207,10 +209,10 @@ export default function ImageSearchButton() {
                 </svg>
               </div>
               <div className="text-[13.5px] font-semibold text-[#3a2e22] mb-1">
-                Drag an image here
+                {t("imageSearch.dragHere")}
               </div>
               <div className="text-xs text-[#8b6f5a]">
-                or click to browse — search starts instantly
+                {t("imageSearch.orBrowse")}
               </div>
               <input
                 ref={fileInputRef}

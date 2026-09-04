@@ -107,8 +107,9 @@ def _is_thai(text: str) -> bool:
     return bool(re.search(r'[฀-๿]', text or ''))
 
 
-def _fetch_store_policy(message: str = "") -> str:
-    use_thai = _is_thai(message)
+def _fetch_store_policy(message: str = "", use_thai: bool | None = None) -> str:
+    if use_thai is None:
+        use_thai = _is_thai(message)
     content_col = "content_th" if use_thai else "content_en"
     fallback = _STORE_POLICY_FALLBACK_TH if use_thai else _STORE_POLICY_FALLBACK_EN
 
@@ -527,11 +528,17 @@ def is_smalltalk_strict(message: str) -> bool:
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
+    # Optional explicit UI language ("th" | "en") from the storefront language toggle.
+    # When absent/invalid, fall back to per-message Thai-script detection.
+    lang: Optional[str] = None
 
 @app.post("/chat")
 def chat(request: ChatRequest):
     conversation_id = _get_or_create_conversation_id(request.conversation_id)
     logger.info(f"Incoming message: {request.message}")
+
+    # Response language: honour the explicit toggle when provided, else detect from the message.
+    use_thai = (request.lang == "th") if request.lang in ("th", "en") else _is_thai(request.message)
 
     # Auto-expire stale context
     _session = _CONVERSATIONS[conversation_id]
@@ -545,7 +552,7 @@ def chat(request: ChatRequest):
         logger.info("Smalltalk detected; returning a friendly greeting.")
         smalltalk_reply = (
             "สวัสดีค่ะ! ฉันช่วยแนะนำเสื้อผ้าของร้านได้ค่ะ คุณกำลังมองหาอะไรอยู่คะ?"
-            if _is_thai(request.message)
+            if use_thai
             else "Hi! I can help you find and compare our shirts and pants. What are you looking for today?"
         )
         return {
@@ -577,7 +584,7 @@ def chat(request: ChatRequest):
         else:
             out_msg = (
                 "ขอโทษค่ะ ฉันช่วยได้แค่เรื่องสินค้า ขนาด ราคา และนโยบายร้านค้าเท่านั้นค่ะ 😊"
-                if _is_thai(request.message)
+                if use_thai
                 else OUT_OF_SCOPE_RESPONSE
             )
             return {"reply": out_msg, "intent": intent, "quick_replies": QUICK_REPLIES_BY_INTENT["OUT_OF_SCOPE"], "conversation_id": conversation_id}
@@ -598,7 +605,7 @@ def chat(request: ChatRequest):
             logger.warning("Out of scope detected (no retrieval results, no product signal).")
             out_msg = (
                 "ขอโทษค่ะ ฉันช่วยได้แค่เรื่องสินค้า ขนาด ราคา และนโยบายร้านค้าเท่านั้นค่ะ 😊"
-                if _is_thai(request.message)
+                if use_thai
                 else OUT_OF_SCOPE_RESPONSE
             )
             return {
@@ -609,7 +616,7 @@ def chat(request: ChatRequest):
         else:
             no_product_msg = (
                 "ขอโทษค่ะ ไม่พบสินค้าที่ตรงกับที่คุณค้นหา ลองค้นหาด้วยคำอื่นได้เลยค่ะ"
-                if _is_thai(request.message)
+                if use_thai
                 else "Sorry, I couldn't find any products related to your query."
             )
             return {
@@ -635,7 +642,7 @@ def chat(request: ChatRequest):
         if any(k in _msg_lower for k in _discount_kw):
             extra_context = f"\n{_fetch_active_discounts()}"
         else:
-            extra_context = f"\nStore Policy:\n{_fetch_store_policy(request.message)}"
+            extra_context = f"\nStore Policy:\n{_fetch_store_policy(request.message, use_thai)}"
     elif intent == Intent.SIZE_GUIDE and product_ids:
         measurement_data = _fetch_measurement_context(product_ids)
         if measurement_data:
@@ -665,7 +672,7 @@ def chat(request: ChatRequest):
         "If comparing products, highlight differences in price, material, sizes, and colors.",
     )
 
-    if _is_thai(request.message):
+    if use_thai:
         lang_instruction = (
             "CRITICAL LANGUAGE RULE: Respond ONLY in Thai (ภาษาไทย). "
             "NEVER use Chinese (中文), Japanese, Korean, or any other language. "

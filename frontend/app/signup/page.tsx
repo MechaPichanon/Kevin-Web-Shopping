@@ -3,9 +3,11 @@ import { useState } from "react";
 import Navbarsub from "@/components/navbarsub"
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff} from "lucide-react"
+import { useLang } from "@/lib/language-context";
 
 export default function SignupPage() {
     const router = useRouter();
+    const { t } = useLang();
     const [showPassword, setShowPassword] = useState(false)
     const [form, setForm] = useState({
         username: "",
@@ -30,53 +32,53 @@ export default function SignupPage() {
             const data = await res.json();
 
             if (!res.ok) {
-                alert(data.error || "สมัครสมาชิกไม่สำเร็จ");
+                alert(data.error || t("auth.signupFailed"));
                 return;
             }
 
-            alert("สมัครสมาชิกสำเร็จ");
+            alert(t("auth.signupSuccess"));
 
             // ไปหน้า Login
             router.push("/login");
 
         } catch (err) {
             console.error(err);
-            alert("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์");
+            alert(t("auth.serverError"));
         }
     };
 
     return (
         <div style={styles.page}>
             <div style={styles.card}>
-                <h1 style={styles.title}>Sign Up</h1>
+                <h1 style={styles.title}>{t("auth.signupTitle")}</h1>
 
                 <div style={styles.form}>
                     <div>
 
-                        <label style={styles.label}>Username</label>
+                        <label style={styles.label}>{t("auth.username")}</label>
                         <input
                             name="username"
-                            placeholder="Enter your username"
+                            placeholder={t("auth.usernamePlaceholder")}
                             onChange={handleChange}
                             style={styles.input} />
                     </div>
 
                     <div>
-                        <label style={styles.label}>Email</label>
+                        <label style={styles.label}>{t("auth.email")}</label>
                         <input
                             name="email"
                             type="email"
-                            placeholder="Enter your email"
+                            placeholder={t("auth.emailPlaceholder")}
                             onChange={handleChange}
                             style={styles.input} />
                     </div>
 
                     <div className="relative">
-                        <label style={styles.label}>Password</label>
+                        <label style={styles.label}>{t("auth.password")}</label>
                         <input
                             name="password"
                             type={showPassword ? "text" : "password"}
-                            placeholder="Enter your password"
+                            placeholder={t("auth.passwordPlaceholder")}
                             value={form.password}
                             onChange={handleChange}
                             style={styles.input}
@@ -95,7 +97,7 @@ export default function SignupPage() {
                     </div>
 
                     <button onClick={handleSubmit} style={styles.button}>
-                        Register
+                        {t("auth.signupButton")}
                     </button>
                 </div>
             </div>

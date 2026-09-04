@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
+import { useLang } from "@/lib/language-context";
 
 type MessageType = "text" | "cards";
 
@@ -31,14 +32,6 @@ type ApiResponse = {
 };
 
 const STORAGE_KEY = "kevin_chat_v1";
-
-const INITIAL_QUICK_REPLIES = [
-  "ดูเสื้อยืด / Show T-shirts",
-  "ดูกางเกง / Show pants",
-  "หาไซส์ / Find my size",
-  "นโยบายร้าน / Store policy",
-  "สินค้าแนะนำ / Recommendations",
-];
 
 let _msgId = 0;
 function nid() {
@@ -69,6 +62,15 @@ const mdComponents = {
 };
 
 export default function ChatWidget() {
+  const { lang, t } = useLang();
+  const INITIAL_QUICK_REPLIES = [
+    t("chat.quick.tshirts"),
+    t("chat.quick.pants"),
+    t("chat.quick.findSize"),
+    t("chat.quick.policy"),
+    t("chat.quick.recommendations"),
+  ];
+
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"welcome" | "chat">("welcome");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -140,7 +142,7 @@ export default function ChatWidget() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed, conversation_id: conversationId }),
+        body: JSON.stringify({ message: trimmed, conversation_id: conversationId, lang }),
       });
 
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -174,8 +176,7 @@ export default function ChatWidget() {
           id: nid(),
           role: "assistant",
           type: "text",
-          content:
-            "ขอโทษค่ะ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง\nSorry, something went wrong. Please try again.",
+          content: t("chat.error"),
         },
       ]);
     } finally {
@@ -224,10 +225,10 @@ export default function ChatWidget() {
           }}
         >
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
-            สวัสดีครับ! / Hi!
+            {t("chat.greetingShort")}
           </div>
           <div style={{ fontSize: 12, color: TEXT_MUTED, lineHeight: 1.4 }}>
-            ถามเรื่องสินค้าได้เลยค่ะ / Ask about our products 👋
+            {t("chat.greetingHint")}
           </div>
         </div>
       )}
@@ -238,7 +239,7 @@ export default function ChatWidget() {
           setOpen((o) => !o);
           setGreetingDismissed(true);
         }}
-        aria-label="Open chat"
+        aria-label={t("chat.openChat")}
         style={{
           position: "fixed",
           right: 24,
@@ -354,12 +355,12 @@ export default function ChatWidget() {
                     display: "inline-block",
                   }}
                 />
-                ตอบทันที / replies instantly
+                {t("chat.repliesInstantly")}
               </div>
             </div>
             <button
               onClick={handleNewChat}
-              title="Start a new conversation"
+              title={t("chat.newConversation")}
               style={{
                 background: "rgba(255,255,255,0.15)",
                 border: "1px solid rgba(255,255,255,0.45)",
@@ -426,7 +427,7 @@ export default function ChatWidget() {
                 </div>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 21, lineHeight: 1.2, color: TEXT_MAIN }}>
-                    สวัสดีครับ! / Hi there 👋
+                    {t("chat.welcomeGreeting")}
                   </div>
                   <div
                     style={{
@@ -436,10 +437,7 @@ export default function ChatWidget() {
                       marginTop: 6,
                     }}
                   >
-                    ฉันคือ Kevin ผู้ช่วยร้านค้า ถามเรื่องสินค้า ไซส์ หรือนโยบายร้านได้เลย
-                    <br />
-                    I&apos;m Kevin, your store assistant. Ask me anything about products, sizing, or
-                    policies.
+                    {t("chat.welcomeBody")}
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
@@ -718,7 +716,7 @@ export default function ChatWidget() {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="ถามเรื่องสินค้า ไซส์ หรือนโยบายร้าน… / Ask about products…"
+              placeholder={t("chat.inputPlaceholder")}
               disabled={isSending}
               autoComplete="off"
               style={{

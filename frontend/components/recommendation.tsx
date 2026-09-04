@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import ProductCard from "@/components/productcard";
 import { ArrowRight } from "lucide-react";
+import { useLang } from "@/lib/language-context";
 
 type BestSellerApi = {
   product_id: string;
@@ -19,6 +20,7 @@ type BestSellerApi = {
 
 export default function Recommendation() {
   const [products, setProducts] = useState<BestSellerApi[]>([]);
+  const { t, pick } = useLang();
 
   useEffect(() => {
     fetch("http://localhost:5000/products/best-sellers?limit=4")
@@ -35,15 +37,15 @@ export default function Recommendation() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <span className="font-mono text-xs font-medium uppercase tracking-[0.2em] text-[#8b6f5a]">
-              สินค้าแนะนำ
+              {t("reco.recommendedTitle")}
             </span>
 
             <h2 className="font-serif mt-2 text-3xl font-semibold text-[#3d3025] sm:text-4xl">
-              สินค้ายอดนิยม
+              {t("reco.popularTitle")}
             </h2>
 
             <p className="mt-2 max-w-xl text-[#8b6f5a]">
-              คัดสรรสินค้าคุณภาพที่ลูกค้าชื่นชอบมากที่สุด
+              {t("reco.subtitle")}
             </p>
           </div>
 
@@ -51,7 +53,7 @@ export default function Recommendation() {
             href="/products"
             className="flex items-center gap-2 rounded-lg border border-[#8b5e3c] px-4 py-2 text-[#8b5e3c] transition hover:bg-[#8b5e3c] hover:text-white"
           >
-            ดูทั้งหมด
+            {t("reco.viewAll")}
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -65,11 +67,11 @@ export default function Recommendation() {
                 id: Number(p.variant_id?.replace(/\D/g, "") || "0"),
                 product_id: p.product_id,
                 variant_id: p.variant_id,
-                name: p.product_name_th || p.product_name,
-                name_en: p.product_name_th ? p.product_name : undefined,
+                name: pick(p.product_name_th, p.product_name),
+                name_en: pick(p.product_name, p.product_name_th),
                 price: Number(p.price),
                 stock: Number(p.stock),
-                category: p.category_th || p.category,
+                category: pick(p.category_th, p.category),
                 image: p.image_url || "https://placehold.co/600x800",
               }}
             />

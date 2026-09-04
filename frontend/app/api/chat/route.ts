@@ -1,6 +1,7 @@
 type ChatRequest = {
   message?: unknown;
   conversation_id?: unknown;
+  lang?: unknown;
 };
 
 const DEFAULT_FASTAPI_BASE_URL = "http://localhost:8000";
@@ -25,6 +26,8 @@ export async function POST(request: Request) {
   }
   const conversation_id =
     typeof body.conversation_id === "string" ? body.conversation_id.trim() : "";
+  const lang =
+    body.lang === "th" || body.lang === "en" ? body.lang : undefined;
 
   const backendUrl = new URL("/chat", getFastApiBaseUrl());
 
@@ -35,6 +38,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         message,
         ...(conversation_id ? { conversation_id } : {}),
+        ...(lang ? { lang } : {}),
       }),
     });
 

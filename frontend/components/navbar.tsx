@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
 import ImageSearchButton from "./ImageSearchButton";
 import { useWishlist } from "@/lib/wishlist-context";
+import { useLang } from "@/lib/language-context";
 
 type User = {
   id: number;
@@ -24,6 +25,7 @@ export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const { totalItems: wishlistCount } = useWishlist();
+  const { lang, setLang, t } = useLang();
 
   const fetchCartCount = async (userId: number) => {
     try {
@@ -99,8 +101,8 @@ export default function Navbar() {
 
           {/* Menu */}
           <div className="hidden lg:flex items-center space-x-6 text-sm font-medium text-[#5a4a3d]">
-            <Link href="/">Home</Link>
-            <Link href="/products">Products</Link>
+            <Link href="/">{t("nav.home")}</Link>
+            <Link href="/products">{t("nav.products")}</Link>
           </div>
 
           {/* Search */}
@@ -114,7 +116,7 @@ export default function Navbar() {
                   router.push(`/search?q=${encodeURIComponent(search.trim())}`);
                 }
               }}
-              placeholder="Search products..."
+              placeholder={t("nav.searchPlaceholder")}
               className="w-full pl-5 pr-14 py-2.5 rounded-full bg-white border border-[#e0d5c8] text-[#3d3025] placeholder-[#9a8a7a]"
             />
             <button
@@ -127,6 +129,29 @@ export default function Navbar() {
 
           {/* Right */}
           <div className="flex items-center space-x-3 sm:space-x-5">
+
+            {/* Language toggle */}
+            <div
+              className="flex items-center rounded-full border border-[#e0d5c8] bg-white p-0.5 text-xs font-semibold"
+              role="group"
+              aria-label={t("nav.langToggle")}
+            >
+              {(["th", "en"] as const).map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => setLang(code)}
+                  aria-pressed={lang === code}
+                  className={`rounded-full px-2.5 py-1 uppercase tracking-wide transition-colors ${
+                    lang === code
+                      ? "bg-[#8b5e3c] text-white"
+                      : "text-[#9a8a7a] hover:text-[#5a4a3d]"
+                  }`}
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
 
             <ImageSearchButton />
 
@@ -160,8 +185,8 @@ export default function Navbar() {
 
             {!user ? (
               <div className="flex items-center space-x-2">
-                <Link href="/login" className="px-3 py-2 text-sm font-medium text-[#5a4a3d]">Login</Link>
-                <Link href="/signup" className="px-5 py-2 text-sm font-semibold text-white bg-[#8b5e3c] rounded-full">Sign up</Link>
+                <Link href="/login" className="px-3 py-2 text-sm font-medium text-[#5a4a3d]">{t("nav.login")}</Link>
+                <Link href="/signup" className="px-5 py-2 text-sm font-semibold text-white bg-[#8b5e3c] rounded-full">{t("nav.signup")}</Link>
               </div>
             ) : (
               <div className="flex items-center space-x-3">
@@ -179,7 +204,7 @@ export default function Navbar() {
                   onClick={handleLogout}
                   className="px-4 py-2 text-sm font-semibold text-[#8b5e3c] border border-[#e0d5c8] rounded-full hover:bg-[#ece2d6]"
                 >
-                  Logout
+                  {t("nav.logout")}
                 </button>
               </div>
             )}

@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff} from "lucide-react"
+import { useLang } from "@/lib/language-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useLang();
   const [showPassword, setShowPassword] = useState(false)
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -23,7 +25,7 @@ export default function LoginPage() {
     const password = form.password.trim();
 
     if (!email || !password) {
-      setError("Please enter both email and password.");
+      setError(t("auth.enterBoth"));
       return;
     }
 
@@ -39,7 +41,7 @@ export default function LoginPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error || "Login failed.");
+        setError(data.error || t("auth.loginFailed"));
         return;
       }
 
@@ -53,9 +55,7 @@ export default function LoginPage() {
         router.push("/profile");
       }
     } catch {
-      setError(
-        "Cannot connect to the server. Please check that backend is running on port 5000."
-      );
+      setError(t("auth.serverError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -64,15 +64,15 @@ export default function LoginPage() {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Login</h1>
+        <h1 style={styles.title}>{t("auth.loginTitle")}</h1>
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <div>
-            <label style={styles.label}>Email</label>
+            <label style={styles.label}>{t("auth.email")}</label>
             <input
               name="email"
               type="email"
-              placeholder="Enter your email"
+              placeholder={t("auth.emailPlaceholder")}
               value={form.email}
               onChange={handleChange}
               style={styles.input}
@@ -80,11 +80,11 @@ export default function LoginPage() {
           </div>
 
           <div className="relative">
-            <label style={styles.label}>Password</label>
+            <label style={styles.label}>{t("auth.password")}</label>
             <input
               name="password"
               type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
+              placeholder={t("auth.passwordPlaceholder")}
               value={form.password}
               onChange={handleChange}
               style={styles.input}
@@ -112,7 +112,7 @@ export default function LoginPage() {
               ...(isSubmitting ? styles.buttonDisabled : {}),
             }}
           >
-            {isSubmitting ? "Logging in..." : "Login"}
+            {isSubmitting ? t("auth.loggingIn") : t("auth.loginButton")}
           </button>
         </form>
       </div>
