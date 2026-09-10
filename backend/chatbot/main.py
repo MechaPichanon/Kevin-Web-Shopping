@@ -253,7 +253,7 @@ def _get_or_create_conversation_id(conversation_id: Optional[str]) -> str:
         if len(_CONVERSATIONS) >= _MAX_CONVERSATIONS:
             # Drop an arbitrary item to keep memory bounded.
             _CONVERSATIONS.pop(next(iter(_CONVERSATIONS)))
-        _CONVERSATIONS[cid] = {"last_active": time.time()}
+        _CONVERSATIONS[cid] = {"last_active": time.time(), "low_conf_streak": 0}
     return cid
 
 def _is_followup_reference(message: str) -> bool:
@@ -532,8 +532,154 @@ class ChatRequest(BaseModel):
     # When absent/invalid, fall back to per-message Thai-script detection.
     lang: Optional[str] = None
 
+
+# ── Live-chat handoff support ────────────────────────────────────────────────
+# The bot's "I can't help with that" replies. When the bot emits two of these in
+# a row we surface a "talk to a human" offer (handoff_suggested). Exact-string
+# membership test — no fragile substring matching.
+_CANNED_CANT_HELP_REPLIES = {
+    "ขอโทษค่ะ ฉันช่วยได้แค่เรื่องสินค้า ขนาด ราคา และนโยบายร้านค้าเท่านั้นค่ะ 😊",
+    "ขอโทษค่ะ ไม่พบสินค้าที่ตรงกับที่คุณค้นหา ลองค้นหาด้วยคำอื่นได้เลยค่ะ",
+    "Sorry, I couldn't find any products related to your query.",
+    OUT_OF_SCOPE_RESPONSE,
+}
+
+
+def _read_session_status(conversation_id: str) -> Optional[str]:
+    """
+    Return chat_sessions.status for this conversation, or None on any failure
+    (DB down, no row, exception). Callers treat None as 'bot' — fail open.
+    Borrows and releases a pooled connection in isolation; never held across
+    the LLM call.
+    """
+    conn = get_conn()
+    if conn is None:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM chat_sessions WHERE conversation_id = %s",
+            (conversation_id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        return row[0] if row else None
+    except Exception as exc:
+        logger.warning("live-chat: status read failed: %s", exc)
+        return None
+    finally:
+        # End the implicit read transaction before the connection goes back to
+        # the pool, so the next borrower starts clean.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        release_conn(conn)
+
+
+def _persist_turn(conversation_id: str, customer_lang: str,
+                  user_msg: str, bot_reply: Optional[str]) -> None:
+    """
+    Best-effort: upsert the chat_sessions row and append the customer message
+    (+ the bot reply, when there is one) in a single short transaction. Silent
+    no-op when the DB is unavailable — the chat reply still goes out.
+    """
+    conn = get_conn()
+    if conn is None:
+        return
+    try:
+        with conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO chat_sessions (conversation_id, customer_lang, status)
+                VALUES (%s, %s, 'bot')
+                ON CONFLICT (conversation_id) DO NOTHING
+                """,
+                (conversation_id, customer_lang if customer_lang in ("th", "en") else "th"),
+            )
+            cur.execute(
+                "SELECT session_id FROM chat_sessions WHERE conversation_id = %s",
+                (conversation_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return
+            session_id = row[0]
+            cur.execute(
+                "INSERT INTO chat_messages (session_id, sender_type, body) VALUES (%s, 'customer', %s)",
+                (session_id, user_msg),
+            )
+            if bot_reply:
+                cur.execute(
+                    "INSERT INTO chat_messages (session_id, sender_type, body) VALUES (%s, 'bot', %s)",
+                    (session_id, bot_reply),
+                )
+            cur.close()
+    except Exception as exc:
+        logger.warning("live-chat: turn persist failed: %s", exc)
+    finally:
+        release_conn(conn)
+
+
+def _is_low_confidence(result: Dict[str, Any]) -> bool:
+    reply = result.get("reply")
+    return isinstance(reply, str) and reply.strip() in _CANNED_CANT_HELP_REPLIES
+
+
+def _finalize(conversation_id: str, user_msg: str, use_thai: bool,
+              result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Single post-processing site for a completed bot turn: persist the turn,
+    update the low-confidence streak, and stamp handoff flags onto the response
+    (so every return branch of _bot_turn gets them).
+    """
+    _persist_turn(conversation_id, "th" if use_thai else "en",
+                  user_msg, result.get("reply"))
+
+    session = _CONVERSATIONS.get(conversation_id)
+    if session is not None:
+        streak = session.get("low_conf_streak", 0)
+        streak = streak + 1 if _is_low_confidence(result) else 0
+        suggested = streak >= 2
+        session["low_conf_streak"] = 0 if suggested else streak
+    else:
+        suggested = False
+
+    result["handoff_suggested"] = suggested
+    result["handoff_active"] = False
+    return result
+
+
 @app.post("/chat")
 def chat(request: ChatRequest):
+    """
+    Thin wrapper around the bot turn. If a human has taken over this
+    conversation (chat_sessions.status is 'waiting' or 'live'), skip the LLM
+    entirely: persist the customer's message for the admin and return a stub.
+    Otherwise run the normal bot turn and finalize it (persist + handoff flags).
+    """
+    conversation_id = _get_or_create_conversation_id(request.conversation_id)
+    use_thai = (request.lang == "th") if request.lang in ("th", "en") else _is_thai(request.message)
+
+    status = _read_session_status(conversation_id)
+    if status in ("waiting", "live"):
+        _persist_turn(conversation_id, "th" if use_thai else "en", request.message, None)
+        return {
+            "reply": "",
+            "intent": "HUMAN_HANDOFF",
+            "handoff_active": True,
+            "handoff_suggested": False,
+            "quick_replies": [],
+            "conversation_id": conversation_id,
+        }
+
+    result = _bot_turn(request)
+    return _finalize(result.get("conversation_id", conversation_id),
+                     request.message, use_thai, result)
+
+
+def _bot_turn(request: ChatRequest):
     conversation_id = _get_or_create_conversation_id(request.conversation_id)
     logger.info(f"Incoming message: {request.message}")
 

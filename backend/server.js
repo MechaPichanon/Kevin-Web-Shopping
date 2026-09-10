@@ -27,6 +27,7 @@ const paymentRoutes = require("./routes/payment");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const discountRoutes = require("./routes/discountRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
+const liveChatRoutes = require("./routes/liveChatRoutes");
 // Comma-separated, matching CORS_ORIGINS on the chatbot service — a single
 // value (the common case) still works unchanged since split() on a string
 // with no commas just returns a one-element array.
@@ -49,6 +50,7 @@ app.use("/payment", paymentRoutes);
 app.use("/wishlist", wishlistRoutes);
 app.use("/discount", discountRoutes);
 app.use("/reviews", reviewRoutes);
+app.use("/live-chat", liveChatRoutes);
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Auth backend is running" });
 });

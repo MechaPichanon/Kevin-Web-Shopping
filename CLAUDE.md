@@ -152,7 +152,8 @@ Browser
         │                                  └─ embeddings.py (Ollama bge-m3 client)
         └─► /auth/* /profile  ──────────►  Express (port 5000)
               /orders/* /payment/*             ├─ bcrypt + JWT + pg
-                                                └─ middleware/auth.js (auth, requireAdmin — shared by server.js and routes/orderRoutes.js)
+              /live-chat/*                      ├─ middleware/auth.js (auth, requireAdmin — shared by server.js and routes/orderRoutes.js)
+                                                └─ live-chat handoff: customer routes unauthenticated (keyed by conversation_id), /live-chat/admin/* behind auth+requireAdminOrStaff
 
 PostgreSQL 15 + pgvector (port 5432)  ← single source of truth for all data
   ├─ users / addresses          – auth, profile, multi-address
@@ -165,6 +166,8 @@ PostgreSQL 15 + pgvector (port 5432)  ← single source of truth for all data
   ├─ payments                   – payment records
   ├─ reviews                    – product reviews
   ├─ discount_codes             – coupons / promotions
+  ├─ chat_sessions / chat_messages – live-chat handoff: every chatbot conversation + turn, persisted from msg #1 so an admin can join mid-thread
+  ├─ admin_presence             – heartbeat row per admin/staff (drives the "admin online" signal in the widget)
   ├─ product_chunks             – RAG text chunks + vector(1024) bge-m3 embeddings
   │                               ↑ retrieval.py reads embeddings from here at startup
   └─ product_image_embeddings   – CLIP visual search, vector(512) (stub, not yet filled)
@@ -192,6 +195,7 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
   - `015_wishlish.sql` — adds `wishlist(user_id, product_id, added_at)`, a many-to-many join table backing the new wishlist feature (`backend/controllers/wishlistControllers.js`, `frontend/app/wishlist/page.tsx`, `frontend/lib/wishlist-context.tsx`). Came in via merge from the friend's frontend branch with a bug: the file created the table as `wishlist` (singular, matching the controller's queries) but its `CREATE INDEX` targeted a nonexistent `wishlists` (plural) table — fixed to reference `wishlist` before applying.
   - `016_order_addcolumn.sql` — adds `orders.discount_code` (TEXT) and `orders.discount_amount` (NUMERIC, default 0), backing the new discount-code feature (`backend/controllers/discountControllers.js`).
   - `017_payment_slips.sql` — adds `payment_slips(slip_id, order_id, slip_url, status, reject_reason, reviewed_by, reviewed_at, uploaded_at)`, a per-upload history table backing the payment-slip **rejection & re-submission loop** (see the subsection below). One row per customer slip upload — rows are never deleted, so a rejected slip stays on record after the customer sends a new one. `orders.payment_slip_url` is kept as a plain mirror of the newest slip's URL so the existing customer/admin order views work unchanged. Backfilled: one row per existing order that already had a `payment_slip_url` (status derived from the order's `payment_status`). No CHECK-constraint change on `orders` — `rejected` was already allowed since `009_`.
+  - `018_live_chat_handoff.sql` — adds `chat_sessions`, `chat_messages`, `admin_presence` for the **"talk to a human" live-chat handoff** (see the subsection below). Required as persisted tables because the FastAPI chatbot keeps conversation state in memory only (single uvicorn process, no `--workers`) — an admin reading the thread from Express needs it in the DB, and it must survive a chatbot restart. No changes to `users`/`orders`/existing `/chat` response keys.
 
 ### Payment-slip rejection & re-submission loop
 
@@ -204,6 +208,60 @@ Previously an admin rejecting a slip was a dead end: `orders.payment_status = 'r
 - New shared helpers in `orderControllers.js`: `restoreOrderStock(client, orderId)` (exact reverse of `createOrder`'s decrement loop — handles set components; relies on `trg_variants_stock_cascade` for derived set stock) and `restoreDiscountUse(client, discountCode)`. **Caller contract:** hold `SELECT … FROM orders WHERE order_id=$1 FOR UPDATE` in the same transaction and only call when the order is not already `cancelled`/`refunded`.
 - Order read responses (`formatOrderRow`) gain `slips: [{url, status, rejectReason, uploadedAt}]` (oldest→newest) and `paymentRejectReason` (latest rejected slip's reason). Fetched via a separate `slipsByOrderId`/`slipsForOrder` query, **not** a JOIN into `ORDER_SELECT` (a one-to-many JOIN would fan out order rows).
 - Frontend for this loop is built: customer `frontend/app/orders/page.tsx` shows the reject reason + a re-upload control (`POST /orders/my/:id/payment-slip` with the auth token) + a "ยกเลิกคำสั่งซื้อ" button (confirm dialog → `PATCH /orders/my/:id/cancel`) + a read-only "ประวัติสลิป" list; admin `frontend/app/admin/orders/page.tsx` has a reason `<Textarea>` (seeded from `paymentRejectReason`, re-usable while already rejected — button relabels to "ส่งเหตุผลอีกครั้ง") and a per-slip history list replacing the single `<img>`; `frontend/lib/orders.ts` `updatePaymentStatusApi` now takes an optional `reason`. The admin payment confirm/reject handler switched from optimistic update to refetch (server mutates `payment_slips`).
+
+### Live chat handoff — "คุยกับแอดมิน" (talk to a human)
+
+When the chatbot can't help, the customer can escalate to a live admin/staff who
+joins the same conversation. Transport is **short polling ~3s** (no WebSocket/SSE
+— nothing realtime exists in the repo). Migration `018_live_chat_handoff.sql`.
+
+- **DB:** `chat_sessions(session_id, conversation_id UNIQUE, user_id?, guest_label,
+  customer_lang, status, assigned_admin_id, escalated_at/claimed_at/ended_at,
+  last_customer_seen_at, …)` — `status ∈ bot|waiting|live|closed`;
+  `chat_messages(message_id BIGSERIAL, session_id, sender_type ∈
+  customer|bot|admin|system, sender_admin_id?, body, created_at)` — `message_id`
+  is the **poll cursor** (`after_id`), never a timestamp (two writer processes →
+  `NOW()` not monotonic); `admin_presence(user_id PK, last_seen_at)`.
+- **FastAPI (`backend/chatbot/main.py`):** `chat()` is now a thin wrapper over the
+  old body (renamed `_bot_turn`). It reads `chat_sessions.status` per request
+  (fail-open to `bot` on any DB error); when `waiting`/`live` it **skips the LLM**,
+  persists the customer message, and returns a `{reply:"", intent:"HUMAN_HANDOFF",
+  handoff_active:true}` stub. Otherwise `_finalize()` persists the customer+bot
+  turn (best-effort, connection never held across the LLM call), tracks a
+  `low_conf_streak` in the in-memory session dict, and stamps
+  `handoff_suggested` (true after 2 consecutive canned "can't help" replies —
+  exact-string match against `_CANNED_CANT_HELP_REPLIES`) onto every response.
+- **Express (`routes/liveChatRoutes.js` + `controllers/liveChatControllers.js`,
+  mounted at `/live-chat`):** customer side is **unauthenticated, keyed by
+  `conversation_id`** (validated by `CID_RE`) — `POST /escalate` (flips
+  `bot|closed → waiting`, `ON CONFLICT` so it works even if the bot never
+  persisted the row; returns `admin_online` + `last_message_id` for the widget's
+  cursor), `POST /message`, `GET /poll?conversation_id&after_id`, `POST /leave`.
+  Admin side is `auth, requireAdminOrStaff` — `GET /admin/queue` (also upserts
+  `admin_presence` as a heartbeat side effect), `POST /admin/claim` (race-safe
+  `UPDATE … WHERE status='waiting'`), `GET /admin/session/:conversationId`,
+  `POST /admin/message`, `POST /admin/close`. Server-inserted `system`
+  breadcrumbs are Thai (admin-only).
+- **"Admin online"** = any `admin_presence` row newer than 60s (heartbeat = the
+  `/admin/chat` queue poll). Bundled into every `escalate`/`poll` response.
+- **Customer widget (`frontend/components/ChatWidget.tsx` + `lib/liveChat.ts`):**
+  adds `mode: bot|waiting|live|closed`, an always-visible "คุยกับแอดมิน" chip +
+  an auto-offer bubble on `handoff_suggested`, a data-driven online/offline
+  header dot, and a 3s poll loop while `waiting`/`live`. It **filters `system`
+  rows** from the poll and synthesizes its own localized transition lines via
+  `t()` (all new copy is `chat.*` keys in both `th` and `en` of
+  `dictionaries.ts`). Persists `mode` + poll cursor in `localStorage`
+  (`kevin_chat_v1`), reconciles once against the server on mount. Suppressed on
+  `/admin/*` via `usePathname()`.
+- **Admin page (`frontend/app/admin/chat/page.tsx`, nav "แชทลูกค้า"):** two-pane
+  queue + conversation view, queue poll 5s, conversation poll 3s, Thai-only
+  literals (admin pages aren't i18n'd) with a `TH`/`EN` tag per row showing the
+  customer's language. Nav item added to all 6 admin `navItems`/`NAV_ITEMS`
+  arrays (no shared `_nav.ts` — deliberate).
+- **Bot resume:** admin close → `status='closed'`; FastAPI treats `closed`
+  identically to `bot`, so the next customer message resumes the bot on the same
+  `conversation_id` / `session_id`. Re-clicking "คุยกับแอดมิน" re-escalates the
+  same row (full history preserved).
 
 ### users table — backward-compat note
 
@@ -250,9 +308,9 @@ fixed so there is exactly one "default" address per user, shared by both flows:
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/018_description.sql` (next number is `018`).
+1. Create `postgres/migrations/019_description.sql` (next number is `019`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/018_description.sql`
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/019_description.sql`
 4. Mirror the change in `postgres/init/01_schema.sql`.
 
 ### Full seed (fresh Docker volume)
@@ -287,6 +345,7 @@ psql "$DATABASE_URL" -f postgres/migrations/014_payment_slip.sql
 psql "$DATABASE_URL" -f postgres/migrations/015_wishlish.sql
 psql "$DATABASE_URL" -f postgres/migrations/016_order_addcolumn.sql
 psql "$DATABASE_URL" -f postgres/migrations/017_payment_slips.sql
+psql "$DATABASE_URL" -f postgres/migrations/018_live_chat_handoff.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -529,14 +588,14 @@ FASTAPI_BASE_URL=http://localhost:8000
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `018_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `019_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`
 - `retrieval.py` reads products from PostgreSQL at runtime (NOT from products.json). Falls back to products.json only when `DATABASE_URL` is unset.
 - `retrieval.py` and `import_products.js` both handle the new variant-based format AND old flat format (backward compat).
 - `chatbot/db.py` — psycopg2 ThreadedConnectionPool; `get_conn()` returns `None` (not exception) when unavailable.
-- Conversation state is in-memory only (max 500 sessions, not persisted across restarts). Clients must echo back the `conversation_id` UUID returned on first message.
+- Chatbot **LLM context** (last-N turns, last-retrieved products, `low_conf_streak`) is in-memory only (max 500 sessions, lost on restart). Clients must echo back the `conversation_id` UUID returned on first message. Separately, since `018_`, the **full transcript** (every customer/bot/admin/system turn) IS persisted to `chat_messages` for the live-chat handoff — the two are independent.
 
 ## new comer updated
 - when new improtant code that effect to project or in this claude.md updated the claude.md

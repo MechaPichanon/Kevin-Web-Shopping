@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useLang } from "@/lib/language-context";
+import {
+  escalateChat,
+  sendCustomerMessage,
+  pollChat,
+  leaveChat,
+} from "@/lib/liveChat";
 
 type MessageType = "text" | "cards";
 
@@ -14,9 +21,11 @@ type ProductCard = {
   image_url?: string;
 };
 
+type ChatRole = "user" | "assistant" | "admin" | "system";
+
 type ChatMessage = {
   id: string;
-  role: "user" | "assistant";
+  role: ChatRole;
   type: MessageType;
   content: string;
   cards?: ProductCard[];
@@ -29,9 +38,27 @@ type ApiResponse = {
   product_cards?: ProductCard[];
   quick_replies?: string[];
   conversation_id?: string;
+  // live-chat handoff
+  handoff_suggested?: boolean;
+  handoff_active?: boolean;
 };
 
+// bot → waiting (in the human queue) → live (admin joined) → closed (bot resumes)
+type Mode = "bot" | "waiting" | "live" | "closed";
+
 const STORAGE_KEY = "kevin_chat_v1";
+
+// Routes where the storefront chat widget should not appear:
+// admin console, the purchase funnel, and auth/account pages.
+const WIDGET_HIDDEN_PREFIXES = [
+  "/admin",
+  "/checkout",
+  "/cart",
+  "/login",
+  "/signup",
+  "/profile",
+  "/orders",
+];
 
 let _msgId = 0;
 function nid() {
@@ -40,10 +67,13 @@ function nid() {
 
 const ACCENT = "#b89f8d";
 const BOT_BUBBLE = "#F4ECE2";
+const ADMIN_BUBBLE = "#3E6E8E";
 const PANEL_BG = "#FFFCF8";
 const BORDER_COLOR = "#ECE3D8";
 const TEXT_MAIN = "#2A2622";
 const TEXT_MUTED = "#6B5F55";
+const DOT_ONLINE = "#6FCF8E";
+const DOT_OFFLINE = "#B6A99C";
 
 const mdComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
@@ -61,8 +91,30 @@ const mdComponents = {
   li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
 };
 
+function readStoredUser(): { id?: number; username?: string } | null {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return u && typeof u === "object" ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+function newConversationId(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch {
+    /* fall through */
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function ChatWidget() {
   const { lang, t } = useLang();
+  const pathname = usePathname();
+
   const INITIAL_QUICK_REPLIES = [
     t("chat.quick.tshirts"),
     t("chat.quick.pants"),
@@ -81,56 +133,285 @@ export default function ChatWidget() {
   const [error, setError] = useState<string | null>(null);
   const [greetingDismissed, setGreetingDismissed] = useState(false);
 
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // live-chat handoff state
+  const [mode, setMode] = useState<Mode>("bot");
+  const [adminOnline, setAdminOnline] = useState<boolean | null>(null);
+  const [showOffer, setShowOffer] = useState(false);
+  const [escalating, setEscalating] = useState(false);
 
-  // Restore from localStorage on mount
+  // Poll cursor. State (so the persist effect writes it to localStorage) with a
+  // ref mirror (so interval callbacks read the live value synchronously).
+  const [lastSeenId, setLastSeenId] = useState<number>(0);
+  const lastSeenIdRef = useRef<number>(0);
+  function setSeen(id: number) {
+    lastSeenIdRef.current = id;
+    setLastSeenId(id);
+  }
+  function bumpSeen(id: number) {
+    if (id > lastSeenIdRef.current) setSeen(id);
+  }
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const modeRef = useRef<Mode>("bot");
+  const convRef = useRef<string | null>(null);
+
   useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  useEffect(() => {
+    convRef.current = conversationId;
+  }, [conversationId]);
+
+  // Restore from localStorage on mount. If we look mid-handoff, reconcile once
+  // against the server so a stale persisted mode can't strand the UI.
+  useEffect(() => {
+    let saved: {
+      messages?: ChatMessage[];
+      conversationId?: string;
+      view?: string;
+      mode?: string;
+      lastSeenId?: number;
+    } | null = null;
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const { messages: m, conversationId: cid, view: v } = JSON.parse(saved);
-        if (Array.isArray(m) && m.length > 0) {
-          setMessages(m);
-          setView(v === "chat" ? "chat" : "welcome");
-        }
-        if (typeof cid === "string") setConversationId(cid);
+      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    } catch {
+      saved = null;
+    }
+    if (!saved) return;
+
+    if (Array.isArray(saved.messages) && saved.messages.length > 0) {
+      setMessages(saved.messages);
+      setView(saved.view === "chat" ? "chat" : "welcome");
+    }
+    if (typeof saved.conversationId === "string") setConversationId(saved.conversationId);
+    if (typeof saved.lastSeenId === "number") setSeen(saved.lastSeenId);
+
+    const m = saved.mode;
+    if (m === "waiting" || m === "live" || m === "closed") {
+      setMode(m);
+      if ((m === "waiting" || m === "live") && typeof saved.conversationId === "string") {
+        void doPoll(saved.conversationId);
       }
-    } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist to localStorage on change
+  // Persist widget state (including the poll cursor) to localStorage.
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages, conversationId, view }));
-    } catch {}
-  }, [messages, conversationId, view]);
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          messages,
+          conversationId,
+          view,
+          mode,
+          lastSeenId,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [messages, conversationId, view, mode, lastSeenId]);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isSending]);
 
+  // Poll loop — only while a human chat is waiting/live.
+  useEffect(() => {
+    if (mode !== "waiting" && mode !== "live") return;
+    if (!conversationId) return;
+    let alive = true;
+    const tick = () => {
+      if (alive) void doPoll();
+    };
+    tick();
+    const iv = setInterval(tick, 3000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, conversationId]);
+
+  async function doPoll(cidArg?: string) {
+    const cid = cidArg || convRef.current;
+    if (!cid) return;
+    try {
+      const res = await pollChat(cid, lastSeenIdRef.current);
+      setAdminOnline(res.admin_online);
+
+      if (res.messages.length > 0) {
+        const additions: ChatMessage[] = [];
+        for (const msg of res.messages) {
+          bumpSeen(msg.message_id);
+          if (msg.sender_type === "system") continue; // synthesized locally instead
+          const role: ChatRole =
+            msg.sender_type === "admin"
+              ? "admin"
+              : msg.sender_type === "bot"
+                ? "assistant"
+                : "user";
+          additions.push({ id: "s" + msg.message_id, role, type: "text", content: msg.body });
+        }
+        if (additions.length > 0) setMessages((prev) => [...prev, ...additions]);
+      }
+
+      // Status transitions → locally-translated system lines.
+      if (res.status === "live" && modeRef.current !== "live") {
+        setMode("live");
+        if (res.assigned_admin_name) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nid(),
+              role: "system",
+              type: "text",
+              content: t("chat.adminJoined", { name: res.assigned_admin_name as string }),
+            },
+          ]);
+        }
+      } else if (res.status === "closed" && modeRef.current !== "closed") {
+        setMode("closed");
+        setMessages((prev) => [
+          ...prev,
+          { id: nid(), role: "system", type: "text", content: t("chat.chatClosed") },
+        ]);
+      } else if (
+        res.status === "bot" &&
+        (modeRef.current === "waiting" || modeRef.current === "live")
+      ) {
+        setMode("bot");
+      }
+    } catch {
+      // transient — keep polling
+    }
+  }
+
+  async function handleEscalate(reason?: string) {
+    if (escalating || mode === "waiting" || mode === "live") return;
+    setEscalating(true);
+    setError(null);
+    setShowOffer(false);
+
+    let cid = conversationId;
+    if (!cid) {
+      cid = newConversationId();
+      setConversationId(cid);
+      convRef.current = cid;
+    }
+
+    try {
+      const u = readStoredUser();
+      const res = await escalateChat({
+        conversationId: cid,
+        lang: lang === "en" ? "en" : "th",
+        userId: typeof u?.id === "number" ? u.id : undefined,
+        guestLabel: typeof u?.username === "string" ? u.username : undefined,
+        reason,
+      });
+      if (res.last_message_id) bumpSeen(res.last_message_id);
+      setAdminOnline(res.admin_online);
+      setView("chat");
+      setQuickReplies([]);
+      setMode("waiting");
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nid(),
+          role: "system",
+          type: "text",
+          content: res.admin_online ? t("chat.waitingForAdmin") : t("chat.noAdminOnline"),
+        },
+      ]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setEscalating(false);
+    }
+  }
+
+  async function handleLeaveHuman() {
+    const cid = convRef.current || conversationId;
+    setMode("closed");
+    setMessages((prev) => [
+      ...prev,
+      { id: nid(), role: "system", type: "text", content: t("chat.chatClosed") },
+    ]);
+    if (cid) {
+      try {
+        await leaveChat(cid);
+      } catch {
+        /* best effort */
+      }
+    }
+  }
+
   function handleNewChat() {
     setMessages([]);
     setConversationId(null);
+    convRef.current = null;
     setInput("");
     setError(null);
     setView("welcome");
     setQuickReplies(INITIAL_QUICK_REPLIES);
+    setMode("bot");
+    setAdminOnline(null);
+    setShowOffer(false);
+    setSeen(0);
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || isSending) return;
+    if (!trimmed || isSending || escalating) return;
 
     setError(null);
     setView("chat");
+
+    // ── Live / waiting: message goes to the human, not the bot ──
+    if (mode === "waiting" || mode === "live") {
+      setInput("");
+      const optimisticId = nid();
+      setMessages((prev) => [
+        ...prev,
+        { id: optimisticId, role: "user", type: "text", content: trimmed },
+      ]);
+      setIsSending(true);
+      try {
+        const cid = convRef.current || conversationId;
+        if (!cid) throw new Error("No conversation");
+        const out = await sendCustomerMessage(cid, trimmed);
+        bumpSeen(out.message_id);
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        if (code === "chat_closed") {
+          setMode("closed");
+          setMessages((prev) => [
+            ...prev,
+            { id: nid(), role: "system", type: "text", content: t("chat.chatClosed") },
+          ]);
+        } else {
+          setError(e instanceof Error ? e.message : "Something went wrong.");
+        }
+      } finally {
+        setIsSending(false);
+      }
+      return;
+    }
+
+    // ── Bot path (mode "bot" or "closed" — closed behaves as bot) ──
+    if (mode === "closed") setMode("bot");
     setQuickReplies([]);
+    setShowOffer(false);
     setIsSending(true);
     setInput("");
     setMessages((prev) => [
@@ -148,12 +429,26 @@ export default function ChatWidget() {
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
 
       const data = (await res.json()) as ApiResponse;
-      const reply = typeof data.reply === "string" ? data.reply : "";
-      if (!reply) throw new Error("Invalid response from server.");
 
       if (typeof data.conversation_id === "string" && data.conversation_id.trim()) {
         setConversationId(data.conversation_id.trim());
+        convRef.current = data.conversation_id.trim();
       }
+
+      // A human already owns this conversation server-side (widget was out of
+      // sync). Drop the local view and let the poll loop rebuild the transcript
+      // from the DB, then correct to "live" if needed.
+      if (data.handoff_active) {
+        setQuickReplies([]);
+        setShowOffer(false);
+        setMessages([]);
+        setSeen(0);
+        setMode("waiting");
+        return;
+      }
+
+      const reply = typeof data.reply === "string" ? data.reply : "";
+      if (!reply) throw new Error("Invalid response from server.");
 
       const hasCards = (data.product_cards?.length ?? 0) > 0;
       setMessages((prev) => [
@@ -167,22 +462,36 @@ export default function ChatWidget() {
         },
       ]);
       setQuickReplies(data.quick_replies ?? []);
+      if (data.handoff_suggested) setShowOffer(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Something went wrong.";
       setError(msg);
       setMessages((prev) => [
         ...prev,
-        {
-          id: nid(),
-          role: "assistant",
-          type: "text",
-          content: t("chat.error"),
-        },
+        { id: nid(), role: "assistant", type: "text", content: t("chat.error") },
       ]);
     } finally {
       setIsSending(false);
     }
   }
+
+  // Don't render the storefront chat widget on admin, checkout, or account pages.
+  if (
+    pathname &&
+    WIDGET_HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))
+  ) {
+    return null;
+  }
+
+  const inHumanChat = mode === "waiting" || mode === "live";
+  const canOfferHuman = mode === "bot" || mode === "closed";
+
+  const headerDot =
+    inHumanChat && adminOnline === false
+      ? { color: DOT_OFFLINE, label: t("chat.adminOffline") }
+      : inHumanChat
+        ? { color: DOT_ONLINE, label: t("chat.adminOnline") }
+        : { color: DOT_ONLINE, label: t("chat.botStatus") };
 
   const avatarStyle: React.CSSProperties = {
     width: 28,
@@ -197,6 +506,7 @@ export default function ChatWidget() {
     fontSize: 12,
     fontWeight: 700,
   };
+  const adminAvatarStyle: React.CSSProperties = { ...avatarStyle, background: ADMIN_BUBBLE };
 
   return (
     <>
@@ -351,11 +661,11 @@ export default function ChatWidget() {
                     width: 7,
                     height: 7,
                     borderRadius: "50%",
-                    background: "#6FCF8E",
+                    background: headerDot.color,
                     display: "inline-block",
                   }}
                 />
-                {t("chat.repliesInstantly")}
+                {headerDot.label}
               </div>
             </div>
             <button
@@ -402,10 +712,7 @@ export default function ChatWidget() {
           </div>
 
           {/* Scrollable body */}
-          <div
-            ref={scrollRef}
-            style={{ flex: 1, overflowY: "auto", padding: "18px 16px" }}
-          >
+          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "18px 16px" }}>
             {view === "welcome" ? (
               /* Welcome screen */
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -472,9 +779,30 @@ export default function ChatWidget() {
               /* Chat view */
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {messages.map((m, i) => {
+                  if (m.role === "system") {
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          alignSelf: "center",
+                          maxWidth: "92%",
+                          textAlign: "center",
+                          fontSize: 12,
+                          color: TEXT_MUTED,
+                          margin: "8px 0",
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {m.content}
+                      </div>
+                    );
+                  }
+
                   const isBot = m.role === "assistant";
+                  const isAdmin = m.role === "admin";
+                  const isLeft = isBot || isAdmin;
                   const prev = messages[i - 1];
-                  const showAvatar = isBot && (!prev || prev.role !== "assistant");
+                  const showAvatar = isLeft && (!prev || prev.role !== m.role);
 
                   return (
                     <div
@@ -483,14 +811,27 @@ export default function ChatWidget() {
                         display: "flex",
                         gap: 8,
                         alignItems: "flex-end",
-                        justifyContent: isBot ? "flex-start" : "flex-end",
+                        justifyContent: isLeft ? "flex-start" : "flex-end",
                         marginBottom: 10,
-                        marginLeft: isBot && !showAvatar ? 36 : 0,
+                        marginLeft: isLeft && !showAvatar ? 36 : 0,
                       }}
                     >
                       {isBot && showAvatar && <div style={avatarStyle}>K</div>}
+                      {isAdmin && showAvatar && <div style={adminAvatarStyle}>♦</div>}
 
                       <div style={{ maxWidth: "80%" }}>
+                        {isAdmin && showAvatar && (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: TEXT_MUTED,
+                              margin: "0 0 3px 2px",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {t("chat.staffLabel")}
+                          </div>
+                        )}
                         {m.type === "cards" && m.cards && m.cards.length > 0 ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                             {/* Text part of cards message */}
@@ -505,9 +846,7 @@ export default function ChatWidget() {
                                 boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                               }}
                             >
-                              <ReactMarkdown components={mdComponents}>
-                                {m.content}
-                              </ReactMarkdown>
+                              <ReactMarkdown components={mdComponents}>{m.content}</ReactMarkdown>
                             </div>
                             {/* Product cards */}
                             {m.cards.map((c) => (
@@ -601,7 +940,7 @@ export default function ChatWidget() {
                               fontSize: 14,
                               lineHeight: 1.45,
                               borderRadius: 18,
-                              background: isBot ? BOT_BUBBLE : ACCENT,
+                              background: isAdmin ? ADMIN_BUBBLE : isBot ? BOT_BUBBLE : ACCENT,
                               color: isBot ? TEXT_MAIN : "#fff",
                               boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                               whiteSpace: "pre-wrap",
@@ -609,9 +948,7 @@ export default function ChatWidget() {
                             }}
                           >
                             {isBot ? (
-                              <ReactMarkdown components={mdComponents}>
-                                {m.content}
-                              </ReactMarkdown>
+                              <ReactMarkdown components={mdComponents}>{m.content}</ReactMarkdown>
                             ) : (
                               m.content
                             )}
@@ -622,8 +959,42 @@ export default function ChatWidget() {
                   );
                 })}
 
-                {/* Animated typing indicator */}
-                {isSending && (
+                {/* Inline "talk to a human" offer */}
+                {showOffer && mode === "bot" && (
+                  <div
+                    style={{
+                      alignSelf: "center",
+                      maxWidth: "92%",
+                      textAlign: "center",
+                      margin: "6px 0 12px",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: TEXT_MUTED, lineHeight: 1.5, marginBottom: 8 }}>
+                      {t("chat.handoffOffer")}
+                    </div>
+                    <button
+                      onClick={() => handleEscalate()}
+                      disabled={escalating}
+                      style={{
+                        padding: "8px 18px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: ACCENT,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 999,
+                        cursor: escalating ? "not-allowed" : "pointer",
+                        fontFamily: "inherit",
+                        opacity: escalating ? 0.6 : 1,
+                      }}
+                    >
+                      {t("chat.talkToHuman")}
+                    </button>
+                  </div>
+                )}
+
+                {/* Animated typing indicator (bot only) */}
+                {isSending && !inHumanChat && (
                   <div
                     style={{
                       display: "flex",
@@ -663,8 +1034,8 @@ export default function ChatWidget() {
             )}
           </div>
 
-          {/* Quick-reply chips (chat mode only) */}
-          {view === "chat" && quickReplies.length > 0 && (
+          {/* Quick-reply chips (bot chat mode only) */}
+          {view === "chat" && mode === "bot" && quickReplies.length > 0 && (
             <div
               style={{
                 display: "flex",
@@ -695,6 +1066,54 @@ export default function ChatWidget() {
                   {q}
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Talk-to-a-human chip (bot / closed) */}
+          {canOfferHuman && (
+            <div style={{ padding: "0 16px 8px" }}>
+              <button
+                onClick={() => handleEscalate()}
+                disabled={escalating}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "7px 14px",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  background: "transparent",
+                  color: ACCENT,
+                  border: `1px solid ${ACCENT}`,
+                  borderRadius: 999,
+                  cursor: escalating ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: escalating ? 0.6 : 1,
+                }}
+              >
+                {t("chat.talkToHuman")}
+              </button>
+            </div>
+          )}
+
+          {/* Leave-human-chat link */}
+          {inHumanChat && (
+            <div style={{ padding: "0 16px 8px" }}>
+              <button
+                onClick={handleLeaveHuman}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: TEXT_MUTED,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  textDecoration: "underline",
+                  padding: 0,
+                }}
+              >
+                {t("chat.leaveChat")}
+              </button>
             </div>
           )}
 

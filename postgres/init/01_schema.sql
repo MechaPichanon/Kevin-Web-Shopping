@@ -437,3 +437,69 @@
   -- IVFFlat index for CLIP search (enable after data is loaded):
   -- CREATE INDEX product_image_embeddings_embedding_idx
   --   ON product_image_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10);
+
+  -- ════════════════════════════════════════
+  -- LIVE CHAT HANDOFF  (migration 018)
+  -- ════════════════════════════════════════
+
+  -- chat_sessions — one row per chatbot conversation (created lazily on first
+  -- turn). status: 'bot' | 'waiting' (in the human queue) | 'live' (admin claimed)
+  -- | 'closed' (admin ended it — bot answers again, same conversation_id).
+  CREATE TABLE IF NOT EXISTS chat_sessions (
+    session_id            SERIAL       PRIMARY KEY,
+    conversation_id       TEXT         NOT NULL UNIQUE,
+    user_id               INTEGER      DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+    guest_label           VARCHAR(50)  DEFAULT NULL,
+    customer_lang         VARCHAR(5)   NOT NULL DEFAULT 'th',
+    status                VARCHAR(20)  NOT NULL DEFAULT 'bot',
+    assigned_admin_id     INTEGER      DEFAULT NULL REFERENCES users(id),
+    escalated_at          TIMESTAMPTZ  DEFAULT NULL,
+    claimed_at            TIMESTAMPTZ  DEFAULT NULL,
+    ended_at              TIMESTAMPTZ  DEFAULT NULL,
+    last_customer_seen_at TIMESTAMPTZ  DEFAULT NULL,
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_chat_sessions_status
+      CHECK (status IN ('bot','waiting','live','closed')),
+    CONSTRAINT chk_chat_sessions_customer_lang
+      CHECK (customer_lang IN ('th','en'))
+  );
+
+  CREATE INDEX IF NOT EXISTS chat_sessions_status_escalated_idx
+    ON chat_sessions (status, escalated_at DESC);
+  CREATE INDEX IF NOT EXISTS chat_sessions_conversation_id_idx
+    ON chat_sessions (conversation_id);
+
+  DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger WHERE tgname = 'trg_chat_sessions_updated_at'
+    ) THEN
+      CREATE TRIGGER trg_chat_sessions_updated_at
+        BEFORE UPDATE ON chat_sessions
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+  END $$;
+
+  -- chat_messages — every turn, bot turns included, from message #1.
+  -- message_id doubles as the poll cursor (after_id) — must stay monotonic.
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    message_id      BIGSERIAL    PRIMARY KEY,
+    session_id      INTEGER      NOT NULL REFERENCES chat_sessions(session_id) ON DELETE CASCADE,
+    sender_type     VARCHAR(20)  NOT NULL,
+    sender_admin_id INTEGER      DEFAULT NULL REFERENCES users(id),
+    body            TEXT         NOT NULL,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_chat_messages_sender_type
+      CHECK (sender_type IN ('customer','bot','admin','system'))
+  );
+
+  CREATE INDEX IF NOT EXISTS chat_messages_session_id_idx
+    ON chat_messages (session_id, message_id);
+
+  -- admin_presence — heartbeat row per admin/staff, upserted by the admin chat
+  -- page's queue poll. "admin online" = any row newer than 60s.
+  CREATE TABLE IF NOT EXISTS admin_presence (
+    user_id      INTEGER      PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    last_seen_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  );
+
