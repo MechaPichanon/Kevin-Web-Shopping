@@ -141,7 +141,7 @@ function getBangkokDateParts() {
 ====================== */
 app.post("/auth/register", async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, firstName = "", lastName = "", phone = "" } = req.body;
 
     if (!username || !email || !password) {
       return res.status(400).json({ error: "กรอกข้อมูลไม่ครบ" });
@@ -160,8 +160,8 @@ app.post("/auth/register", async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
 
     await pool.query(
-      "INSERT INTO users (username, email, password) VALUES ($1,$2,$3)",
-      [username, email, hash]
+      "INSERT INTO users (username, email, password, first_name, last_name, phone) VALUES ($1,$2,$3,$4,$5,$6)",
+      [username, email, hash, firstName.trim(), lastName.trim(), phone.trim()]
     );
 
     res.json({ message: "Register success" });
