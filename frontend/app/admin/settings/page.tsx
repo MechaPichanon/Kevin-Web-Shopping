@@ -47,6 +47,7 @@ export default function AdminSettingsPage() {
   const router = useRouter()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [accountName, setAccountName] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
@@ -85,7 +86,7 @@ export default function AdminSettingsPage() {
       return
     }
     setIsAdmin(true)
-
+    setAccountName(parsed.username || parsed.email || "")
     loadPolicies()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
@@ -136,9 +137,8 @@ export default function AdminSettingsPage() {
       )}
 
       <aside
-        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center justify-between border-b border-border px-4">
@@ -147,8 +147,8 @@ export default function AdminSettingsPage() {
                 <span className="text-sm font-bold text-primary-foreground">L</span>
               </div>
               <div>
-                <span className="font-semibold">BosButter</span>
-                <p className="text-xs text-white/60">Admin Panel</p>
+                <span className="font-semibold">{accountName || "Admin"}</span>
+                <p className="text-xs text-white/60">{"Admin Panel"}</p>
               </div>
             </Link>
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsSidebarOpen(false)}>
@@ -161,11 +161,10 @@ export default function AdminSettingsPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                  item.href === "/admin/settings"
-                    ? "bg-[#8b5e3c] text-white"
-                    : "text-white/70 hover:bg-white/10 hover:text-white"
-                }`}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${item.href === "/admin/settings"
+                  ? "bg-[#8b5e3c] text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  }`}
               >
                 <item.icon className="h-5 w-5" />
                 {item.label}
@@ -173,19 +172,15 @@ export default function AdminSettingsPage() {
             ))}
           </nav>
 
-          <div className="border-t border-border p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-medium text-primary">A</span>
-              </div>
-              <div className="flex-1">
-                <span className="font-semibold">BosButter</span>
-                <p className="text-xs text-white/60">Admin Panel</p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+          <div className="border-t border-white/10 p-4">
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 text-white hover:bg-white/10"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" />
+              ออกจากระบบ
+            </Button>
           </div>
         </div>
       </aside>

@@ -42,49 +42,49 @@ const NAV_ITEMS = [
 
 const CATEGORIES = [
   { value: "shirt", label: "Shirt", labelTh: "เชิ้ต" },
-  { value: "polo",  label: "Polo",  labelTh: "โปโล" },
-  { value: "pant",  label: "Pant",  labelTh: "กางเกง" },
-  { value: "set",   label: "Set",   labelTh: "ชุด" },
+  { value: "polo", label: "Polo", labelTh: "โปโล" },
+  { value: "pant", label: "Pant", labelTh: "กางเกง" },
+  { value: "set", label: "Set", labelTh: "ชุด" },
 ]
 
 const SUBCATS: Record<string, { value: string; label: string; labelTh: string }[]> = {
   shirt: [
-    { value: "silk-shirt",  label: "Silk Shirt",  labelTh: "เชิ้ตผ้าไหม" },
+    { value: "silk-shirt", label: "Silk Shirt", labelTh: "เชิ้ตผ้าไหม" },
     { value: "linen-shirt", label: "Linen Shirt", labelTh: "เชิ้ตลินิน" },
   ],
   polo: [
-    { value: "plain-polo",   label: "Plain Polo",   labelTh: "โปโลพื้น" },
+    { value: "plain-polo", label: "Plain Polo", labelTh: "โปโลพื้น" },
     { value: "striped-polo", label: "Striped Polo", labelTh: "โปโลริ้ว" },
-    { value: "corn-polo",    label: "Corn Polo",    labelTh: "โปโลข้าวโพด" },
-    { value: "zip-polo",     label: "Zip Polo",     labelTh: "โปโลซิป" },
-    { value: "knit-polo",    label: "Knit Polo",    labelTh: "โปโลถัก" },
+    { value: "corn-polo", label: "Corn Polo", labelTh: "โปโลข้าวโพด" },
+    { value: "zip-polo", label: "Zip Polo", labelTh: "โปโลซิป" },
+    { value: "knit-polo", label: "Knit Polo", labelTh: "โปโลถัก" },
   ],
   pant: [
-    { value: "silk-pant",   label: "Silk Pants",  labelTh: "กางเกงไหม" },
+    { value: "silk-pant", label: "Silk Pants", labelTh: "กางเกงไหม" },
     { value: "swim-shorts", label: "Swim Shorts", labelTh: "ขาสั้นว่ายน้ำ" },
   ],
 }
 
 const PATTERNS = [
-  { value: "solid",       label: "Solid",       labelTh: "เรียบ" },
-  { value: "striped",     label: "Striped",     labelTh: "ลายทาง" },
-  { value: "checked",     label: "Checked",     labelTh: "ลายตาราง" },
-  { value: "printed",     label: "Printed",     labelTh: "ลายพิมพ์" },
+  { value: "solid", label: "Solid", labelTh: "เรียบ" },
+  { value: "striped", label: "Striped", labelTh: "ลายทาง" },
+  { value: "checked", label: "Checked", labelTh: "ลายตาราง" },
+  { value: "printed", label: "Printed", labelTh: "ลายพิมพ์" },
   { value: "herringbone", label: "Herringbone", labelTh: "ลายก้างปลา" },
 ]
 
 const SLEEVE_OPTIONS = [
-  { value: "long",  label: "Long sleeve",  labelTh: "แขนยาว" },
+  { value: "long", label: "Long sleeve", labelTh: "แขนยาว" },
   { value: "short", label: "Short sleeve", labelTh: "แขนสั้น" },
-  { value: "3/4",   label: "3/4 sleeve",   labelTh: "แขนสามส่วน" },
+  { value: "3/4", label: "3/4 sleeve", labelTh: "แขนสามส่วน" },
 ]
 
 const COLLAR_OPTIONS = [
-  { value: "spread",      label: "Spread",      labelTh: "คอปก" },
+  { value: "spread", label: "Spread", labelTh: "คอปก" },
   { value: "button-down", label: "Button-down", labelTh: "คอกระดุม" },
-  { value: "band",        label: "Band",        labelTh: "คอตั้ง" },
-  { value: "point",       label: "Point",       labelTh: "คอแหลม" },
-  { value: "cutaway",     label: "Cutaway",     labelTh: "คอตัด" },
+  { value: "band", label: "Band", labelTh: "คอตั้ง" },
+  { value: "point", label: "Point", labelTh: "คอแหลม" },
+  { value: "cutaway", label: "Cutaway", labelTh: "คอตัด" },
 ]
 
 const UPPER_SIZES = ["M", "L", "XL", "XXL"]
@@ -366,7 +366,7 @@ export default function AdminProductsPage() {
   })
   const isAdmin = role === "admin" || role === "staff"
   const isStaff = role === "staff"
-
+  const [accountName, setAccountName] = useState("")
   const [products, setProducts] = useState<ProductRow[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -389,6 +389,8 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     if (!isAdmin) router.push("/login")
+    let parsed: { role?: string; username?: string; email?: string } = {}
+    setAccountName(parsed.username || parsed.email || "")
   }, [isAdmin, router])
 
   useEffect(() => {
@@ -435,8 +437,8 @@ export default function AdminProductsPage() {
     const subObj = (SUBCATS[cat] ?? []).find((s) => s.value === subVal)
 
     const variantDrafts: VariantDraft[] = (p.variants ?? []).map((v) => {
-      const matched   = PRESET_COLORS.find((c) => c.name.toLowerCase() === (v.color || "").toLowerCase())
-      const patObj    = PATTERNS.find((pt) => pt.value === (v.pattern || "solid"))
+      const matched = PRESET_COLORS.find((c) => c.name.toLowerCase() === (v.color || "").toLowerCase())
+      const patObj = PATTERNS.find((pt) => pt.value === (v.pattern || "solid"))
       const sleeveObj = SLEEVE_OPTIONS.find((s) => s.value === (v.sleeve || "long"))
       const collarObj = COLLAR_OPTIONS.find((c) => c.value === (v.collar || "spread"))
       return {
@@ -502,13 +504,13 @@ export default function AdminProductsPage() {
 
   const upd =
     (key: keyof FormState) =>
-    (
-      e: React.ChangeEvent<
-        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-      >
-    ) => {
-      setForm((f) => ({ ...f, [key]: e.target.value }))
-    }
+      (
+        e: React.ChangeEvent<
+          HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+        >
+      ) => {
+        setForm((f) => ({ ...f, [key]: e.target.value }))
+      }
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const cat = e.target.value
@@ -840,9 +842,9 @@ export default function AdminProductsPage() {
         is_active: v.isActive,
         ...(v.componentVariantIds && v.componentVariantIds.length > 0
           ? {
-              component_variant_ids: v.componentVariantIds,
-              component_quantities: (v.componentQuantities ?? []).map((q) => Number(q) || 1),
-            }
+            component_variant_ids: v.componentVariantIds,
+            component_quantities: (v.componentQuantities ?? []).map((q) => Number(q) || 1),
+          }
           : {}),
       }))
     ))
@@ -927,12 +929,12 @@ export default function AdminProductsPage() {
   const isSet = form.category === "set"
   const setComponentsResolved = isSet
     ? form.setComponents
-        .filter((p) => p.productId && p.variantId)
-        .map((p) => {
-          const prod = products.find((pr) => pr.product_id === p.productId)
-          const variant = prod?.variants.find((v) => v.variant_id === p.variantId)
-          return { pick: p, prod, variant }
-        })
+      .filter((p) => p.productId && p.variantId)
+      .map((p) => {
+        const prod = products.find((pr) => pr.product_id === p.productId)
+        const variant = prod?.variants.find((v) => v.variant_id === p.variantId)
+        return { pick: p, prod, variant }
+      })
     : []
   const setComponentsSum = setComponentsResolved.reduce(
     (sum, r) => sum + (r.variant ? Number(r.variant.price) * (Number(r.pick.quantity) || 1) : 0),
@@ -991,13 +993,12 @@ export default function AdminProductsPage() {
   return (
     <div
       className="flex min-h-screen"
-      style={{ background: "#f5f1ed"}}
+      style={{ background: "#f5f1ed" }}
     >
       {/* ── Sidebar ───────────────────────────────────────────────────────── */}
       <aside
-        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
@@ -1006,7 +1007,7 @@ export default function AdminProductsPage() {
                 <span className="font-bold text-white">L</span>
               </div>
               <div>
-                <span className="font-semibold">BosButter</span>
+                <span className="font-semibold">{accountName || (isStaff ? "Staff" : "Admin")}</span>
                 <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
               </div>
             </Link>
@@ -1028,11 +1029,10 @@ export default function AdminProductsPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                  item.href === "/admin/products"
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${item.href === "/admin/products"
                     ? "bg-[#8b5e3c] text-white"
                     : "text-white/70 hover:bg-white/10 hover:text-white"
-                }`}
+                  }`}
               >
                 <item.icon className="h-5 w-5" />
                 {item.label}
@@ -1192,77 +1192,77 @@ export default function AdminProductsPage() {
                         const totalStock = (product.variants ?? []).reduce((s, v) => s + Number(v.stock), 0)
                         const variantCount = product.variants?.length ?? 0
                         return (
-                        <tr
-                          key={product.product_id}
-                          className="border-b hover:bg-muted/30"
-                        >
-                          <td className="px-4 py-3">
-                            {product.image_url ? (
-                              <img
-                                src={product.image_url}
-                                alt={product.product_name}
-                                className="h-16 w-16 rounded object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-16 w-16 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
-                                ไม่มีรูป
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 font-medium">
-                            {product.product_name}
-                          </td>
-                          <td className="px-4 py-3 text-sm capitalize">
-                            {product.category}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            {variantCount} ไซส์/สี
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            {firstV?.color ?? "—"}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            {firstV ? `฿${Number(firstV.price).toLocaleString()}` : "—"}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            <span
-                              style={{
-                                fontWeight: 600,
-                                color:
-                                  totalStock === 0
-                                    ? "#dc2626"
-                                    : totalStock <= 10
-                                    ? "#d97706"
-                                    : "#16a34a",
-                              }}
-                            >
-                              {totalStock}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEdit(product)}
-                                title="แก้ไข"
+                          <tr
+                            key={product.product_id}
+                            className="border-b hover:bg-muted/30"
+                          >
+                            <td className="px-4 py-3">
+                              {product.image_url ? (
+                                <img
+                                  src={product.image_url}
+                                  alt={product.product_name}
+                                  className="h-16 w-16 rounded object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-16 w-16 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+                                  ไม่มีรูป
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-medium">
+                              {product.product_name}
+                            </td>
+                            <td className="px-4 py-3 text-sm capitalize">
+                              {product.category}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {variantCount} ไซส์/สี
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {firstV?.color ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {firstV ? `฿${Number(firstV.price).toLocaleString()}` : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color:
+                                    totalStock === 0
+                                      ? "#dc2626"
+                                      : totalStock <= 10
+                                        ? "#d97706"
+                                        : "#16a34a",
+                                }}
                               >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              {!isStaff && (
+                                {totalStock}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1">
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => setDeleteTarget(product)}
-                                  title="ลบ"
+                                  onClick={() => openEdit(product)}
+                                  title="แก้ไข"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Edit className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+                                {!isStaff && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => setDeleteTarget(product)}
+                                    title="ลบ"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
                         )
                       })}
                       {filteredProducts.length === 0 && (
@@ -1894,295 +1894,295 @@ export default function AdminProductsPage() {
                         )}
                       </div>
                     ) : (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "200px 1fr",
-                        gap: 22,
-                        alignItems: "start",
-                      }}
-                    >
-                      {/* Size */}
-                      <div>
-                        <label style={labelStyle}>Size</label>
-                        <select
-                          value={form.size}
-                          onChange={upd("size")}
-                          style={selectStyle}
-                        >
-                          {(isUpper ? UPPER_SIZES : PANT_SIZES).map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                        <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#9aa0ac" }}>
-                          {isUpper ? "Letter sizing (XS–XXL)." : "Waist sizing in inches."}
-                        </p>
-                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "200px 1fr",
+                          gap: 22,
+                          alignItems: "start",
+                        }}
+                      >
+                        {/* Size */}
+                        <div>
+                          <label style={labelStyle}>Size</label>
+                          <select
+                            value={form.size}
+                            onChange={upd("size")}
+                            style={selectStyle}
+                          >
+                            {(isUpper ? UPPER_SIZES : PANT_SIZES).map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#9aa0ac" }}>
+                            {isUpper ? "Letter sizing (XS–XXL)." : "Waist sizing in inches."}
+                          </p>
+                        </div>
 
-                      {/* Color */}
-                      <div>
-                        <label style={labelStyle}>Color</label>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 9,
-                            flexWrap: "wrap",
-                            marginBottom: 14,
-                          }}
-                        >
-                          {PRESET_COLORS.map((c) => {
-                            const isSel =
-                              c.hex.toLowerCase() === form.colorHex.toLowerCase()
-                            const light = luminance(c.hex) > 0.6
-                            return (
-                              <button
-                                key={c.hex}
-                                type="button"
-                                onClick={() => selectColor(c)}
-                                title={c.name}
-                                style={{
-                                  width: 32,
-                                  height: 32,
-                                  borderRadius: 9,
-                                  border: "none",
-                                  cursor: "pointer",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  background: c.hex,
-                                  boxShadow: isSel
-                                    ? "0 0 0 2px #fff, 0 0 0 4px #8b5e3c"
-                                    : light
-                                    ? "inset 0 0 0 1px #e2e5ea"
-                                    : "inset 0 0 0 1px rgba(0,0,0,.06)",
-                                }}
-                              >
-                                {isSel && (
-                                  <span
-                                    style={{
-                                      fontSize: 14,
-                                      fontWeight: 700,
-                                      lineHeight: 1,
-                                      color: light ? "#16181d" : "#ffffff",
-                                    }}
-                                  >
-                                    ✓
-                                  </span>
-                                )}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
-                            gap: 12,
-                          }}
-                        >
-                          <div>
-                            <label
-                              style={{
-                                ...labelStyle,
-                                fontSize: 11.5,
-                                color: "#8a909c",
-                                marginBottom: 6,
-                              }}
-                            >
-                              Color name{" "}
-                              <span
-                                style={{
-                                  fontSize: 9.5,
-                                  fontWeight: 600,
-                                  color: "#6b7280",
-                                  background: "#f0f1f4",
-                                  padding: "1px 5px",
-                                  borderRadius: 5,
-                                }}
-                              >
-                                EN
-                              </span>
-                            </label>
-                            <input
-                              value={form.colorName}
-                              onChange={upd("colorName")}
-                              placeholder="Navy"
-                              style={{ ...inputStyle, height: 40, padding: "0 12px" }}
-                            />
+                        {/* Color */}
+                        <div>
+                          <label style={labelStyle}>Color</label>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 9,
+                              flexWrap: "wrap",
+                              marginBottom: 14,
+                            }}
+                          >
+                            {PRESET_COLORS.map((c) => {
+                              const isSel =
+                                c.hex.toLowerCase() === form.colorHex.toLowerCase()
+                              const light = luminance(c.hex) > 0.6
+                              return (
+                                <button
+                                  key={c.hex}
+                                  type="button"
+                                  onClick={() => selectColor(c)}
+                                  title={c.name}
+                                  style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 9,
+                                    border: "none",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    background: c.hex,
+                                    boxShadow: isSel
+                                      ? "0 0 0 2px #fff, 0 0 0 4px #8b5e3c"
+                                      : light
+                                        ? "inset 0 0 0 1px #e2e5ea"
+                                        : "inset 0 0 0 1px rgba(0,0,0,.06)",
+                                  }}
+                                >
+                                  {isSel && (
+                                    <span
+                                      style={{
+                                        fontSize: 14,
+                                        fontWeight: 700,
+                                        lineHeight: 1,
+                                        color: light ? "#16181d" : "#ffffff",
+                                      }}
+                                    >
+                                      ✓
+                                    </span>
+                                  )}
+                                </button>
+                              )
+                            })}
                           </div>
-                          <div>
-                            <label
-                              style={{
-                                ...labelStyle,
-                                fontSize: 11.5,
-                                color: "#8a909c",
-                                marginBottom: 6,
-                                fontFamily: "'Noto Sans Thai', sans-serif",
-                              }}
-                            >
-                              สีสินค้า{" "}
-                              <span
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: 12,
+                            }}
+                          >
+                            <div>
+                              <label
                                 style={{
-                                  fontSize: 9.5,
-                                  fontWeight: 600,
-                                  color: "#6b7280",
-                                  background: "#f0f1f4",
-                                  padding: "1px 5px",
-                                  borderRadius: 5,
-                                  fontFamily: "inherit",
+                                  ...labelStyle,
+                                  fontSize: 11.5,
+                                  color: "#8a909c",
+                                  marginBottom: 6,
                                 }}
                               >
-                                TH
-                              </span>
-                            </label>
-                            <input
-                              value={form.colorNameTh}
-                              onChange={upd("colorNameTh")}
-                              placeholder="กรมท่า"
-                              style={{
-                                ...inputStyle,
-                                height: 40,
-                                padding: "0 12px",
-                                fontFamily: "'Noto Sans Thai', sans-serif",
-                              }}
-                            />
+                                Color name{" "}
+                                <span
+                                  style={{
+                                    fontSize: 9.5,
+                                    fontWeight: 600,
+                                    color: "#6b7280",
+                                    background: "#f0f1f4",
+                                    padding: "1px 5px",
+                                    borderRadius: 5,
+                                  }}
+                                >
+                                  EN
+                                </span>
+                              </label>
+                              <input
+                                value={form.colorName}
+                                onChange={upd("colorName")}
+                                placeholder="Navy"
+                                style={{ ...inputStyle, height: 40, padding: "0 12px" }}
+                              />
+                            </div>
+                            <div>
+                              <label
+                                style={{
+                                  ...labelStyle,
+                                  fontSize: 11.5,
+                                  color: "#8a909c",
+                                  marginBottom: 6,
+                                  fontFamily: "'Noto Sans Thai', sans-serif",
+                                }}
+                              >
+                                สีสินค้า{" "}
+                                <span
+                                  style={{
+                                    fontSize: 9.5,
+                                    fontWeight: 600,
+                                    color: "#6b7280",
+                                    background: "#f0f1f4",
+                                    padding: "1px 5px",
+                                    borderRadius: 5,
+                                    fontFamily: "inherit",
+                                  }}
+                                >
+                                  TH
+                                </span>
+                              </label>
+                              <input
+                                value={form.colorNameTh}
+                                onChange={upd("colorNameTh")}
+                                placeholder="กรมท่า"
+                                style={{
+                                  ...inputStyle,
+                                  height: 40,
+                                  padding: "0 12px",
+                                  fontFamily: "'Noto Sans Thai', sans-serif",
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
                     )}
                   </section>
 
                   {/* Measurements */}
                   {!isSet && (
-                  <section style={sectionStyle}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        marginBottom: 20,
-                      }}
-                    >
-                      <div>
-                        <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>
-                          Measurements
-                        </h2>
-                        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
-                          {isUpper
-                            ? "Upper-body garment — chest, sleeve type and collar type."
-                            : "Lower-body garment — waist range."}
-                        </p>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          padding: "4px 11px",
-                          borderRadius: 999,
-                          background: "#f4f5f7",
-                          color: "#707683",
-                        }}
-                      >
-                        {isUpper ? "Upper body" : "Lower body"}
-                      </span>
-                    </div>
-
-                    {isUpper ? (
+                    <section style={sectionStyle}>
                       <div
                         style={{
-                          display: "grid",
-                          gridTemplateColumns: "1.4fr 1fr 1fr",
-                          gap: 16,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: 20,
                         }}
                       >
                         <div>
-                          <label style={labelStyle}>
-                            Chest{" "}
-                            <span style={{ color: "#9aa0ac", fontWeight: 500 }}>
-                              (inch)
-                            </span>
-                          </label>
-                          <div
-                            style={{ display: "flex", alignItems: "center", gap: 9 }}
-                          >
-                            <input
-                              type="number"
-                              value={form.chestMin}
-                              onChange={upd("chestMin")}
-                              placeholder="Min"
-                              style={inputStyle}
-                            />
-                            <span style={{ color: "#c8cdd6", fontWeight: 600 }}>–</span>
-                            <input
-                              type="number"
-                              value={form.chestMax}
-                              onChange={upd("chestMax")}
-                              placeholder="Max"
-                              style={inputStyle}
-                            />
+                          <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>
+                            Measurements
+                          </h2>
+                          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
+                            {isUpper
+                              ? "Upper-body garment — chest, sleeve type and collar type."
+                              : "Lower-body garment — waist range."}
+                          </p>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: "4px 11px",
+                            borderRadius: 999,
+                            background: "#f4f5f7",
+                            color: "#707683",
+                          }}
+                        >
+                          {isUpper ? "Upper body" : "Lower body"}
+                        </span>
+                      </div>
+
+                      {isUpper ? (
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1.4fr 1fr 1fr",
+                            gap: 16,
+                          }}
+                        >
+                          <div>
+                            <label style={labelStyle}>
+                              Chest{" "}
+                              <span style={{ color: "#9aa0ac", fontWeight: 500 }}>
+                                (inch)
+                              </span>
+                            </label>
+                            <div
+                              style={{ display: "flex", alignItems: "center", gap: 9 }}
+                            >
+                              <input
+                                type="number"
+                                value={form.chestMin}
+                                onChange={upd("chestMin")}
+                                placeholder="Min"
+                                style={inputStyle}
+                              />
+                              <span style={{ color: "#c8cdd6", fontWeight: 600 }}>–</span>
+                              <input
+                                type="number"
+                                value={form.chestMax}
+                                onChange={upd("chestMax")}
+                                placeholder="Max"
+                                style={inputStyle}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Sleeve</label>
+                            <select
+                              value={form.sleeve}
+                              onChange={handleSleeveChange}
+                              style={selectStyle}
+                            >
+                              {SLEEVE_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label} / {o.labelTh}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Collar</label>
+                            <select
+                              value={form.collar}
+                              onChange={handleCollarChange}
+                              style={selectStyle}
+                            >
+                              {COLLAR_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label} / {o.labelTh}</option>
+                              ))}
+                            </select>
                           </div>
                         </div>
-                        <div>
-                          <label style={labelStyle}>Sleeve</label>
-                          <select
-                            value={form.sleeve}
-                            onChange={handleSleeveChange}
-                            style={selectStyle}
-                          >
-                            {SLEEVE_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>{o.label} / {o.labelTh}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Collar</label>
-                          <select
-                            value={form.collar}
-                            onChange={handleCollarChange}
-                            style={selectStyle}
-                          >
-                            {COLLAR_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>{o.label} / {o.labelTh}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <div>
-                          <label style={labelStyle}>
-                            Waist{" "}
-                            <span style={{ color: "#9aa0ac", fontWeight: 500 }}>
-                              (inch)
-                            </span>
-                          </label>
-                          <div
-                            style={{ display: "flex", alignItems: "center", gap: 9 }}
-                          >
-                            <input
-                              type="number"
-                              value={form.waistMin}
-                              onChange={upd("waistMin")}
-                              placeholder="Min"
-                              style={inputStyle}
-                            />
-                            <span style={{ color: "#c8cdd6", fontWeight: 600 }}>–</span>
-                            <input
-                              type="number"
-                              value={form.waistMax}
-                              onChange={upd("waistMax")}
-                              placeholder="Max"
-                              style={inputStyle}
-                            />
+                      ) : (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                          <div>
+                            <label style={labelStyle}>
+                              Waist{" "}
+                              <span style={{ color: "#9aa0ac", fontWeight: 500 }}>
+                                (inch)
+                              </span>
+                            </label>
+                            <div
+                              style={{ display: "flex", alignItems: "center", gap: 9 }}
+                            >
+                              <input
+                                type="number"
+                                value={form.waistMin}
+                                onChange={upd("waistMin")}
+                                placeholder="Min"
+                                style={inputStyle}
+                              />
+                              <span style={{ color: "#c8cdd6", fontWeight: 600 }}>–</span>
+                              <input
+                                type="number"
+                                value={form.waistMax}
+                                onChange={upd("waistMax")}
+                                placeholder="Max"
+                                style={inputStyle}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </section>
+                      )}
+                    </section>
                   )}
 
                   {/* Pricing & inventory */}

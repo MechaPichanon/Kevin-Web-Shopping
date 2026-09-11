@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import {
   Package,
   Users,
@@ -159,7 +160,7 @@ export default function AdminDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isStaff, setIsStaff] = useState(false)
-
+  const [accountName, setAccountName] = useState("")
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
   const [statsError, setStatsError] = useState<string | null>(null)
@@ -202,7 +203,7 @@ export default function AdminDashboard() {
     const staff = parsed.role === "staff"
     setIsStaff(staff)
     setIsAdmin(true)
-
+    setAccountName(parsed.username || parsed.email || "")
     fetchDashboardStats()
       .then(setStats)
       .catch((e: Error) => setStatsError(e.message))
@@ -304,8 +305,8 @@ export default function AdminDashboard() {
 
   const chartDots = chartData?.hasData
     ? chartData.currentVals
-        .map((v, i) => ({ x: chartData.scaleX(i).toFixed(1), y: chartData.scaleY(v).toFixed(1), i }))
-        .filter((d) => d.i % 6 === 0 || d.i === chartData.n - 1)
+      .map((v, i) => ({ x: chartData.scaleX(i).toFixed(1), y: chartData.scaleY(v).toFixed(1), i }))
+      .filter((d) => d.i % 6 === 0 || d.i === chartData.n - 1)
     : []
 
   const xAxisLabels = chartData?.hasData
@@ -639,9 +640,8 @@ export default function AdminDashboard() {
 
       {/* SIDEBAR */}
       <aside
-        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
@@ -650,8 +650,8 @@ export default function AdminDashboard() {
                 <span className="font-bold text-white">L</span>
               </div>
               <div>
-                <p className="text-lg font-semibold">BosButter</p>
-                <p className="text-xs text-white/60">{panelLabel}</p>
+                <span className="font-semibold">{accountName || (isStaff ? "Staff" : "Admin")}</span>
+                <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
               </div>
             </Link>
             <button className="lg:hidden" onClick={() => setIsSidebarOpen(false)}>
@@ -664,9 +664,8 @@ export default function AdminDashboard() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                  item.href === "/admin" ? "bg-[#8b5e3c] text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
-                }`}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${item.href === "/admin" ? "bg-[#8b5e3c] text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
+                  }`}
               >
                 <item.icon className="h-5 w-5" />
                 {item.label}
@@ -675,18 +674,14 @@ export default function AdminDashboard() {
           </nav>
 
           <div className="border-t border-white/10 p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#8b5e3c]">
-                <span className="font-semibold">{isStaff ? "S" : "A"}</span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">{isStaff ? "Staff" : "Admin"}</p>
-                <p className="text-xs text-white/60">{isStaff ? "พนักงาน" : "ผู้ดูแลระบบ"}</p>
-              </div>
-              <button onClick={handleLogout} className="rounded-lg p-2 transition hover:bg-white/10">
-                <LogOut className="h-4 w-4" />
-              </button>
-            </div>
+            <Button
+              variant="ghost"
+              className="w-full gap-2 text-white hover:bg-white/10"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" />
+              ออกจากระบบ
+            </Button>
           </div>
         </div>
       </aside>
@@ -728,9 +723,8 @@ export default function AdminDashboard() {
         <main className="flex-1 space-y-6 p-4 lg:p-6">
           {/* KPI CARDS */}
           <section
-            className={`grid gap-4 sm:grid-cols-2 ${
-              isStaff ? "xl:grid-cols-2" : "xl:grid-cols-[minmax(280px,2fr)_repeat(3,minmax(200px,1fr))]"
-            }`}
+            className={`grid gap-4 sm:grid-cols-2 ${isStaff ? "xl:grid-cols-2" : "xl:grid-cols-[minmax(280px,2fr)_repeat(3,minmax(200px,1fr))]"
+              }`}
           >
             {statsLoading ? (
               Array.from({ length: isStaff ? 2 : 4 }).map((_, i) => (
@@ -807,114 +801,113 @@ export default function AdminDashboard() {
 
           {/* REVENUE CHART */}
           {!isStaff && (
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">ยอดขายรายวัน</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  30 วันที่ผ่านมา เทียบกับช่วงก่อนหน้า · ไม่รวมคำสั่งซื้อที่ยกเลิก/คืนเงิน
-                </p>
-              </div>
-              {periodChange && (
-                <span
-                  className={`flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
-                    periodChange.isUp ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                  }`}
-                >
-                  {periodChange.isUp ? "▲" : "▼"} {periodChange.text}
-                </span>
-              )}
-            </div>
-
-            {revenueLoading ? (
-              <div className="h-[220px] animate-pulse rounded-xl bg-muted" />
-            ) : revenueError ? (
-              <p className="flex items-center gap-2 text-sm text-red-700">
-                <AlertCircle className="h-4 w-4" />
-                {revenueError}
-              </p>
-            ) : !chartData?.hasData ? (
-              <div className="flex h-[180px] items-center justify-center rounded-xl bg-muted/40 text-sm text-muted-foreground">
-                ยังไม่มีข้อมูลยอดขายในช่วง 60 วันที่ผ่านมา
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-2.5">
-                  <div
-                    className="flex flex-none flex-col justify-between text-[11px] text-muted-foreground"
-                    style={{ height: 180 }}
+            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">ยอดขายรายวัน</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    30 วันที่ผ่านมา เทียบกับช่วงก่อนหน้า · ไม่รวมคำสั่งซื้อที่ยกเลิก/คืนเงิน
+                  </p>
+                </div>
+                {periodChange && (
+                  <span
+                    className={`flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${periodChange.isUp ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                      }`}
                   >
-                    {chartData.yLabels.map((y, i) => (
-                      <span key={i}>{y}</span>
-                    ))}
-                  </div>
-                  <div className="relative min-w-0 flex-1">
-                    <svg
-                      viewBox="0 0 720 180"
-                      preserveAspectRatio="none"
-                      className="block h-[180px] w-full cursor-crosshair"
-                      onMouseMove={handleChartMove}
-                      onMouseLeave={handleChartLeave}
+                    {periodChange.isUp ? "▲" : "▼"} {periodChange.text}
+                  </span>
+                )}
+              </div>
+
+              {revenueLoading ? (
+                <div className="h-[220px] animate-pulse rounded-xl bg-muted" />
+              ) : revenueError ? (
+                <p className="flex items-center gap-2 text-sm text-red-700">
+                  <AlertCircle className="h-4 w-4" />
+                  {revenueError}
+                </p>
+              ) : !chartData?.hasData ? (
+                <div className="flex h-[180px] items-center justify-center rounded-xl bg-muted/40 text-sm text-muted-foreground">
+                  ยังไม่มีข้อมูลยอดขายในช่วง 60 วันที่ผ่านมา
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2.5">
+                    <div
+                      className="flex flex-none flex-col justify-between text-[11px] text-muted-foreground"
+                      style={{ height: 180 }}
                     >
-                      {chartData.gridY.map((g, i) => (
-                        <line key={i} x1={0} y1={g} x2={720} y2={g} stroke="#e0d5c8" strokeWidth={1} />
-                      ))}
-                      <path d={chartData.areaPath} fill="rgba(139,94,60,.1)" stroke="none" />
-                      <path d={chartData.prevLinePath} fill="none" stroke="#d8c9b8" strokeWidth={2} strokeDasharray="4 4" />
-                      <path d={chartData.linePath} fill="none" stroke="#8b5e3c" strokeWidth={2.5} />
-                      {chartDots.map((d) => (
-                        <circle key={d.i} cx={d.x} cy={d.y} r={3} fill="#8b5e3c" />
-                      ))}
-                      {hoverPoint && (
-                        <>
-                          <line x1={hoverPoint.x} y1={0} x2={hoverPoint.x} y2={180} stroke="#8b5e3c" strokeWidth={1} strokeDasharray="3 3" />
-                          <circle cx={hoverPoint.x} cy={hoverPoint.curY} r={4} fill="#8b5e3c" stroke="#fff" strokeWidth={1.5} />
-                          <circle cx={hoverPoint.x} cy={hoverPoint.prevY} r={4} fill="#b89f8d" stroke="#fff" strokeWidth={1.5} />
-                        </>
-                      )}
-                    </svg>
-                    {hoverPoint && (
-                      <div
-                        className="pointer-events-none absolute top-2 min-w-[130px] rounded-lg bg-[#3d3025] p-2.5 text-[11.5px] text-white"
-                        style={{ left: `${hoverPoint.leftPct}%`, transform: hoverPoint.transform }}
-                      >
-                        <div className="mb-1.5 text-white/60">{hoverPoint.date}</div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-[#c8a688]" />
-                            ช่วงนี้
-                          </span>
-                          <span>{hoverPoint.curVal}</span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between gap-3">
-                          <span className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-[#8a7a68]" />
-                            ช่วงก่อนหน้า
-                          </span>
-                          <span>{hoverPoint.prevVal}</span>
-                        </div>
-                      </div>
-                    )}
-                    <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
-                      {xAxisLabels.map((label, i) => (
-                        <span key={i}>{label}</span>
+                      {chartData.yLabels.map((y, i) => (
+                        <span key={i}>{y}</span>
                       ))}
                     </div>
+                    <div className="relative min-w-0 flex-1">
+                      <svg
+                        viewBox="0 0 720 180"
+                        preserveAspectRatio="none"
+                        className="block h-[180px] w-full cursor-crosshair"
+                        onMouseMove={handleChartMove}
+                        onMouseLeave={handleChartLeave}
+                      >
+                        {chartData.gridY.map((g, i) => (
+                          <line key={i} x1={0} y1={g} x2={720} y2={g} stroke="#e0d5c8" strokeWidth={1} />
+                        ))}
+                        <path d={chartData.areaPath} fill="rgba(139,94,60,.1)" stroke="none" />
+                        <path d={chartData.prevLinePath} fill="none" stroke="#d8c9b8" strokeWidth={2} strokeDasharray="4 4" />
+                        <path d={chartData.linePath} fill="none" stroke="#8b5e3c" strokeWidth={2.5} />
+                        {chartDots.map((d) => (
+                          <circle key={d.i} cx={d.x} cy={d.y} r={3} fill="#8b5e3c" />
+                        ))}
+                        {hoverPoint && (
+                          <>
+                            <line x1={hoverPoint.x} y1={0} x2={hoverPoint.x} y2={180} stroke="#8b5e3c" strokeWidth={1} strokeDasharray="3 3" />
+                            <circle cx={hoverPoint.x} cy={hoverPoint.curY} r={4} fill="#8b5e3c" stroke="#fff" strokeWidth={1.5} />
+                            <circle cx={hoverPoint.x} cy={hoverPoint.prevY} r={4} fill="#b89f8d" stroke="#fff" strokeWidth={1.5} />
+                          </>
+                        )}
+                      </svg>
+                      {hoverPoint && (
+                        <div
+                          className="pointer-events-none absolute top-2 min-w-[130px] rounded-lg bg-[#3d3025] p-2.5 text-[11.5px] text-white"
+                          style={{ left: `${hoverPoint.leftPct}%`, transform: hoverPoint.transform }}
+                        >
+                          <div className="mb-1.5 text-white/60">{hoverPoint.date}</div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-[#c8a688]" />
+                              ช่วงนี้
+                            </span>
+                            <span>{hoverPoint.curVal}</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between gap-3">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-[#8a7a68]" />
+                              ช่วงก่อนหน้า
+                            </span>
+                            <span>{hoverPoint.prevVal}</span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+                        {xAxisLabels.map((label, i) => (
+                          <span key={i}>{label}</span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-3.5 flex items-center gap-4 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-[2.5px] w-4 rounded-full bg-[#8b5e3c]" />
-                    ช่วงนี้
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-[2px] w-4 rounded-full bg-[#d8c9b8]" />
-                    ช่วงก่อนหน้า
-                  </span>
-                </div>
-              </>
-            )}
-          </section>
+                  <div className="mt-3.5 flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-[2.5px] w-4 rounded-full bg-[#8b5e3c]" />
+                      ช่วงนี้
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-[2px] w-4 rounded-full bg-[#d8c9b8]" />
+                      ช่วงก่อนหน้า
+                    </span>
+                  </div>
+                </>
+              )}
+            </section>
           )}
 
           {/* QUICK ACTIONS */}
@@ -1022,9 +1015,8 @@ export default function AdminDashboard() {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5">
                             <span
-                              className={`flex h-5 w-5 flex-none items-center justify-center rounded-md text-[11px] font-bold ${
-                                i === 0 ? "bg-primary text-white" : "bg-primary/10 text-primary"
-                              }`}
+                              className={`flex h-5 w-5 flex-none items-center justify-center rounded-md text-[11px] font-bold ${i === 0 ? "bg-primary text-white" : "bg-primary/10 text-primary"
+                                }`}
                             >
                               {i + 1}
                             </span>

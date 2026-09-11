@@ -173,7 +173,7 @@ export default function AdminOrdersPage() {
   const [rejectReason, setRejectReason] = useState("")
   const [paymentActionError, setPaymentActionError] = useState<string | null>(null)
   const [isPaymentActionBusy, setIsPaymentActionBusy] = useState(false)
-
+  const [accountName, setAccountName] = useState("")
   useEffect(() => {
     // ⚠️ Assumes login stores the JWT under "token" and the user object
     // (with a "role" field) under "user" — matches server.js's /auth/login
@@ -192,7 +192,7 @@ export default function AdminOrdersPage() {
     setIsAdmin(true)
     setIsStaff(parsed.role === "staff")
     setAdminEmail(parsed.email ?? "")
-
+    setAccountName(parsed.username || parsed.email || "")
     fetchOrders()
       .then(setOrders)
       .catch((err) => setLoadError(err.message))
@@ -247,7 +247,7 @@ export default function AdminOrdersPage() {
       await updateOrderStatusApi(orderId, newStatus)
     } catch (err) {
       console.error(err)
-      fetchOrders().then(setOrders).catch(() => {})
+      fetchOrders().then(setOrders).catch(() => { })
     }
   }
 
@@ -280,9 +280,8 @@ export default function AdminOrdersPage() {
       )}
 
       <aside
-        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center justify-between border-b border-border px-4">
@@ -291,7 +290,7 @@ export default function AdminOrdersPage() {
                 <span className="text-sm font-bold text-primary-foreground">L</span>
               </div>
               <div>
-                <span className="font-semibold">BosButter</span>
+                <span className="font-semibold">{accountName || (isStaff ? "Staff" : "Admin")}</span>
                 <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
               </div>
             </Link>
@@ -308,11 +307,10 @@ export default function AdminOrdersPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                  item.href === "/admin/orders"
-                    ? "bg-[#8b5e3c] text-white"
-                    : "text-white/70 hover:bg-white/10 hover:text-white"
-                }`}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${item.href === "/admin/orders"
+                  ? "bg-[#8b5e3c] text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  }`}
               >
                 <item.icon className="h-5 w-5" />
                 {item.label}
@@ -320,19 +318,15 @@ export default function AdminOrdersPage() {
             ))}
           </nav>
 
-          <div className="border-t border-border p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-medium text-primary">{isStaff ? "S" : "A"}</span>
-              </div>
-              <div className="flex-1">
-                <span className="font-semibold">BosButter</span>
-                <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+          <div className="border-t border-white/10 p-4">
+            <Button
+              variant="ghost"
+              className="w-full gap-2 text-white hover:bg-white/10"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" />
+              ออกจากระบบ
+            </Button>
           </div>
         </div>
       </aside>
@@ -483,9 +477,8 @@ export default function AdminOrdersPage() {
                               filteredOrders.map((order) => (
                                 <tr
                                   key={order.id}
-                                  className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
-                                    selectedOrder?.id === order.id ? "bg-primary/5" : "hover:bg-muted/30"
-                                  }`}
+                                  className={`border-b border-border last:border-0 cursor-pointer transition-colors ${selectedOrder?.id === order.id ? "bg-primary/5" : "hover:bg-muted/30"
+                                    }`}
                                   onClick={() => setSelectedOrder(order)}
                                 >
                                   <td className="px-4 py-3 text-sm font-medium text-foreground">{order.id}</td>
@@ -504,14 +497,14 @@ export default function AdminOrdersPage() {
                                       </span>
                                       {(order.paymentStatus === "pending_verification" ||
                                         order.paymentStatus === "rejected") && (
-                                        <span
-                                          className={`inline-flex w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${getPaymentColor(
-                                            order.paymentStatus
-                                          )}`}
-                                        >
-                                          {getPaymentText(order.paymentStatus)}
-                                        </span>
-                                      )}
+                                          <span
+                                            className={`inline-flex w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${getPaymentColor(
+                                              order.paymentStatus
+                                            )}`}
+                                          >
+                                            {getPaymentText(order.paymentStatus)}
+                                          </span>
+                                        )}
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-muted-foreground">{order.date}</td>
@@ -661,7 +654,7 @@ export default function AdminOrdersPage() {
                               selectedOrder.slips && selectedOrder.slips.length > 0
                                 ? selectedOrder.slips
                                 : selectedOrder.paymentSlipUrl
-                                ? [
+                                  ? [
                                     {
                                       url: selectedOrder.paymentSlipUrl,
                                       status: selectedOrder.paymentStatus,
@@ -669,7 +662,7 @@ export default function AdminOrdersPage() {
                                       uploadedAt: "",
                                     },
                                   ]
-                                : []
+                                  : []
                             if (slips.length === 0) return null
                             return (
                               <div className="mt-3 space-y-3">
@@ -709,47 +702,47 @@ export default function AdminOrdersPage() {
 
                           {(selectedOrder.paymentStatus === "pending_verification" ||
                             selectedOrder.paymentStatus === "rejected") && (
-                            <div className="mt-3 space-y-2">
-                              <Textarea
-                                value={rejectReason}
-                                onChange={(e) => setRejectReason(e.target.value)}
-                                placeholder="เหตุผลที่สลิปไม่ถูกต้อง (จะแสดงให้ลูกค้าเห็น)"
-                                className="min-h-20 text-sm"
-                              />
-                              {paymentActionError && (
-                                <p className="text-xs text-destructive">{paymentActionError}</p>
-                              )}
-                              <div className="grid grid-cols-2 gap-2">
-                                <Button
-                                  size="sm"
-                                  disabled={isPaymentActionBusy}
-                                  className="gap-2 bg-green-600 text-white hover:bg-green-700"
-                                  onClick={() => updatePaymentStatus(selectedOrder.id, "paid")}
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                  ยืนยันการชำระ
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isPaymentActionBusy}
-                                  className="gap-2 border-red-200 text-destructive hover:text-destructive"
-                                  onClick={() =>
-                                    updatePaymentStatus(
-                                      selectedOrder.id,
-                                      "rejected",
-                                      rejectReason.trim()
-                                    )
-                                  }
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                  {selectedOrder.paymentStatus === "rejected"
-                                    ? "ส่งเหตุผลอีกครั้ง"
-                                    : "สลิปไม่ถูกต้อง"}
-                                </Button>
+                              <div className="mt-3 space-y-2">
+                                <Textarea
+                                  value={rejectReason}
+                                  onChange={(e) => setRejectReason(e.target.value)}
+                                  placeholder="เหตุผลที่สลิปไม่ถูกต้อง (จะแสดงให้ลูกค้าเห็น)"
+                                  className="min-h-20 text-sm"
+                                />
+                                {paymentActionError && (
+                                  <p className="text-xs text-destructive">{paymentActionError}</p>
+                                )}
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Button
+                                    size="sm"
+                                    disabled={isPaymentActionBusy}
+                                    className="gap-2 bg-green-600 text-white hover:bg-green-700"
+                                    onClick={() => updatePaymentStatus(selectedOrder.id, "paid")}
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                    ยืนยันการชำระ
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isPaymentActionBusy}
+                                    className="gap-2 border-red-200 text-destructive hover:text-destructive"
+                                    onClick={() =>
+                                      updatePaymentStatus(
+                                        selectedOrder.id,
+                                        "rejected",
+                                        rejectReason.trim()
+                                      )
+                                    }
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                    {selectedOrder.paymentStatus === "rejected"
+                                      ? "ส่งเหตุผลอีกครั้ง"
+                                      : "สลิปไม่ถูกต้อง"}
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </div>
 
                         {/* status */}

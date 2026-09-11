@@ -58,7 +58,7 @@ export default function AdminChatPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [isStaff, setIsStaff] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-
+  const [accountName, setAccountName] = useState("")
   const [queue, setQueue] = useState<QueueResult | null>(null)
   const [queueError, setQueueError] = useState<string | null>(null)
   const [queueLoading, setQueueLoading] = useState(true)
@@ -84,7 +84,7 @@ export default function AdminChatPage() {
       router.push("/login")
       return
     }
-    let parsed: { role?: string } = {}
+    let parsed: { role?: string; username?: string; email?: string } = {}
     try {
       parsed = JSON.parse(user)
     } catch {
@@ -97,6 +97,7 @@ export default function AdminChatPage() {
     }
     setIsAdmin(true)
     setIsStaff(parsed.role === "staff")
+    setAccountName(parsed.username || parsed.email || "")
   }, [router])
 
   const handleLogout = () => {
@@ -275,9 +276,8 @@ export default function AdminChatPage() {
       )}
 
       <aside
-        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-20 bottom-0 left-0 z-40 w-64 transform bg-[#5b3a29] text-white transition-transform duration-300 lg:static lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center justify-between border-b border-border px-4">
@@ -286,7 +286,7 @@ export default function AdminChatPage() {
                 <span className="text-sm font-bold text-primary-foreground">L</span>
               </div>
               <div>
-                <span className="font-semibold">BosButter</span>
+                <span className="font-semibold">{accountName || (isStaff ? "Staff" : "Admin")}</span>
                 <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
               </div>
             </Link>
@@ -300,11 +300,10 @@ export default function AdminChatPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                  item.href === "/admin/chat"
-                    ? "bg-[#8b5e3c] text-white"
-                    : "text-white/70 hover:bg-white/10 hover:text-white"
-                }`}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${item.href === "/admin/chat"
+                  ? "bg-[#8b5e3c] text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  }`}
               >
                 <item.icon className="h-5 w-5" />
                 {item.label}
@@ -312,19 +311,15 @@ export default function AdminChatPage() {
             ))}
           </nav>
 
-          <div className="border-t border-border p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-medium text-primary">{isStaff ? "S" : "A"}</span>
-              </div>
-              <div className="flex-1">
-                <span className="font-semibold">BosButter</span>
-                <p className="text-xs text-white/60">{isStaff ? "Staff Panel" : "Admin Panel"}</p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+          <div className="border-t border-white/10 p-4">
+            <Button
+              variant="ghost"
+              className="w-full gap-2 text-white hover:bg-white/10"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" />
+              ออกจากระบบ
+            </Button>
           </div>
         </div>
       </aside>
@@ -418,13 +413,12 @@ export default function AdminChatPage() {
                     return (
                       <div key={m.message_id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                         <div
-                          className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
-                            mine
-                              ? "bg-[#3E6E8E] text-white"
-                              : m.sender_type === "bot"
-                                ? "bg-muted text-foreground"
-                                : "bg-[#f4ece2] text-foreground"
-                          }`}
+                          className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${mine
+                            ? "bg-[#3E6E8E] text-white"
+                            : m.sender_type === "bot"
+                              ? "bg-muted text-foreground"
+                              : "bg-[#f4ece2] text-foreground"
+                            }`}
                         >
                           {m.sender_type === "bot" && (
                             <div className="mb-0.5 text-[10px] font-semibold opacity-60">บอท</div>
@@ -512,11 +506,10 @@ function QueueSection({
                   <button
                     disabled={busy}
                     onClick={() => onPick(row)}
-                    className={`w-full rounded-lg border p-2.5 text-left transition ${
-                      active
-                        ? "border-[#8b5e3c] bg-[#8b5e3c]/10"
-                        : "border-border hover:bg-muted/50"
-                    }`}
+                    className={`w-full rounded-lg border p-2.5 text-left transition ${active
+                      ? "border-[#8b5e3c] bg-[#8b5e3c]/10"
+                      : "border-border hover:bg-muted/50"
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-foreground">{row.guest_label}</span>

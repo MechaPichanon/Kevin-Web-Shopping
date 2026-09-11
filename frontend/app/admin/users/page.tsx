@@ -17,7 +17,7 @@ import {
     Trash2,
     Save,
     Plus,
-  MessageSquare,
+    MessageSquare,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -32,12 +32,12 @@ import {
 } from "@/components/ui/dialog"
 
 const navItems = [
-  { href: "/admin", label: "Dashboard", icon: BarChart3 },
-  { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
-  { href: "/admin/orders", label: "คำสั่งซื้อ", icon: ShoppingCart },
-  { href: "/admin/chat", label: "แชทลูกค้า", icon: MessageSquare },
-  { href: "/admin/users", label: "จัดการผู้ใช้", icon: Users },
-  { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
+    { href: "/admin", label: "Dashboard", icon: BarChart3 },
+    { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
+    { href: "/admin/orders", label: "คำสั่งซื้อ", icon: ShoppingCart },
+    { href: "/admin/chat", label: "แชทลูกค้า", icon: MessageSquare },
+    { href: "/admin/users", label: "จัดการผู้ใช้", icon: Users },
+    { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
 ]
 
 const roles = [
@@ -70,7 +70,7 @@ export default function AdminUsersPage() {
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
-
+    const [accountName, setAccountName] = useState("")
     const [users, setUsers] = useState<User[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -87,7 +87,7 @@ export default function AdminUsersPage() {
 
     useEffect(() => {
         const user = localStorage.getItem("user")
-
+        let parsed: { role?: string; username?: string; email?: string } = {}
         if (user) {
             const parsed = JSON.parse(user)
 
@@ -100,6 +100,7 @@ export default function AdminUsersPage() {
         } else {
             router.push("/login")
         }
+        setAccountName(parsed.username || parsed.email || "")
     }, [router])
 
     const fetchUsers = async () => {
@@ -306,13 +307,8 @@ export default function AdminUsersPage() {
                             </div>
 
                             <div>
-                                <p className="text-lg font-semibold">
-                                    BosButter
-                                </p>
-
-                                <p className="text-xs text-white/60">
-                                    Admin Panel
-                                </p>
+                                <span className="font-semibold">{accountName || "Admin"}</span>
+                                <p className="text-xs text-white/60">{"Admin Panel"}</p>
                             </div>
                         </Link>
 
@@ -327,8 +323,8 @@ export default function AdminUsersPage() {
                                 key={item.href}
                                 href={item.href}
                                 className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${item.href === "/admin/users"
-                                        ? "bg-[#8b5e3c] text-white"
-                                        : "text-white/70 hover:bg-white/10 hover:text-white"
+                                    ? "bg-[#8b5e3c] text-white"
+                                    : "text-white/70 hover:bg-white/10 hover:text-white"
                                     }`}
                             >
                                 <item.icon className="h-5 w-5" />
