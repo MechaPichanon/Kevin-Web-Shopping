@@ -9,6 +9,7 @@ import { getToken } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import { useLang } from "@/lib/language-context"
 import { th as thDict, type TranslationKey } from "@/lib/i18n/dictionaries"
+import { getCourier } from "@/lib/couriers"
 
 const API = "http://localhost:5000"
 
@@ -39,6 +40,7 @@ type Order = {
   paymentSlipUrl?: string
   paymentMethod?: string
   trackingNumber?: string
+  courierName?: string
   notes?: string
   slips?: { url: string; status: string; rejectReason: string | null; uploadedAt: string }[]
   paymentRejectReason?: string | null
@@ -619,6 +621,36 @@ export default function OrdersPage() {
                               <p className="text-muted-foreground">{order.address}</p>
                             </div>
                           </div>
+
+                          {/* Tracking Info */}
+                          {order.trackingNumber && (
+                            <div>
+                              <h3 className="font-semibold text-foreground mb-3">{t("orders.trackingInfo")}</h3>
+                              <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">{t("orders.courier")}</span>
+                                  <span className="text-foreground font-medium">
+                                    {getCourier(order.courierName)?.label || order.courierName || "-"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">{t("orders.trackingNumber")}</span>
+                                  <span className="text-foreground font-medium">{order.trackingNumber}</span>
+                                </div>
+                                {(() => {
+                                  const url = getCourier(order.courierName)?.trackingUrl(order.trackingNumber!)
+                                  return url ? (
+                                    <a href={url} target="_blank" rel="noopener noreferrer" className="block pt-1">
+                                      <Button variant="outline" size="sm" className="gap-2 w-full">
+                                        <Truck className="h-4 w-4" />
+                                        {t("orders.trackAtCourier")}
+                                      </Button>
+                                    </a>
+                                  ) : null
+                                })()}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Payment Info */}
                           <div>

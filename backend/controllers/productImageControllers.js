@@ -1,4 +1,5 @@
 const pool = require("../db")
+const { requestImageEmbedding } = require("../utils/imageEmbedding")
 
 // GET /products/:productId/images
 // Returns all images for a product ordered by color then sort_order.
@@ -48,6 +49,10 @@ const addProductImage = async (req, res) => {
     )
 
     res.status(201).json(result.rows[0])
+
+    requestImageEmbedding(result.rows[0].image_id, productId, image_url).catch((err) =>
+      console.error("[image-embed] failed for", result.rows[0].image_id, err.message)
+    )
   } catch (err) {
     console.error("ADD IMAGE ERROR:", err.message)
     res.status(500).json({ error: "Server error" })

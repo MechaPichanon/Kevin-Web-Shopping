@@ -11,6 +11,7 @@ const {
   getAllOrders,
   getOrderById,
   updateOrderStatus,
+  updateOrderTracking,
   updatePaymentStatus,
   uploadPaymentSlip,
   customerReuploadPaymentSlip,
@@ -30,6 +31,7 @@ router.patch("/my/:id/cancel", auth, cancelMyOrder);
 router.get("/admin", auth, requireAdminOrStaff, getAllOrders);
 router.get("/admin/:id", auth, requireAdminOrStaff, getOrderById);
 router.patch("/admin/:id/status", auth, requireAdminOrStaff, updateOrderStatus);
+router.patch("/admin/:id/tracking", auth, requireAdminOrStaff, updateOrderTracking);
 router.patch("/admin/:id/payment-status", auth, requireAdminOrStaff, updatePaymentStatus);
 
 module.exports = router;

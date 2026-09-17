@@ -867,11 +867,28 @@ export default function AdminProductsPage() {
         alert(data.error || "Error saving product")
         return
       }
+      const wasCreate = !editingProduct
+      const data = wasCreate ? await res.json() : null
       setToast(true)
-      setTimeout(() => {
+      setTimeout(async () => {
         setToast(false)
-        cancelForm()
-        fetchProducts()
+        if (wasCreate && data?.product_id) {
+          // Land on the edit view for the product we just created instead of
+          // the list, so the photo just uploaded (now correctly tagged with
+          // its color) is visible right away — no reason left to re-upload it.
+          const listRes = await fetch("http://localhost:5000/products")
+          const list: ProductRow[] = await listRes.json()
+          setProducts(list)
+          const created = list.find((p) => p.product_id === data.product_id)
+          if (created) {
+            openEdit(created)
+          } else {
+            cancelForm()
+          }
+        } else {
+          cancelForm()
+          fetchProducts()
+        }
       }, 1500)
     } catch {
       alert("Unable to save product")

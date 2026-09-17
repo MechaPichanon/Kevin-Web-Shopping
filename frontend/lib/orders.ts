@@ -30,6 +30,7 @@ export type Order = {
   paymentSlipUrl?: string
   paymentMethod?: string
   trackingNumber?: string
+  courierName?: string // courier slug — see lib/couriers.ts for the label + tracking-page URL
   notes?: string
   slips?: PaymentSlip[]
   paymentRejectReason?: string | null
@@ -60,6 +61,19 @@ export async function updateOrderStatusApi(id: number, status: string): Promise<
     body: JSON.stringify({ status }),
   })
   if (!res.ok) throw new Error("อัปเดตสถานะไม่สำเร็จ")
+}
+
+export async function updateOrderTrackingApi(
+  id: number,
+  trackingNumber: string,
+  courierName: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/${id}/tracking`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ tracking_number: trackingNumber, courier_name: courierName }),
+  })
+  if (!res.ok) throw new Error("บันทึกเลขพัสดุไม่สำเร็จ")
 }
 
 export async function updatePaymentStatusApi(

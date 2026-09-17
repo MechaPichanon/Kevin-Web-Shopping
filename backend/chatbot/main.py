@@ -953,3 +953,43 @@ async def image_search_endpoint(image: UploadFile = File(...)):
 
     results = image_search.search_by_image(embedding, limit=10)
     return {"results": results}
+
+
+class EmbedOneRequest(BaseModel):
+    image_id: int
+    product_id: str
+    image_url: str
+
+
+@app.post("/image-search/embed-one")
+def embed_one_image(req: EmbedOneRequest):
+    """
+    Compute and store the CLIP embedding for a single product image.
+    Called fire-and-forget by the Node backend right after a product_images
+    row is inserted or its image_url changes, so new photos become
+    searchable without needing the manual backfill script.
+    """
+    try:
+        response = requests.get(image_search.resolve_uploads_url(req.image_url), timeout=30)
+        response.raise_for_status()
+        embedding = image_search.embed_image(response.content)
+    except Exception as exc:
+        logger.error(f"embed-one fetch/embed failed for image {req.image_id}: {exc}")
+        raise HTTPException(status_code=400, detail="Could not fetch or embed image")
+
+    conn = get_conn()
+    if conn is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    try:
+        cur = conn.cursor()
+        image_search.store_embedding(cur, req.image_id, req.product_id, embedding)
+        conn.commit()
+        cur.close()
+    except Exception as exc:
+        conn.rollback()
+        logger.error(f"embed-one store failed for image {req.image_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Could not store embedding")
+    finally:
+        release_conn(conn)
+
+    return {"ok": True}

@@ -14,6 +14,40 @@ export type ImageSearchResult = {
 
 export const IMAGE_SEARCH_STORAGE_KEY = "kevin_image_search_result";
 
+const MAX_PREVIEW_DIMENSION = 480;
+const PREVIEW_QUALITY = 0.72;
+
+function createPreviewDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(
+        1,
+        MAX_PREVIEW_DIMENSION / Math.max(img.width, img.height)
+      );
+      const width = Math.round(img.width * scale);
+      const height = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      URL.revokeObjectURL(objectUrl);
+      if (!ctx) {
+        reject(new Error("Canvas context unavailable"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", PREVIEW_QUALITY));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image"));
+    };
+    img.src = objectUrl;
+  });
+}
+
 export default function ImageSearchButton() {
   const router = useRouter();
   const { t } = useLang();
@@ -76,16 +110,17 @@ export default function ImageSearchButton() {
     }
   };
 
-  const runSearch = (file: File) => {
+  const runSearch = async (file: File) => {
     setError("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      setPreviewSrc(dataUrl);
-      setPhase("loading");
-      uploadAndSearch(file, dataUrl);
-    };
-    reader.readAsDataURL(file);
+    setPhase("loading");
+    try {
+      const previewDataUrl = await createPreviewDataUrl(file);
+      setPreviewSrc(previewDataUrl);
+      await uploadAndSearch(file, previewDataUrl);
+    } catch {
+      setError(t("imageSearch.failed"));
+      setPhase("dropzone");
+    }
   };
 
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {

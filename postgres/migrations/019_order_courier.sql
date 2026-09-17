@@ -1,0 +1,2 @@
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS courier_name VARCHAR(100);
