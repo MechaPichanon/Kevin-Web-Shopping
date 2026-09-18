@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label";
 import { getToken } from "@/lib/auth";
 import type { ShippingAddress } from "@/types/address";
 import { useLang } from "@/lib/language-context";
-
+import { Check } from "lucide-react"
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
@@ -192,6 +192,12 @@ export default function ProfilePage() {
   // ─────────────────────────────────────────────
   // Handlers – Password
   // ─────────────────────────────────────────────
+  const newPasswordRequirements = [
+    { text: t("auth.pwReqMinLength"), met: passwordForm.newPassword.length >= 8 },
+    { text: t("auth.pwReqUppercase"), met: /[A-Z]/.test(passwordForm.newPassword) },
+    { text: t("auth.pwReqNumber"), met: /[0-9]/.test(passwordForm.newPassword) },
+  ];
+
   const handleChangePassword = async () => {
     setPasswordError("");
     setPasswordSuccess("");
@@ -200,8 +206,8 @@ export default function ProfilePage() {
       setPasswordError(t("profile.pwMismatch"));
       return;
     }
-    if (passwordForm.newPassword.length < 6) {
-      setPasswordError(t("profile.pwTooShort"));
+    if (!newPasswordRequirements.every((req) => req.met)) {
+      setPasswordError(t("profile.pwRequirementsNotMet"));
       return;
     }
 
@@ -236,7 +242,6 @@ export default function ProfilePage() {
       setIsChangingPassword(false);
     }
   };
-
   // ─────────────────────────────────────────────
   // Loading state
   // ─────────────────────────────────────────────
@@ -504,6 +509,18 @@ export default function ProfilePage() {
                             setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))
                           }
                         />
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {newPasswordRequirements.map((req, i) => (
+                          <div
+                            key={i}
+                            className={`flex items-center gap-2 text-xs ${req.met ? "text-green-600" : "text-muted-foreground"
+                              }`}
+                          >
+                            <Check className={`h-3 w-3 ${req.met ? "opacity-100" : "opacity-30"}`} />
+                            {req.text}
+                          </div>
+                        ))}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="confirmPassword">{t("profile.confirmNewPassword")}</Label>

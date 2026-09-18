@@ -136,6 +136,20 @@ function getBangkokDateParts() {
   };
 }
 
+// Password policy shared by registration and password changes, so the rule
+// can't drift between the two. Mirrors the checklist shown on the signup form.
+function validatePassword(password) {
+  if (!password || password.length < 8) {
+    return "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร";
+  }
+  if (!/[A-Z]/.test(password)) {
+    return "รหัสผ่านต้องมีตัวอักษรพิมพ์ใหญ่อย่างน้อย 1 ตัว";
+  }
+  if (!/[0-9]/.test(password)) {
+    return "รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว";
+  }
+  return null;
+}
 /* ======================
    REGISTER
 ====================== */
@@ -147,6 +161,10 @@ app.post("/auth/register", async (req, res) => {
       return res.status(400).json({ error: "กรอกข้อมูลไม่ครบ" });
     }
 
+        const passwordError = validatePassword(password);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
+    }
     // เช็ค email ซ้ำ
     const check = await pool.query(
       "SELECT id FROM users WHERE email = $1",
@@ -399,7 +417,57 @@ app.put("/profile", auth, async (req, res) => {
     client.release();
   }
 });
+/* ======================
+   CHANGE PASSWORD (Protected)
+====================== */
+app.put("/change-password", auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+    const passwordError = validatePassword(newPassword);
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "กรุณากรอกรหัสผ่านให้ครบ" });
+    }
 
+
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
+    }
+
+
+    const result = await pool.query(
+      "SELECT password FROM users WHERE id = $1",
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "ไม่พบผู้ใช้" });
+    }
+
+    const match = await bcrypt.compare(currentPassword, result.rows[0].password);
+
+    if (!match) {
+      return res.status(400).json({ error: "รหัสผ่านปัจจุบันไม่ถูกต้อง" });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม" });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    await pool.query(
+      "UPDATE users SET password = $1 WHERE id = $2",
+      [hash, userId]
+    );
+
+    res.json({ message: "Password changed" });
+
+  } catch (err) {
+    console.error("CHANGE PASSWORD ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 app.get("/users", auth, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`

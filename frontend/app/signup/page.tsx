@@ -96,7 +96,7 @@ export default function SignupPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-    
+
       <main className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
@@ -219,21 +219,20 @@ export default function SignupPage() {
                     )}
                   </button>
                 </div>
-                {formData.password && (
-                  <div className="mt-2 space-y-1">
-                    {passwordRequirements.map((req, i) => (
-                      <div
-                        key={i}
-                        className={`flex items-center gap-2 text-xs ${
-                          req.met ? "text-green-600" : "text-muted-foreground"
+
+                <div className="mt-2 space-y-1">
+                  {passwordRequirements.map((req, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-2 text-xs ${req.met ? "text-green-600" : "text-muted-foreground"
                         }`}
-                      >
-                        <Check className={`h-3 w-3 ${req.met ? "opacity-100" : "opacity-30"}`} />
-                        {req.text}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                    >
+                      <Check className={`h-3 w-3 ${req.met ? "opacity-100" : "opacity-30"}`} />
+                      {req.text}
+                    </div>
+                  ))}
+                </div>
+
               </div>
 
               <div className="space-y-2">
@@ -262,11 +261,10 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setAgreedToTerms(!agreedToTerms)}
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                    agreedToTerms
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${agreedToTerms
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-background"
-                  }`}
+                    }`}
                 >
                   {agreedToTerms && <Check className="h-3 w-3" />}
                 </button>
