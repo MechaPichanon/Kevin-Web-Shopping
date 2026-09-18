@@ -264,6 +264,7 @@
     payment_status    VARCHAR(20)   NOT NULL DEFAULT 'unpaid',
     payment_slip_url  TEXT          DEFAULT NULL,  -- customer-uploaded transfer slip image
     tracking_number   VARCHAR(100)  DEFAULT NULL,
+    courier_name      VARCHAR(100)  DEFAULT NULL,
     notes             TEXT          DEFAULT NULL,
     discount_code     TEXT          DEFAULT NULL,
     discount_amount   NUMERIC       NOT NULL DEFAULT 0,

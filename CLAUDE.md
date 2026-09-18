@@ -196,6 +196,46 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
   - `016_order_addcolumn.sql` — adds `orders.discount_code` (TEXT) and `orders.discount_amount` (NUMERIC, default 0), backing the new discount-code feature (`backend/controllers/discountControllers.js`).
   - `017_payment_slips.sql` — adds `payment_slips(slip_id, order_id, slip_url, status, reject_reason, reviewed_by, reviewed_at, uploaded_at)`, a per-upload history table backing the payment-slip **rejection & re-submission loop** (see the subsection below). One row per customer slip upload — rows are never deleted, so a rejected slip stays on record after the customer sends a new one. `orders.payment_slip_url` is kept as a plain mirror of the newest slip's URL so the existing customer/admin order views work unchanged. Backfilled: one row per existing order that already had a `payment_slip_url` (status derived from the order's `payment_status`). No CHECK-constraint change on `orders` — `rejected` was already allowed since `009_`.
   - `018_live_chat_handoff.sql` — adds `chat_sessions`, `chat_messages`, `admin_presence` for the **"talk to a human" live-chat handoff** (see the subsection below). Required as persisted tables because the FastAPI chatbot keeps conversation state in memory only (single uvicorn process, no `--workers`) — an admin reading the thread from Express needs it in the DB, and it must survive a chatbot restart. No changes to `users`/`orders`/existing `/chat` response keys.
+  - `019_order_courier.sql` — adds `orders.courier_name VARCHAR(100)` (see **Courier tracking number** below). `orders.tracking_number` already existed in the schema since `005_` but was never written by any endpoint — this migration is really about making both columns writable, not adding tracking_number itself.
+
+### Courier tracking number (no courier API — manual admin entry)
+
+No courier has an API integration (and none is planned — see the top-of-file
+note this was scoped down from real order tracking to this instead). An admin
+manually types in the tracking number + picks the courier after handing a
+package to them; the customer sees it on their order and gets a link to that
+courier's own tracking page to check status themselves.
+
+- **DB:** `orders.tracking_number` (existing) + `orders.courier_name` (new,
+  `019_`) — `courier_name` stores a **slug** (`thailand_post`, `kerry`,
+  `flash`, `jt`, `ninja_van`, `dhl`, `other`), not a display label.
+- **Backend:** `PATCH /orders/admin/:id/tracking` (`orderControllers.js`
+  `updateOrderTracking`, `auth, requireAdminOrStaff`) takes
+  `{ tracking_number, courier_name }` and writes both columns in one
+  unconditional `UPDATE` (no status-transition rules to guard, unlike
+  `updateOrderStatus`/`updatePaymentStatus`) — `courier_name` is checked
+  against `VALID_COURIERS` (same slug list as below), 400 on anything else.
+  `formatOrderRow`/`ORDER_SELECT` now also return `courierName`.
+- **Courier slug → label + tracking URL** lives in **one place**,
+  `frontend/lib/couriers.ts` (`COURIERS`, `getCourier()`), used by both the
+  admin picker and the customer-facing link so they can't drift out of sync.
+  Where a courier's tracking site is known to accept the number as a query
+  param (Thailand Post, Kerry, Flash, DHL) the link prefills it; for J&T and
+  Ninja Van it just opens their tracking page and the customer pastes the
+  number in themselves (their URL query-param support wasn't verified — don't
+  assume a prefill link works for those two without checking first).
+- **Admin UI** (`frontend/app/admin/orders/page.tsx`): the order detail panel's
+  tracking block (previously a read-only display of `trackingNumber` that
+  nothing ever set) is now a courier `<select>` + tracking-number `<Input>` +
+  save button, calling `updateOrderTrackingApi` then refetching orders (same
+  refetch-not-optimistic pattern as `updatePaymentStatus`, since the server
+  response shape changed).
+- **Customer UI** (`frontend/app/orders/page.tsx`): new "ข้อมูลพัสดุ" /
+  "Shipment tracking" section (i18n'd, `orders.trackingInfo` /
+  `orders.courier` / `orders.trackingNumber` / `orders.trackAtCourier` keys in
+  both `th`/`en` of `dictionaries.ts`), shown only when `trackingNumber` is
+  set, with a button linking out to the courier's tracking page via
+  `getCourier().trackingUrl()`.
 
 ### Payment-slip rejection & re-submission loop
 
@@ -308,9 +348,9 @@ fixed so there is exactly one "default" address per user, shared by both flows:
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/019_description.sql` (next number is `019`).
+1. Create `postgres/migrations/020_description.sql` (next number is `020`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/019_description.sql`
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/020_description.sql`
 4. Mirror the change in `postgres/init/01_schema.sql`.
 
 ### Full seed (fresh Docker volume)
@@ -346,6 +386,7 @@ psql "$DATABASE_URL" -f postgres/migrations/015_wishlish.sql
 psql "$DATABASE_URL" -f postgres/migrations/016_order_addcolumn.sql
 psql "$DATABASE_URL" -f postgres/migrations/017_payment_slips.sql
 psql "$DATABASE_URL" -f postgres/migrations/018_live_chat_handoff.sql
+psql "$DATABASE_URL" -f postgres/migrations/019_order_courier.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -588,7 +629,7 @@ FASTAPI_BASE_URL=http://localhost:8000
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `019_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `020_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`

@@ -1,5 +1,6 @@
 const crypto = require("crypto")
 const db = require("../db")
+const { requestImageEmbedding } = require("../utils/imageEmbedding")
 
 function buildChunkText({ product_name, category, sub_category, description, price, size, color, sleeve, collar }) {
   const lines = [
@@ -287,13 +288,16 @@ const addProduct = async (req, res) => {
       await attachSetComponents(client, variantId, v)
     }
 
+    let newImageId = null
     if (image_url) {
       const firstVariantId = "V" + now + "_0"
-      await client.query(
-        `INSERT INTO product_images (product_id, variant_id, image_url, is_primary, sort_order)
-         VALUES ($1,$2,$3,true,0)`,
-        [productId, firstVariantId, image_url]
+      const imageResult = await client.query(
+        `INSERT INTO product_images (product_id, variant_id, image_url, color, is_primary, sort_order)
+         VALUES ($1,$2,$3,$4,true,0)
+         RETURNING image_id`,
+        [productId, firstVariantId, image_url, firstV.color || null]
       )
+      newImageId = imageResult.rows[0].image_id
     }
 
     await client.query(
@@ -307,11 +311,16 @@ const addProduct = async (req, res) => {
     )
 
     await client.query("COMMIT")
-    res.status(201).json({ message: "เพิ่มสินค้าสำเร็จ" })
+    res.status(201).json({ message: "เพิ่มสินค้าสำเร็จ", product_id: productId })
 
     generateAndStoreEmbedding(productId, chunkContent).catch((err) =>
       console.error("[embed] failed for", productId, err.message)
     )
+    if (newImageId) {
+      requestImageEmbedding(newImageId, productId, image_url).catch((err) =>
+        console.error("[image-embed] failed for", newImageId, err.message)
+      )
+    }
   } catch (err) {
     if (client) await client.query("ROLLBACK")
     console.log(err)
@@ -420,6 +429,7 @@ const updateProduct = async (req, res) => {
       )
     }
 
+    let changedImageId = null
     if (image_url) {
       const imageResult = await client.query(
         `UPDATE product_images SET image_url=$1, is_primary=true, sort_order=0
@@ -427,11 +437,15 @@ const updateProduct = async (req, res) => {
         [image_url, productId]
       )
       if (imageResult.rowCount === 0) {
-        await client.query(
+        const inserted = await client.query(
           `INSERT INTO product_images (product_id, variant_id, image_url, is_primary, sort_order)
-           VALUES ($1,$2,$3,true,0)`,
+           VALUES ($1,$2,$3,true,0)
+           RETURNING image_id`,
           [productId, submittedIds[0], image_url]
         )
+        changedImageId = inserted.rows[0].image_id
+      } else {
+        changedImageId = imageResult.rows[0].image_id
       }
     }
 
@@ -451,6 +465,11 @@ const updateProduct = async (req, res) => {
     generateAndStoreEmbedding(productId, chunkContent).catch((err) =>
       console.error("[embed] failed for", productId, err.message)
     )
+    if (changedImageId) {
+      requestImageEmbedding(changedImageId, productId, image_url).catch((err) =>
+        console.error("[image-embed] failed for", changedImageId, err.message)
+      )
+    }
   } catch (err) {
     if (client) await client.query("ROLLBACK")
     console.log(err)

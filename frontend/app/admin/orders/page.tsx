@@ -25,6 +25,7 @@ import {
   RefreshCw,
   AlertCircle,
   MessageSquare,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,9 +34,11 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   fetchOrders,
   updateOrderStatusApi,
+  updateOrderTrackingApi,
   updatePaymentStatusApi,
   type Order,
 } from "@/lib/orders"
+import { COURIERS } from "@/lib/couriers"
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
@@ -204,6 +207,10 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     setRejectReason(selectedOrder?.paymentRejectReason ?? "")
     setPaymentActionError(null)
+    setTrackingNumberInput(selectedOrder?.trackingNumber ?? "")
+    setCourierInput(selectedOrder?.courierName ?? "")
+    setTrackingActionError(null)
+    setTrackingSaveState("idle")
   }, [selectedOrder?.id])
 
   const handleLogout = () => {
@@ -248,6 +255,23 @@ export default function AdminOrdersPage() {
     } catch (err) {
       console.error(err)
       fetchOrders().then(setOrders).catch(() => { })
+    }
+  }
+
+  const saveTracking = async (orderId: number) => {
+    setTrackingSaveState("saving")
+    setTrackingActionError(null)
+    try {
+      await updateOrderTrackingApi(orderId, trackingNumberInput.trim(), courierInput)
+      const fresh = await fetchOrders()
+      setOrders(fresh)
+      setSelectedOrder(fresh.find((o) => o.id === orderId) ?? null)
+      setTrackingSaveState("saved")
+      setTimeout(() => setTrackingSaveState("idle"), 1500)
+    } catch (err) {
+      console.error(err)
+      setTrackingActionError(err instanceof Error ? err.message : "บันทึกเลขพัสดุไม่สำเร็จ")
+      setTrackingSaveState("idle")
     }
   }
 
@@ -794,15 +818,62 @@ export default function AdminOrdersPage() {
                             )
                           })()}
 
-                          {selectedOrder.trackingNumber && (
-                            <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2.5">
+                          <div className="mt-3 space-y-2 rounded-lg border border-border bg-muted/50 px-3 py-2.5">
+                            <div className="flex items-center gap-2">
                               <Truck className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">เลขพัสดุ</span>
-                              <span className="ml-auto text-xs font-semibold text-foreground">
-                                {selectedOrder.trackingNumber}
+                              <span className="text-xs font-medium text-muted-foreground">
+                                พัสดุ / เลขพัสดุ
                               </span>
                             </div>
-                          )}
+                            <div className="grid grid-cols-2 gap-2">
+                              <select
+                                value={courierInput}
+                                onChange={(e) => setCourierInput(e.target.value)}
+                                className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                              >
+                                <option value="">เลือกขนส่ง</option>
+                                {COURIERS.map((c) => (
+                                  <option key={c.slug} value={c.slug}>
+                                    {c.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <Input
+                                value={trackingNumberInput}
+                                onChange={(e) => setTrackingNumberInput(e.target.value)}
+                                placeholder="เลขพัสดุ"
+                                className="h-9 text-xs"
+                              />
+                            </div>
+                            {trackingActionError && (
+                              <p className="text-xs text-destructive">{trackingActionError}</p>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={trackingSaveState !== "idle"}
+                              className={`w-full gap-2 ${
+                                trackingSaveState === "saved"
+                                  ? "border-transparent bg-green-600 text-white hover:bg-green-700"
+                                  : ""
+                              }`}
+                              onClick={() => saveTracking(selectedOrder.id)}
+                            >
+                              {trackingSaveState === "saving" ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  กำลังบันทึก...
+                                </>
+                              ) : trackingSaveState === "saved" ? (
+                                <>
+                                  <CheckCircle className="h-4 w-4" />
+                                  บันทึกแล้ว
+                                </>
+                              ) : (
+                                "บันทึกเลขพัสดุ"
+                              )}
+                            </Button>
+                          </div>
 
                           {selectedOrder.notes && (
                             <div className="mt-2 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">

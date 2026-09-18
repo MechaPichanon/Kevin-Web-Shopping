@@ -8,9 +8,12 @@ time/memory cost until image search is actually used.
 
 import io
 import logging
+import os
 import threading
+import urllib.parse
 from typing import List
 
+import requests
 from PIL import Image
 
 try:
@@ -21,6 +24,20 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 CLIP_MODEL_NAME = "clip-ViT-B-32"
+
+# product_images.image_url is stored as the browser-facing URL
+# (http://localhost:5000/uploads/...), which isn't reachable by that
+# hostname from inside another container. Rewrite it to the auth-backend
+# service's internal docker-network hostname, matching how docker-compose.yml
+# already reaches it elsewhere (e.g. FASTAPI_BASE_URL). Override to e.g.
+# http://localhost:5000 if running outside Docker.
+UPLOADS_BASE_URL = os.getenv("UPLOADS_BASE_URL", "http://auth-backend:5000")
+
+
+def resolve_uploads_url(image_url: str) -> str:
+    parsed = urllib.parse.urlsplit(image_url)
+    base = urllib.parse.urlsplit(UPLOADS_BASE_URL)
+    return urllib.parse.urlunsplit((base.scheme, base.netloc, parsed.path, parsed.query, parsed.fragment))
 
 _model = None
 _model_lock = threading.Lock()
@@ -94,6 +111,22 @@ def search_by_image(embedding: List[float], limit: int = 10) -> List[dict]:
         }
         for product_id, product_name, image_url, similarity, min_price in rows
     ]
+
+
+def store_embedding(cur, image_id: int, product_id: str, embedding: List[float]) -> None:
+    """Upsert a CLIP embedding for one product_images row. Caller commits."""
+    vector_literal = "[" + ",".join(str(x) for x in embedding) + "]"
+    cur.execute(
+        """
+        INSERT INTO product_image_embeddings (image_id, product_id, embed_model, embedded_at, embedding)
+        VALUES (%s, %s, %s, NOW(), %s::vector(512))
+        ON CONFLICT (image_id) DO UPDATE SET
+            embed_model = EXCLUDED.embed_model,
+            embedded_at = EXCLUDED.embedded_at,
+            embedding = EXCLUDED.embedding
+        """,
+        (image_id, product_id, CLIP_MODEL_NAME, vector_literal),
+    )
 
 
 def count_embeddings() -> int:

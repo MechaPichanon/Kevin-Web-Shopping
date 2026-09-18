@@ -16,6 +16,17 @@ const VALID_PAYMENT_STATUSES = [
   "rejected",
   "refunded",
 ];
+// Slugs, not display labels — the frontend maps each to a Thai label + the
+// courier's own tracking-page URL (see frontend/lib/couriers.ts).
+const VALID_COURIERS = [
+  "thailand_post",
+  "kerry",
+  "flash",
+  "jt",
+  "ninja_van",
+  "dhl",
+  "other",
+];
 
 const createOrder = async (req, res) => {
   const client = await db.connect();
@@ -459,6 +470,7 @@ function formatOrderRow(o, items, slips) {
     paymentSlipUrl: o.payment_slip_url,
     paymentMethod: o.payment_method,
     trackingNumber: o.tracking_number,
+    courierName: o.courier_name,
     notes: o.notes,
     slips: (slips || []).map((s) => ({
       url: s.slip_url,
@@ -490,6 +502,7 @@ const ORDER_SELECT = `
     o.discount_amount,
     o.total_price,
     o.tracking_number,
+    o.courier_name,
     o.notes,
     o.ordered_at,
     o.updated_at,
@@ -689,6 +702,38 @@ const updateOrderStatus = async (req, res) => {
     });
   } finally {
     client.release();
+  }
+};
+
+// ---- Admin: set courier + tracking number (no courier API integration — the
+// customer looks it up on the courier's own site) ----
+const updateOrderTracking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tracking_number, courier_name } = req.body;
+
+    if (courier_name && !VALID_COURIERS.includes(courier_name)) {
+      return res.status(400).json({
+        error: `Invalid courier_name. Must be one of: ${VALID_COURIERS.join(", ")}`,
+      });
+    }
+
+    const result = await db.query(
+      `UPDATE orders
+       SET tracking_number = $2, courier_name = $3, updated_at = NOW()
+       WHERE order_id = $1
+       RETURNING order_id`,
+      [id, tracking_number || null, courier_name || null]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order Not Found" });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Server Error" });
   }
 };
 
@@ -997,6 +1042,7 @@ module.exports = {
   getAllOrders,
   getOrderById,
   updateOrderStatus,
+  updateOrderTracking,
   updatePaymentStatus,
   uploadPaymentSlip,
   customerReuploadPaymentSlip,
