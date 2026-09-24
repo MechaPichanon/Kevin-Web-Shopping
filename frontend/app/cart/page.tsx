@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { useCart } from "@/lib/cart-context"
 import { colorToHex } from "@/lib/color-map"
 import { useLang } from "@/lib/language-context"
 type CartItem = {
@@ -115,27 +113,37 @@ export default function CartPage() {
         }).format(price);
 
     return (
-        <div className="min-h-screen bg-[#b89f8d] p-8">
-            <h1 className="mb-2 text-3xl font-bold">
-                {t("cart.title")}
-            </h1>
+        <div className="flex min-h-screen flex-col">
+            <main className="flex-1">
+                <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+                    <span className="text-sm font-medium uppercase tracking-wider text-primary">
+                        {t("cart.title")}
+                    </span>
+                    <h1 className="mt-2 font-serif text-3xl font-bold text-foreground sm:text-4xl">
+                        {t("cart.title")}
+                    </h1>
+                    <p className="mt-2 text-muted-foreground">
+                        {t("cart.itemsCount", { n: items.length })}
+                    </p>
 
-            <p className="mb-6">
-                {t("cart.itemsCount", { n: items.length })}
-            </p>
-
-            {items.length === 0 ? (
-                <div>
-                    {t("cart.emptyShort")}
-
-                    <Link
-                        href="/products"
-                        className="ml-4 text-blue-500"
-                    >
-                        {t("cart.browse")}
-                    </Link>
-                </div>
-            ) : (
+                    {items.length === 0 ? (
+                        <div className="mt-16 flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-20 text-center">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+                                <ShoppingBag className="h-9 w-9 text-primary" />
+                            </div>
+                            <h2 className="font-serif text-2xl font-bold text-foreground">
+                                {t("cart.empty")}
+                            </h2>
+                            <p className="max-w-md text-muted-foreground">
+                                {t("cart.emptyShort")}
+                            </p>
+                            <Button asChild className="mt-2 gap-2">
+                                <Link href="/products">
+                                    {t("cart.browse")} <ArrowRight className="h-4 w-4" />
+                                </Link>
+                            </Button>
+                        </div>
+                    ) : (
                 <div className="grid gap-8 lg:grid-cols-3">
                     <div className="lg:col-span-2 space-y-4">
                         {items.map((item) => (
@@ -292,6 +300,8 @@ export default function CartPage() {
                     </div>
                 </div>
             )}
+                </div>
+            </main>
         </div>
     );
 }
