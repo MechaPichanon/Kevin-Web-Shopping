@@ -389,6 +389,16 @@ export default function AdminProductsPage() {
   const [imgUploadColor, setImgUploadColor] = useState("")
   const [imgUploadFile, setImgUploadFile] = useState<File | null>(null)
   const [isUploadingImg, setIsUploadingImg] = useState(false)
+  const [pendingGalleryImages, setPendingGalleryImages] = useState<
+    { key: string; file: File; color: string; previewUrl: string }[]
+  >([])
+
+  const clearPendingGalleryImages = () => {
+    setPendingGalleryImages((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.previewUrl))
+      return []
+    })
+  }
 
   useEffect(() => {
     if (!isAdmin) router.push("/login")
@@ -398,7 +408,7 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     let ignore = false
-    fetch(`${API_BASE}/products`)
+    fetch(`${API_BASE}/products/admin`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: ProductRow[]) => { if (!ignore) setProducts(data) })
       .catch(console.error)
@@ -406,7 +416,7 @@ export default function AdminProductsPage() {
   }, [])
 
   const fetchProducts = () => {
-    fetch(`${API_BASE}/products`)
+    fetch(`${API_BASE}/products/admin`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: ProductRow[]) => setProducts(data))
       .catch(console.error)
@@ -430,6 +440,7 @@ export default function AdminProductsPage() {
     setForm(BLANK_FORM)
     setEditingProduct(null)
     setDeleteTarget(null)
+    clearPendingGalleryImages()
     setView("form")
   }
 
@@ -490,6 +501,7 @@ export default function AdminProductsPage() {
     setProductImages([])
     setImgUploadFile(null)
     setImgUploadColor("")
+    clearPendingGalleryImages()
     fetchProductImages(p.product_id)
     setView("form")
   }
@@ -501,6 +513,7 @@ export default function AdminProductsPage() {
     setProductImages([])
     setImgUploadFile(null)
     setImgUploadColor("")
+    clearPendingGalleryImages()
   }
 
   // ── form helpers ──────────────────────────────────────────────────────────
@@ -689,6 +702,33 @@ export default function AdminProductsPage() {
     setForm((f) => ({ ...f, variants: f.variants.filter((v) => v._key !== key) }))
   }
 
+  // The Visibility panel lives in the sticky right rail (looks product-wide)
+  // but "active/draft" is only ever a per-variant field. If a specific row
+  // is open for editing, only that row changes; otherwise (the common
+  // single-variant case, or "nothing pending right now") there's no other
+  // way to target an already-added row, so apply to all of them.
+  const applyVisibility = (status: "active" | "draft") => {
+    setForm((f) => {
+      if (f.editingVariantKey) {
+        return {
+          ...f,
+          status,
+          variants: f.variants.map((v) =>
+            v._key === f.editingVariantKey ? { ...v, isActive: status === "active" } : v
+          ),
+        }
+      }
+      if (f.variants.length > 0) {
+        return {
+          ...f,
+          status,
+          variants: f.variants.map((v) => ({ ...v, isActive: status === "active" })),
+        }
+      }
+      return { ...f, status }
+    })
+  }
+
   const handleAddVariantRow = () => {
     if (form.category === "set") {
       setForm((f) => ({
@@ -721,17 +761,38 @@ export default function AdminProductsPage() {
 
   // ── product image handlers ────────────────────────────────────────────────
 
-  const handleImageUpload = async () => {
-    if (!editingProduct || !imgUploadFile || isUploadingImg) return
-    setIsUploadingImg(true)
+  const postGalleryImage = (productId: string, file: File, color: string) => {
     const fd = new FormData()
-    fd.append("image", imgUploadFile)
-    if (imgUploadColor) fd.append("color", imgUploadColor)
+    fd.append("image", file)
+    if (color) fd.append("color", color)
+    return fetch(
+      `${API_BASE}/products/${encodeURIComponent(productId)}/images`,
+      { method: "POST", body: fd, headers: authHeaders() }
+    )
+  }
+
+  const handleImageUpload = async () => {
+    if (!imgUploadFile || isUploadingImg) return
+
+    // New, not-yet-saved product: stage locally, upload happens on Save.
+    if (!editingProduct) {
+      setPendingGalleryImages((prev) => [
+        ...prev,
+        {
+          key: String(Date.now() + Math.random()),
+          file: imgUploadFile,
+          color: imgUploadColor,
+          previewUrl: URL.createObjectURL(imgUploadFile),
+        },
+      ])
+      setImgUploadFile(null)
+      setImgUploadColor("")
+      return
+    }
+
+    setIsUploadingImg(true)
     try {
-      const res = await fetch(
-        `${API_BASE}/products/${encodeURIComponent(editingProduct.product_id)}/images`,
-        { method: "POST", body: fd, headers: authHeaders() }
-      )
+      const res = await postGalleryImage(editingProduct.product_id, imgUploadFile, imgUploadColor)
       if (!res.ok) { alert("อัพโหลดไม่สำเร็จ"); return }
       setImgUploadFile(null)
       setImgUploadColor("")
@@ -741,6 +802,20 @@ export default function AdminProductsPage() {
     } finally {
       setIsUploadingImg(false)
     }
+  }
+
+  const handleRemovePendingImage = (key: string) => {
+    setPendingGalleryImages((prev) => {
+      const target = prev.find((p) => p.key === key)
+      if (target) URL.revokeObjectURL(target.previewUrl)
+      return prev.filter((p) => p.key !== key)
+    })
+  }
+
+  const handleChangePendingImageColor = (key: string, color: string) => {
+    setPendingGalleryImages((prev) =>
+      prev.map((p) => (p.key === key ? { ...p, color } : p))
+    )
   }
 
   const handleDeleteImage = async (imageId: number) => {
@@ -758,6 +833,19 @@ export default function AdminProductsPage() {
     await fetch(
       `${API_BASE}/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}/primary`,
       { method: "PUT", headers: authHeaders() }
+    )
+    fetchProductImages(editingProduct.product_id)
+  }
+
+  const handleChangeImageColor = async (imageId: number, color: string) => {
+    if (!editingProduct) return
+    await fetch(
+      `${API_BASE}/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}/color`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ color: color || null }),
+      }
     )
     fetchProductImages(editingProduct.product_id)
   }
@@ -881,12 +969,18 @@ export default function AdminProductsPage() {
           // Land on the edit view for the product we just created instead of
           // the list, so the photo just uploaded (now correctly tagged with
           // its color) is visible right away — no reason left to re-upload it.
-          const listRes = await fetch(`${API_BASE}/products`)
+          const toFlush = pendingGalleryImages
+          const listRes = await fetch(`${API_BASE}/products/admin`, { headers: authHeaders() })
           const list: ProductRow[] = await listRes.json()
           setProducts(list)
           const created = list.find((p) => p.product_id === data.product_id)
           if (created) {
             openEdit(created)
+            for (const p of toFlush) {
+              await postGalleryImage(data.product_id, p.file, p.color)
+              URL.revokeObjectURL(p.previewUrl)
+            }
+            if (toFlush.length > 0) fetchProductImages(data.product_id)
           } else {
             cancelForm()
           }
@@ -2438,120 +2532,167 @@ export default function AdminProductsPage() {
                     )}
                   </section>
 
-                  {/* Product images — edit mode only */}
-                  {editingProduct && (
-                    <section style={sectionStyle}>
-                      <div style={{ marginBottom: 20 }}>
-                        <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>รูปภาพสินค้า</h2>
-                        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
-                          รูปแยกตามสี — ลูกค้าเลือกสีแล้วรูปเปลี่ยน (★ = รูปหน้าปก)
-                        </p>
-                      </div>
+                  {/* Product images — works before save too (staged locally until the product exists) */}
+                  {(() => {
+                    const availableColors = Array.from(
+                      new Set(form.variants.map((v) => v.colorName).filter(Boolean))
+                    )
+                    type GalleryEntry = {
+                      key: string
+                      url: string
+                      color: string
+                      isPrimary: boolean
+                      isPending: boolean
+                      imageId?: number
+                    }
+                    const entries: GalleryEntry[] = editingProduct
+                      ? productImages.map((img) => ({
+                        key: String(img.image_id),
+                        url: resolveApiUrl(img.image_url),
+                        color: img.color ?? "",
+                        isPrimary: img.is_primary,
+                        isPending: false,
+                        imageId: img.image_id,
+                      }))
+                      : pendingGalleryImages.map((p) => ({
+                        key: p.key,
+                        url: p.previewUrl,
+                        color: p.color,
+                        isPrimary: false,
+                        isPending: true,
+                      }))
 
-                      {/* Images grouped by color */}
-                      {(() => {
-                        const groups = productImages.reduce<Record<string, ProductImage[]>>((acc, img) => {
-                          const key = img.color ?? ""
-                          if (!acc[key]) acc[key] = []
-                          acc[key].push(img)
-                          return acc
-                        }, {})
-                        const entries = Object.entries(groups)
-                        if (entries.length === 0) {
-                          return <p style={{ fontSize: 12.5, color: "#9aa0ac", margin: "0 0 16px" }}>ยังไม่มีรูปภาพ</p>
-                        }
-                        return entries.map(([color, imgs]) => (
-                          <div key={color} style={{ marginBottom: 18 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#525a68", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                              {color ? (
-                                <>
-                                  <span style={{
-                                    width: 12, height: 12, borderRadius: "50%",
-                                    background: PRESET_COLORS.find((c) => c.name.toLowerCase() === color.toLowerCase())?.hex ?? "#ccc",
-                                    border: "1px solid #dfe3ea", display: "inline-block", flexShrink: 0,
-                                  }} />
-                                  {color}
-                                </>
-                              ) : "ไม่มีสี (ทั่วไป)"}
-                            </div>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                              {imgs.map((img) => (
-                                <div key={img.image_id} style={{ position: "relative", width: 90, height: 90 }}>
-                                  <img
-                                    src={resolveApiUrl(img.image_url)}
-                                    alt={img.alt_text ?? ""}
-                                    style={{
-                                      width: 90, height: 90, objectFit: "cover", borderRadius: 8,
-                                      border: img.is_primary ? "2.5px solid #8b5e3c" : "1.5px solid #eceef2",
-                                    }}
-                                  />
-                                  <div style={{ position: "absolute", top: 3, right: 3, display: "flex", gap: 3 }}>
-                                    {!img.is_primary && (
-                                      <button
-                                        type="button"
-                                        title="ตั้งเป็นรูปหน้าปก"
-                                        onClick={() => handleSetPrimaryImage(img.image_id)}
-                                        style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(255,255,255,.92)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}
-                                      >★</button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteImage(img.image_id)}
-                                      style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(255,255,255,.92)", color: "#dc2626", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}
-                                    >×</button>
-                                  </div>
-                                  {img.is_primary && (
-                                    <div style={{ position: "absolute", bottom: 3, left: 3, fontSize: 9, fontWeight: 700, background: "#8b5e3c", color: "#fff", padding: "1px 5px", borderRadius: 3, letterSpacing: "0.03em" }}>
-                                      PRIMARY
+                    const groups = entries.reduce<Record<string, GalleryEntry[]>>((acc, img) => {
+                      const key = img.color
+                      if (!acc[key]) acc[key] = []
+                      acc[key].push(img)
+                      return acc
+                    }, {})
+                    const groupEntries = Object.entries(groups)
+
+                    return (
+                      <section style={sectionStyle}>
+                        <div style={{ marginBottom: 20 }}>
+                          <h2 style={{ margin: 0, fontSize: 15.5, fontWeight: 700 }}>รูปภาพสินค้า</h2>
+                          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
+                            รูปแยกตามสี — ลูกค้าเลือกสีแล้วรูปเปลี่ยน (★ = รูปหน้าปก)
+                            {!editingProduct && " — รูปจะอัพโหลดจริงตอนกดบันทึก"}
+                          </p>
+                        </div>
+
+                        {/* Images grouped by color */}
+                        {groupEntries.length === 0 ? (
+                          <p style={{ fontSize: 12.5, color: "#9aa0ac", margin: "0 0 16px" }}>ยังไม่มีรูปภาพ</p>
+                        ) : (
+                          groupEntries.map(([color, imgs]) => (
+                            <div key={color} style={{ marginBottom: 18 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#525a68", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                {color ? (
+                                  <>
+                                    <span style={{
+                                      width: 12, height: 12, borderRadius: "50%",
+                                      background: PRESET_COLORS.find((c) => c.name.toLowerCase() === color.toLowerCase())?.hex ?? "#ccc",
+                                      border: "1px solid #dfe3ea", display: "inline-block", flexShrink: 0,
+                                    }} />
+                                    {color}
+                                  </>
+                                ) : "ไม่มีสี (ทั่วไป)"}
+                              </div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                                {imgs.map((img) => (
+                                  <div key={img.key} style={{ display: "flex", flexDirection: "column", gap: 4, width: 90 }}>
+                                    <div style={{ position: "relative", width: 90, height: 90 }}>
+                                      <img
+                                        src={img.url}
+                                        alt=""
+                                        style={{
+                                          width: 90, height: 90, objectFit: "cover", borderRadius: 8,
+                                          border: img.isPrimary ? "2.5px solid #8b5e3c" : "1.5px solid #eceef2",
+                                        }}
+                                      />
+                                      <div style={{ position: "absolute", top: 3, right: 3, display: "flex", gap: 3 }}>
+                                        {!img.isPending && !img.isPrimary && (
+                                          <button
+                                            type="button"
+                                            title="ตั้งเป็นรูปหน้าปก"
+                                            onClick={() => handleSetPrimaryImage(img.imageId!)}
+                                            style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(255,255,255,.92)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                          >★</button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => img.isPending ? handleRemovePendingImage(img.key) : handleDeleteImage(img.imageId!)}
+                                          style={{ width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(255,255,255,.92)", color: "#dc2626", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                        >×</button>
+                                      </div>
+                                      {img.isPrimary && (
+                                        <div style={{ position: "absolute", bottom: 3, left: 3, fontSize: 9, fontWeight: 700, background: "#8b5e3c", color: "#fff", padding: "1px 5px", borderRadius: 3, letterSpacing: "0.03em" }}>
+                                          PRIMARY
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                              ))}
+                                    <select
+                                      value={img.color}
+                                      onChange={(e) =>
+                                        img.isPending
+                                          ? handleChangePendingImageColor(img.key, e.target.value)
+                                          : handleChangeImageColor(img.imageId!, e.target.value)
+                                      }
+                                      style={{ ...selectStyle, width: 90, height: 28, fontSize: 11, padding: "0 4px" }}
+                                    >
+                                      <option value="">ไม่มีสี</option>
+                                      {availableColors.map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))
-                      })()}
+                          ))
+                        )}
 
-                      {/* Upload row */}
-                      <div style={{ paddingTop: 16, borderTop: "1px solid #f1f2f5", display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
-                        <div>
-                          <label style={labelStyle}>สีที่ต้องการ</label>
-                          <select
-                            value={imgUploadColor}
-                            onChange={(e) => setImgUploadColor(e.target.value)}
-                            style={{ ...selectStyle, width: 160, height: 38 }}
+                        {/* Upload row */}
+                        <div style={{ paddingTop: 16, borderTop: "1px solid #f1f2f5", display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+                          <div>
+                            <label style={labelStyle}>สีที่ต้องการ</label>
+                            <select
+                              value={imgUploadColor}
+                              onChange={(e) => setImgUploadColor(e.target.value)}
+                              style={{ ...selectStyle, width: 160, height: 38 }}
+                            >
+                              <option value="">ไม่มีสี (ทั่วไป)</option>
+                              {availableColors.map((color) => (
+                                <option key={color} value={color}>{color}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={labelStyle}>เลือกรูป</label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => setImgUploadFile(e.target.files?.[0] ?? null)}
+                              style={{ ...inputStyle, height: 38, paddingTop: 9, fontSize: 13 }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleImageUpload}
+                            disabled={!imgUploadFile || isUploadingImg}
+                            style={{
+                              height: 38, padding: "0 18px", borderRadius: 10, border: "none",
+                              background: (!imgUploadFile || isUploadingImg) ? "#c4a882" : "#8b5e3c",
+                              color: "#fff", fontSize: 13, fontWeight: 600,
+                              cursor: (!imgUploadFile || isUploadingImg) ? "default" : "pointer",
+                            }}
                           >
-                            <option value="">ไม่มีสี (ทั่วไป)</option>
-                            {Array.from(new Set(form.variants.map((v) => v.colorName).filter(Boolean))).map((color) => (
-                              <option key={color} value={color}>{color}</option>
-                            ))}
-                          </select>
+                            {isUploadingImg ? "กำลังอัพโหลด…" : editingProduct ? "อัพโหลด" : "เพิ่มรูป"}
+                          </button>
                         </div>
-                        <div>
-                          <label style={labelStyle}>เลือกรูป</label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => setImgUploadFile(e.target.files?.[0] ?? null)}
-                            style={{ ...inputStyle, height: 38, paddingTop: 9, fontSize: 13 }}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleImageUpload}
-                          disabled={!imgUploadFile || isUploadingImg}
-                          style={{
-                            height: 38, padding: "0 18px", borderRadius: 10, border: "none",
-                            background: (!imgUploadFile || isUploadingImg) ? "#c4a882" : "#8b5e3c",
-                            color: "#fff", fontSize: 13, fontWeight: 600,
-                            cursor: (!imgUploadFile || isUploadingImg) ? "default" : "pointer",
-                          }}
-                        >
-                          {isUploadingImg ? "กำลังอัพโหลด…" : "อัพโหลด"}
-                        </button>
-                      </div>
-                    </section>
-                  )}
+                      </section>
+                    )
+                  })()}
                 </div>
 
                 {/* ── RIGHT RAIL ── */}
@@ -2688,7 +2829,7 @@ export default function AdminProductsPage() {
                     >
                       <button
                         type="button"
-                        onClick={() => setForm((f) => ({ ...f, status: "active" }))}
+                        onClick={() => applyVisibility("active")}
                         style={{
                           flex: 1,
                           height: 36,
@@ -2709,7 +2850,7 @@ export default function AdminProductsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setForm((f) => ({ ...f, status: "draft" }))}
+                        onClick={() => applyVisibility("draft")}
                         style={{
                           flex: 1,
                           height: 36,

@@ -91,9 +91,18 @@ const getCart = async (req, res) => {
       JOIN products p
       ON v.product_id = p.product_id
 
-      LEFT JOIN product_images pi
-      ON p.product_id = pi.product_id
-      AND pi.is_primary = true
+      LEFT JOIN LATERAL (
+        SELECT pi.image_url
+        FROM product_images pi
+        WHERE pi.product_id = p.product_id
+        ORDER BY
+          (pi.color = v.color) DESC,
+          (pi.color IS NULL) DESC,
+          pi.is_primary DESC,
+          pi.sort_order ASC,
+          pi.image_id ASC
+        LIMIT 1
+      ) pi ON true
 
       WHERE c.user_id = $1
       `,

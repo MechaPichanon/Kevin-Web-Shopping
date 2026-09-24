@@ -16,6 +16,7 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
+const { sendPasswordResetEmail } = require("./utils/mailer");
 const productRoutes = require("./routes/productRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const app = express();
@@ -153,6 +154,12 @@ function validatePassword(password) {
   }
   return null;
 }
+function validatePhone(phone) {
+  if (phone && phone.trim().length > 10) {
+    return "เบอร์โทรศัพท์ต้องไม่เกิน 10 หลัก";
+  }
+  return null;
+}
 /* ======================
    REGISTER
 ====================== */
@@ -167,6 +174,10 @@ app.post("/auth/register", async (req, res) => {
         const passwordError = validatePassword(password);
     if (passwordError) {
       return res.status(400).json({ error: passwordError });
+    }
+    const phoneError = validatePhone(phone);
+    if (phoneError) {
+      return res.status(400).json({ error: phoneError });
     }
     // เช็ค email ซ้ำ
     const check = await pool.query(
@@ -246,6 +257,110 @@ app.post("/auth/login", async (req, res) => {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ======================
+   FORGOT PASSWORD
+====================== */
+app.post("/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "กรุณากรอกอีเมล" });
+    }
+
+    const result = await pool.query(
+      "SELECT id, email, password FROM users WHERE email = $1",
+      [email]
+    );
+
+    // Always respond the same way whether or not the email exists, so this
+    // endpoint can't be used to enumerate registered accounts.
+    const genericResponse = {
+      message: "หากอีเมลนี้มีอยู่ในระบบ เราได้ส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปแล้ว",
+    };
+
+    if (result.rows.length === 0) {
+      return res.json(genericResponse);
+    }
+
+    const user = result.rows[0];
+
+    // Stateless reset token — no DB table needed. Embeds a fingerprint of
+    // the CURRENT password hash so the token stops working the moment the
+    // password actually changes (old/reused links can't be replayed).
+    const resetToken = jwt.sign(
+      { id: user.id, purpose: "password_reset", pwdFingerprint: user.password.slice(-12) },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    const frontendBase = (process.env.CORS_ORIGIN || "http://localhost:3000")
+      .split(",")[0]
+      .trim();
+    const resetLink = `${frontendBase}/reset-password?token=${resetToken}`;
+
+    const emailSent = await sendPasswordResetEmail(user.email, resetLink);
+
+    // SMTP not configured (local dev default) — hand the link back directly
+    // instead of silently doing nothing, so the flow stays testable/demoable
+    // without needing real email set up.
+    res.json(emailSent ? genericResponse : { ...genericResponse, devResetLink: resetLink });
+  } catch (err) {
+    console.error("FORGOT PASSWORD ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ======================
+   RESET PASSWORD
+====================== */
+app.post("/auth/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "ข้อมูลไม่ครบ" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(400).json({ error: "ลิงก์หมดอายุหรือไม่ถูกต้อง กรุณาขอลิงก์ใหม่" });
+    }
+
+    if (decoded.purpose !== "password_reset") {
+      return res.status(400).json({ error: "โทเคนไม่ถูกต้อง" });
+    }
+
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
+    }
+
+    const result = await pool.query(
+      "SELECT id, password FROM users WHERE id = $1",
+      [decoded.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: "ไม่พบผู้ใช้" });
+    }
+
+    const user = result.rows[0];
+    if (user.password.slice(-12) !== decoded.pwdFingerprint) {
+      // Password already changed since this token was issued — stale or
+      // already-used link.
+      return res.status(400).json({ error: "ลิงก์นี้ถูกใช้ไปแล้วหรือหมดอายุ กรุณาขอลิงก์ใหม่" });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hash, user.id]);
+
+    res.json({ message: "ตั้งรหัสผ่านใหม่สำเร็จ" });
+  } catch (err) {
+    console.error("RESET PASSWORD ERROR:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 });

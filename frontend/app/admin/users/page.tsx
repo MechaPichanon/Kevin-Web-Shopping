@@ -19,6 +19,8 @@ import {
     Plus,
     MessageSquare,
     Gift,
+    Eye,
+    EyeOff,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -83,6 +85,7 @@ export default function AdminUsersPage() {
 
     const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
     const [staffForm, setStaffForm] = useState({ username: "", email: "", password: "" })
+    const [showStaffPassword, setShowStaffPassword] = useState(false)
     const [isCreatingStaff, setIsCreatingStaff] = useState(false)
     const [addStaffError, setAddStaffError] = useState<string | null>(null)
 
@@ -659,13 +662,27 @@ export default function AdminUsersPage() {
                             <label className="mb-2 block text-sm font-medium text-foreground">
                                 รหัสผ่าน
                             </label>
-                            <Input
-                                type="password"
-                                value={staffForm.password}
-                                onChange={(e) =>
-                                    setStaffForm({ ...staffForm, password: e.target.value })
-                                }
-                            />
+                            <div className="relative">
+                                <Input
+                                    type={showStaffPassword ? "text" : "password"}
+                                    value={staffForm.password}
+                                    onChange={(e) =>
+                                        setStaffForm({ ...staffForm, password: e.target.value })
+                                    }
+                                    className="pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowStaffPassword(!showStaffPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                >
+                                    {showStaffPassword ? (
+                                        <EyeOff className="h-5 w-5" />
+                                    ) : (
+                                        <Eye className="h-5 w-5" />
+                                    )}
+                                </button>
+                            </div>
                         </div>
 
                         {addStaffError && (

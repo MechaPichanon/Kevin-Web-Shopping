@@ -739,7 +739,8 @@ export default function AdminOrdersPage() {
                             )
                           })()}
 
-                          {(selectedOrder.paymentStatus === "pending_verification" ||
+                          {selectedOrder.status !== "cancelled" &&
+                            (selectedOrder.paymentStatus === "pending_verification" ||
                             selectedOrder.paymentStatus === "rejected") && (
                               <div className="mt-3 space-y-2">
                                 <Textarea
@@ -844,6 +845,7 @@ export default function AdminOrdersPage() {
                               <select
                                 value={courierInput}
                                 onChange={(e) => setCourierInput(e.target.value)}
+                                disabled={selectedOrder.status === "cancelled"}
                                 className="h-9 rounded-md border border-input bg-background px-2 text-xs"
                               >
                                 <option value="">เลือกขนส่ง</option>
@@ -857,6 +859,7 @@ export default function AdminOrdersPage() {
                                 value={trackingNumberInput}
                                 onChange={(e) => setTrackingNumberInput(e.target.value)}
                                 placeholder="เลขพัสดุ"
+                                disabled={selectedOrder.status === "cancelled"}
                                 className="h-9 text-xs"
                               />
                             </div>
@@ -866,7 +869,7 @@ export default function AdminOrdersPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={trackingSaveState !== "idle"}
+                              disabled={trackingSaveState !== "idle" || selectedOrder.status === "cancelled"}
                               className={`w-full gap-2 ${trackingSaveState === "saved"
                                   ? "border-transparent bg-green-600 text-white hover:bg-green-700"
                                   : ""
@@ -887,6 +890,11 @@ export default function AdminOrdersPage() {
                                 "บันทึกเลขพัสดุ"
                               )}
                             </Button>
+                            {selectedOrder.status === "cancelled" && (
+                              <p className="text-xs text-muted-foreground">
+                                คำสั่งซื้อที่ยกเลิกแล้วไม่สามารถแก้ไขข้อมูลพัสดุได้
+                              </p>
+                            )}
                           </div>
 
                           {selectedOrder.notes && (

@@ -29,9 +29,10 @@ export default function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: name === "phone" ? value.replace(/\D/g, "").slice(0, 10) : value,
     })
   }
 
@@ -162,6 +163,8 @@ export default function SignupPage() {
                     id="phone"
                     name="phone"
                     type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     placeholder={t("auth.phonePlaceholder")}
                     value={formData.phone}
                     onChange={handleChange}

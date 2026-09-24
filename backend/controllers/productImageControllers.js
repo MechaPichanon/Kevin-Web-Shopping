@@ -128,4 +128,31 @@ const setPrimaryImage = async (req, res) => {
   }
 }
 
-module.exports = { getProductImages, addProductImage, deleteProductImage, setPrimaryImage }
+// PUT /products/:productId/images/:imageId/color
+// Re-tags an already-uploaded image with a different color. Not validated
+// against the product's variants server-side — the admin UI's color picker
+// (sourced from the product's own variants) is the source of truth here,
+// same trust level as addProductImage's color field.
+const setImageColor = async (req, res) => {
+  try {
+    const { productId, imageId } = req.params
+    const { color } = req.body
+
+    const result = await pool.query(
+      `UPDATE product_images SET color = $1 WHERE image_id = $2 AND product_id = $3
+       RETURNING image_id, color`,
+      [color || null, imageId, productId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Image not found" })
+    }
+
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error("SET IMAGE COLOR ERROR:", err.message)
+    res.status(500).json({ error: "Server error" })
+  }
+}
+
+module.exports = { getProductImages, addProductImage, deleteProductImage, setPrimaryImage, setImageColor }

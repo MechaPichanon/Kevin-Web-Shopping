@@ -143,6 +143,70 @@ ORDER BY MAX(p.created_at) DESC
   }
 }
 
+// Admin-only mirror of getProducts: identical shape, but does NOT filter out
+// draft (is_active = FALSE) variants — the storefront-facing getProducts
+// must keep hiding those, but the admin product list/edit form needs to see
+// every variant it owns, including drafts, or a saved draft becomes
+// permanently invisible (and gets silently re-confirmed as inactive on the
+// next save, since it's absent from the submitted variants list).
+const getAdminProducts = async (req, res) => {
+  try {
+    const result = await db.query(`
+SELECT
+  p.product_id,
+  p.product_name,
+  p.product_name_th,
+  p.category,
+  p.sub_category,
+  p.description,
+  p.description_th,
+  pi.image_url,
+  json_agg(
+    json_build_object(
+      'variant_id', pv.variant_id,
+      'size',       pv.size,
+      'color',      pv.color,
+      'color_th',   pv.color_th,
+      'pattern',    pv.pattern,
+      'pattern_th', pv.pattern_th,
+      'chest_min',  pv.chest_min,
+      'chest_max',  pv.chest_max,
+      'waist_min',  pv.waist_min,
+      'waist_max',  pv.waist_max,
+      'sleeve',     pv.sleeve,
+      'sleeve_th',  pv.sleeve_th,
+      'collar',     pv.collar,
+      'collar_th',  pv.collar_th,
+      'price',      pv.price,
+      'cost_price', pv.cost_price,
+      'stock',      pv.stock,
+      'is_active',  pv.is_active
+    ) ORDER BY pv.price ASC
+  ) FILTER (WHERE pv.variant_id IS NOT NULL) AS variants
+
+FROM products p
+
+LEFT JOIN variants pv
+  ON p.product_id = pv.product_id
+
+LEFT JOIN product_images pi
+  ON p.product_id = pi.product_id
+  AND pi.is_primary = TRUE
+
+WHERE p.is_active = TRUE
+
+GROUP BY p.product_id, pi.image_url
+
+ORDER BY MAX(p.created_at) DESC
+`)
+
+    res.json(result.rows)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({ error: "Server error" })
+  }
+}
+
 const searchProducts = async (req, res) => {
   const { q } = req.query
   if (!q || !q.trim()) {
@@ -754,6 +818,7 @@ ORDER BY p.created_at DESC
 
 module.exports = {
   getProducts,
+  getAdminProducts,
   getProductById,
   searchProducts,
   getCategories,

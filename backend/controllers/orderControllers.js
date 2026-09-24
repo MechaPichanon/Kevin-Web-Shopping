@@ -24,6 +24,11 @@ const VALID_COURIERS = [
 ];
 
 const createOrder = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "กรุณาแนบสลิปการโอนเงิน" });
+  }
+  const slipUrl = `/uploads/${req.file.filename}`;
+
   const client = await db.connect();
 
   try {
@@ -207,9 +212,11 @@ const createOrder = async (req, res) => {
         shipping_fee,
         discount_code,
         discount_amount,
-        total_price
+        total_price,
+        payment_slip_url,
+        payment_status
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending_verification')
       RETURNING order_id
       `,
       [
@@ -221,11 +228,17 @@ const createOrder = async (req, res) => {
         discount_code || null,
         discountAmount,
         totalPrice,
+        slipUrl,
       ]
     );
 
     const orderId =
       orderResult.rows[0].order_id;
+
+    await client.query(
+      `INSERT INTO payment_slips (order_id, slip_url) VALUES ($1, $2)`,
+      [orderId, slipUrl]
+    );
 
     for (const item of cartItems) {
       await client.query(
@@ -297,6 +310,8 @@ const createOrder = async (req, res) => {
       shippingFee,
       discountAmount,
       totalPrice,
+      payment_slip_url: slipUrl,
+      payment_status: "pending_verification",
     });
 
   } catch (err) {
@@ -357,12 +372,40 @@ async function restoreDiscountUse(client, discountCode) {
   );
 }
 
+// Called once, at the moment an order transitions into 'cancelled'. If a
+// slip was still awaiting review, the cancellation itself is the verdict —
+// mark it rejected so the UI stops offering to approve/reject a slip that
+// no longer matters. Paid orders are left untouched (a paid+cancelled order
+// is a refund case, handled manually, out of scope here).
+async function rejectPendingSlipOnCancel(client, orderId, reviewerId) {
+  const { rows } = await client.query(
+    `SELECT payment_status FROM orders WHERE order_id = $1`,
+    [orderId]
+  );
+  if (rows[0]?.payment_status !== "pending_verification") return;
+
+  await client.query(
+    `UPDATE orders SET payment_status = 'rejected' WHERE order_id = $1`,
+    [orderId]
+  );
+  await client.query(
+    `UPDATE payment_slips
+     SET status = 'rejected', reject_reason = 'คำสั่งซื้อถูกยกเลิก',
+         reviewed_by = $2, reviewed_at = NOW()
+     WHERE slip_id = (
+       SELECT slip_id FROM payment_slips WHERE order_id = $1
+       ORDER BY uploaded_at DESC, slip_id DESC LIMIT 1
+     )`,
+    [orderId, reviewerId]
+  );
+}
+
 // Shared: order_items joined with variants so each item also carries the
 // product_id it belongs to — needed for the review flow (reviews.product_id).
 async function itemsByOrderId(orderIds) {
   const itemsResult = await db.query(
     `
-    SELECT oi.*, v.product_id
+    SELECT oi.*, v.product_id, v.size, v.color, v.color_th
     FROM order_items oi
     JOIN variants v ON v.variant_id = oi.variant_id
     WHERE oi.order_id = ANY($1::int[])
@@ -376,7 +419,7 @@ async function itemsByOrderId(orderIds) {
     map[item.order_id].push({
       productId: item.product_id,
       name: item.product_name,
-      variant: item.variant_desc,
+      variant: [item.color_th || item.color, item.size].filter(Boolean).join(" / "),
       qty: item.quantity,
       price: Number(item.unit_price),
     });
@@ -387,7 +430,7 @@ async function itemsByOrderId(orderIds) {
 async function itemsForOrder(orderId) {
   const itemsResult = await db.query(
     `
-    SELECT oi.*, v.product_id
+    SELECT oi.*, v.product_id, v.size, v.color, v.color_th
     FROM order_items oi
     JOIN variants v ON v.variant_id = oi.variant_id
     WHERE oi.order_id = $1
@@ -398,7 +441,7 @@ async function itemsForOrder(orderId) {
   return itemsResult.rows.map((item) => ({
     productId: item.product_id,
     name: item.product_name,
-    variant: item.variant_desc,
+    variant: [item.color_th || item.color, item.size].filter(Boolean).join(" / "),
     qty: item.quantity,
     price: Number(item.unit_price),
   }));
@@ -674,6 +717,7 @@ const updateOrderStatus = async (req, res) => {
     if (nowReversed && !wasReversed) {
       await restoreOrderStock(client, id);
       await restoreDiscountUse(client, current.rows[0].discount_code);
+      await rejectPendingSlipOnCancel(client, id, req.user.id);
       await client.query(
         `UPDATE payments SET status = 'failed' WHERE order_id = $1`,
         [id]
@@ -721,6 +765,19 @@ const updateOrderTracking = async (req, res) => {
       });
     }
 
+    const current = await db.query(
+      `SELECT status FROM orders WHERE order_id = $1`,
+      [id]
+    );
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: "Order Not Found" });
+    }
+    if (current.rows[0].status === "cancelled") {
+      return res.status(409).json({
+        error: "คำสั่งซื้อที่ยกเลิกแล้ว ไม่สามารถแก้ไขข้อมูลพัสดุได้",
+      });
+    }
+
     const result = await db.query(
       `UPDATE orders
        SET tracking_number = $2, courier_name = $3, updated_at = NOW()
@@ -756,6 +813,25 @@ const updatePaymentStatus = async (req, res) => {
 
     await client.query("BEGIN");
 
+    const current = await client.query(
+      `SELECT status FROM orders WHERE order_id = $1 FOR UPDATE`,
+      [id]
+    );
+
+    if (current.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        error: "Order Not Found",
+      });
+    }
+
+    if (current.rows[0].status === "cancelled") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "คำสั่งซื้อที่ยกเลิกแล้ว ไม่สามารถเปลี่ยนสถานะการชำระเงินได้",
+      });
+    }
+
     const result = await client.query(
       `
       UPDATE orders
@@ -765,13 +841,6 @@ const updatePaymentStatus = async (req, res) => {
       `,
       [id, payment_status]
     );
-
-    if (result.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({
-        error: "Order Not Found",
-      });
-    }
 
     if (payment_status === "paid") {
       await client.query(
@@ -1013,6 +1082,7 @@ const cancelMyOrder = async (req, res) => {
 
     await restoreOrderStock(client, id);
     await restoreDiscountUse(client, order.discount_code);
+    await rejectPendingSlipOnCancel(client, id, null);
 
     await client.query(
       `UPDATE orders SET status = 'cancelled', updated_at = NOW() WHERE order_id = $1`,

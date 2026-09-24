@@ -33,7 +33,6 @@ export default function CheckoutPage() {
   const [qrLoading, setQrLoading] = useState(false)
   const [orderId, setOrderId] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("promptpay")
-  const [isLoading, setIsLoading] = useState(false)
   const [userId, setUserId] = useState<number | null>(null)
 
   // ── Discount state ──
@@ -166,15 +165,32 @@ export default function CheckoutPage() {
   }
 
   const handleSlipUpload = async () => {
-    if (!slipFile || !orderId) return
+    if (!slipFile || !userId) return
     setIsUploadingSlip(true)
     setSlipError("")
     try {
       const formData = new FormData()
       formData.append("slip", slipFile)
-      const res = await fetch(`${API}/orders/${orderId}/payment-slip`, { method: "POST", body: formData })
+      formData.append("user_id", String(userId))
+      formData.append("firstName", form.firstName)
+      formData.append("lastName", form.lastName)
+      formData.append("phone", form.phone)
+      formData.append("addressLine1", form.addressLine1)
+      formData.append("addressLine2", form.addressLine2 || "")
+      formData.append("province", form.province)
+      formData.append("postalCode", form.postalCode)
+      formData.append("payment_method", paymentMethod)
+      if (discountCode) formData.append("discount_code", discountCode)
+
+      const res = await fetch(`${API}/orders/create`, { method: "POST", body: formData })
       const data = await res.json()
       if (!res.ok) { setSlipError(data.error || t("checkout.slipUploadFailed")); return }
+
+      setOrderId(data.order_id || "")
+      setOrderSummary({ subtotal: data.subtotal, shippingFee: data.shippingFee, totalPrice: data.totalPrice })
+      setItems([])
+      setTotalPrice(0)
+      window.dispatchEvent(new Event("cartUpdated"))
       setStep("done")
     } catch (err) {
       console.error("Slip upload error:", err)
@@ -184,44 +200,11 @@ export default function CheckoutPage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!userId) { alert(t("checkout.loginRequired")); router.push("/login"); return }
-    setIsLoading(true)
-    try {
-      const payload = {
-        user_id: userId,
-        firstName: form.firstName,
-        lastName: form.lastName,
-        phone: form.phone,
-        addressLine1: form.addressLine1,
-        addressLine2: form.addressLine2,
-        province: form.province,
-        postalCode: form.postalCode,
-        payment_method: paymentMethod,
-        discount_code: discountCode || undefined,
-        discount_amount: discountAmount || undefined,
-      }
-      const res = await fetch(`${API}/orders/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok) { alert(data.error || t("checkout.orderError")); setIsLoading(false); return }
-      setOrderId(data.order_id || "")
-      setItems([])
-      setTotalPrice(0)
-      setOrderSummary({ subtotal: data.subtotal, shippingFee: data.shippingFee, totalPrice: data.totalPrice })
-      window.dispatchEvent(new Event("cartUpdated"))
-      setStep("payment")
-      fetchQrCode(data.totalPrice)
-    } catch (err) {
-      console.error("Order submit error:", err)
-      alert(t("checkout.connectionError"))
-    } finally {
-      setIsLoading(false)
-    }
+    setStep("payment")
+    fetchQrCode(grandTotal)
   }
 
   // ── Payment step ──
@@ -234,13 +217,15 @@ export default function CheckoutPage() {
             <p className="mt-2 text-muted-foreground">{t("checkout.payViaPromptPayHint")}</p>
             <Card className="mt-6 w-full border-border">
               <CardContent className="flex flex-col items-center gap-4 p-6">
-                <div className="flex justify-between w-full text-sm">
-                  <span className="text-muted-foreground">{t("checkout.orderNumber")}</span>
-                  <span className="font-medium text-foreground">{orderId}</span>
-                </div>
+                {orderId && (
+                  <div className="flex justify-between w-full text-sm">
+                    <span className="text-muted-foreground">{t("checkout.orderNumber")}</span>
+                    <span className="font-medium text-foreground">{orderId}</span>
+                  </div>
+                )}
                 <div className="flex justify-between w-full text-sm">
                   <span className="text-muted-foreground">{t("checkout.amountDue")}</span>
-                  <span className="font-medium text-foreground">{formatPrice(orderSummary.totalPrice)}</span>
+                  <span className="font-medium text-foreground">{formatPrice(grandTotal)}</span>
                 </div>
                 <div className="flex h-56 w-56 items-center justify-center rounded-lg border border-border bg-secondary/30">
                   {qrLoading ? (
@@ -483,8 +468,8 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
-                  <Button type="submit" className="mt-6 w-full" disabled={isLoading}>
-                    {isLoading ? t("checkout.processing") : t("checkout.placeOrder")}
+                  <Button type="submit" className="mt-6 w-full">
+                    {t("checkout.placeOrder")}
                   </Button>
                 </CardContent>
               </Card>

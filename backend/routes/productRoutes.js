@@ -2,6 +2,7 @@ const express = require("express")
 
 const {
   getProducts,
+  getAdminProducts,
   getProductById,
   searchProducts,
   getCategories,
@@ -17,6 +18,7 @@ const {
   addProductImage,
   deleteProductImage,
   setPrimaryImage,
+  setImageColor,
 } = require("../controllers/productImageControllers")
 
 const { getProductReviews } = require("../controllers/reviewControllers")
@@ -31,6 +33,7 @@ router.get("/search", searchProducts)
 router.get("/categories", getCategories)
 router.get("/filter", filterProducts)
 router.get("/best-sellers", getBestSellers)
+router.get("/admin", auth, requireAdminOrStaff, getAdminProducts)
 router.get("/", getProducts)
 router.get("/:productId", getProductById)
 
@@ -65,6 +68,7 @@ router.get("/:productId/images", getProductImages)
 router.post("/:productId/images", auth, requireAdminOrStaff, upload.single("image"), addProductImage)
 router.delete("/:productId/images/:imageId", auth, requireAdminOrStaff, deleteProductImage)
 router.put("/:productId/images/:imageId/primary", auth, requireAdminOrStaff, setPrimaryImage)
+router.put("/:productId/images/:imageId/color", auth, requireAdminOrStaff, setImageColor)
 
 router.get("/:productId/reviews", getProductReviews)
 
