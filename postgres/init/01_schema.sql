@@ -174,6 +174,7 @@
     first_name  VARCHAR(80)  NOT NULL DEFAULT '',
     last_name   VARCHAR(80)  NOT NULL DEFAULT '',
     phone       VARCHAR(20)  DEFAULT NULL,
+    address     TEXT         NOT NULL DEFAULT '', -- legacy flat-text mirror of the default addresses row, auto-synced by PUT /profile — see CLAUDE.md "Address sync"
     role        VARCHAR(20)  NOT NULL DEFAULT 'customer',
     is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),

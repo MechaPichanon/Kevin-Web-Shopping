@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation"
 import { getToken } from "@/lib/auth"
 import type { ShippingAddress } from "@/types/address"
 import { useLang } from "@/lib/language-context"
-import { API_BASE as API } from "@/lib/api"
+import { API_BASE as API, resolveApiUrl } from "@/lib/api"
 
 const paymentMethods = [
   { id: "promptpay", nameKey: "checkout.promptpay" as const, icon: QrCode },
@@ -420,7 +420,7 @@ export default function CheckoutPage() {
                     {items.map((item: any) => (
                       <div key={item.cart_item_id} className="flex gap-3">
                         <div className="h-14 w-12 shrink-0 overflow-hidden rounded-md bg-secondary">
-                          <img src={item.image_url || "https://placehold.co/100x120"} alt={item.product_name} className="h-full w-full object-cover" />
+                          <img src={item.image_url ? resolveApiUrl(item.image_url) : "https://placehold.co/100x120"} alt={item.product_name} className="h-full w-full object-cover" />
                         </div>
                         <div className="flex flex-1 flex-col justify-center">
                           <p className="line-clamp-1 text-sm font-medium">{item.product_name}</p>

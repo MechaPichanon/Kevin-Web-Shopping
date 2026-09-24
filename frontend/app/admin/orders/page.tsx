@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { resolveApiUrl } from "@/lib/api"
 import {
   fetchOrders,
   updateOrderStatusApi,
@@ -717,9 +718,9 @@ export default function AdminOrdersPage() {
                                         {getSlipStatusText(slip.status)}
                                       </span>
                                     </div>
-                                    <a href={slip.url} target="_blank" rel="noopener noreferrer" className="block">
+                                    <a href={resolveApiUrl(slip.url)} target="_blank" rel="noopener noreferrer" className="block">
                                       <img
-                                        src={slip.url}
+                                        src={resolveApiUrl(slip.url)}
                                         alt="สลิปการโอนเงิน"
                                         className="max-h-64 w-full rounded-lg border border-border object-contain"
                                       />

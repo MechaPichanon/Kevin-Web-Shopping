@@ -198,6 +198,7 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
   - `018_live_chat_handoff.sql` — adds `chat_sessions`, `chat_messages`, `admin_presence` for the **"talk to a human" live-chat handoff** (see the subsection below). Required as persisted tables because the FastAPI chatbot keeps conversation state in memory only (single uvicorn process, no `--workers`) — an admin reading the thread from Express needs it in the DB, and it must survive a chatbot restart. No changes to `users`/`orders`/existing `/chat` response keys.
   - `019_order_courier.sql` — adds `orders.courier_name VARCHAR(100)` (see **Courier tracking number** below). `orders.tracking_number` already existed in the schema since `005_` but was never written by any endpoint — this migration is really about making both columns writable, not adding tracking_number itself.
   - `020_simplify_order_status.sql` — simplifies `orders.status` from 6 values to 4 (`pending/confirmed/shipped/cancelled`, dropping `delivered` — merged into `confirmed`, which was already the app's real "complete" state — and `refunded`, which no endpoint ever set) and drops `refunded` from `orders.payment_status` and `payments.status` too (also never set by any code path). Adds `orders.shipped_at TIMESTAMPTZ`, stamped once the first time an order's status becomes `shipped`. See **Order status simplification & receipt confirmation** below.
+  - `021_schema_drift_cleanup.sql` — fixes two gaps found between `01_schema.sql` and what was actually running on the long-lived dev DB: `wishlist.product_id` was unbounded `VARCHAR` (bug in `015_`) instead of `VARCHAR(20)` like every other FK to `products.product_id`, and a leftover `users_role_check` constraint (from `004_`, superseded by `chk_users_role` when `005_` rebuilt the `users` table) duplicated the same 3-value check. Both fixed by this migration. Separately, `users.address` was found missing from `01_schema.sql` even though it's live on every real DB (added at runtime by `server.js`'s `ensureUserProfileColumns()` self-heal, used by the address-sync feature below) — no migration needed for that one since the column already self-heals, but `01_schema.sql` itself was corrected to include it so a fresh volume's schema file actually matches reality.
 
 ### Courier tracking number (no courier API — manual admin entry)
 
@@ -391,9 +392,9 @@ fixed so there is exactly one "default" address per user, shared by both flows:
 
 ### Adding or changing tables
 
-1. Create `postgres/migrations/020_description.sql` (next number is `020`).
+1. Create `postgres/migrations/022_description.sql` (next number is `022`).
 2. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
-3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/020_description.sql`
+3. Apply manually: `psql "$DATABASE_URL" -f postgres/migrations/022_description.sql`
 4. Mirror the change in `postgres/init/01_schema.sql`.
 
 ### Full seed (fresh Docker volume)
@@ -431,6 +432,7 @@ psql "$DATABASE_URL" -f postgres/migrations/017_payment_slips.sql
 psql "$DATABASE_URL" -f postgres/migrations/018_live_chat_handoff.sql
 psql "$DATABASE_URL" -f postgres/migrations/019_order_courier.sql
 psql "$DATABASE_URL" -f postgres/migrations/020_simplify_order_status.sql
+psql "$DATABASE_URL" -f postgres/migrations/021_schema_drift_cleanup.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -674,7 +676,7 @@ ORDER_AUTO_CONFIRM_DAYS=7           # days a shipped order waits before auto-con
 
 ## Conventions
 
-- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `020_`
+- SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `022_`
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`

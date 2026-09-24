@@ -8,6 +8,7 @@ import {
   type ImageSearchResult,
 } from "@/components/ImageSearchButton";
 import { useLang } from "@/lib/language-context";
+import { resolveApiUrl } from "@/lib/api";
 
 type StoredImageSearch = {
   previewSrc: string;
@@ -102,7 +103,7 @@ export default function ImageSearchResultsPage() {
               <div className="relative w-full h-[220px] bg-[#ece2d6]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={item.image_url}
+                  src={resolveApiUrl(item.image_url)}
                   alt={item.product_name}
                   className="w-full h-full object-cover"
                 />

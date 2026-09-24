@@ -11,6 +11,7 @@ import {
   pollChat,
   leaveChat,
 } from "@/lib/liveChat";
+import { resolveApiUrl } from "@/lib/api";
 
 type MessageType = "text" | "cards";
 
@@ -874,7 +875,7 @@ export default function ChatWidget() {
                                 >
                                   {c.image_url && (
                                     <img
-                                      src={c.image_url}
+                                      src={resolveApiUrl(c.image_url)}
                                       alt={c.name}
                                       style={{
                                         width: "100%",
