@@ -17,11 +17,13 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [accountDeactivated, setAccountDeactivated] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setAccountDeactivated(false)
 
     const trimmedEmail = email.trim()
     const trimmedPassword = password.trim()
@@ -42,7 +44,11 @@ export default function LoginPage() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setError(data.error || t("auth.loginFailed"))
+        if (data.code === "ACCOUNT_DEACTIVATED") {
+          setAccountDeactivated(true)
+        } else {
+          setError(data.error || t("auth.loginFailed"))
+        }
         return
       }
 
@@ -82,9 +88,9 @@ export default function LoginPage() {
             </div>
 
             {/* Error Message */}
-            {error && (
+            {(error || accountDeactivated) && (
               <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
+                {accountDeactivated ? t("auth.accountDeactivated") : error}
               </div>
             )}
 

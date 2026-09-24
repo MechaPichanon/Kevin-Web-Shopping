@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Filter, Grid3X3, LayoutGrid } from "lucide-react";
 
@@ -9,7 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { useLang } from "@/lib/language-context";
 import { API_BASE } from "@/lib/api";
 
-const DEFAULT_MAX_PRICE = 5000;
+const DEFAULT_MAX_PRICE = 700;
 
 const priceRanges: {
   id: string;
@@ -20,10 +20,7 @@ const priceRanges: {
   max: number;
 }[] = [
   { id: "under-500", labelKey: "products.priceUnder", labelNum: 500, min: 0, max: 500 },
-  { id: "500-1000", name: "฿500 – 1,000", min: 500, max: 1000 },
-  { id: "1000-2000", name: "฿1,000 – 2,000", min: 1000, max: 2000 },
-  { id: "2000-3000", name: "฿2,000 – 3,000", min: 2000, max: 3000 },
-  { id: "over-3000", labelKey: "products.priceAndUp", labelNum: 3000, min: 3000, max: 999999 },
+  { id: "500-700", name: "฿500 – 700", min: 500, max: 700 },
 ];
 
 type SubCategoryItem = {
@@ -130,18 +127,7 @@ function ProductPageContent() {
     setSelectedSubCategory("all");
   };
 
-  const priceLimit = useMemo(() => {
-    const maxPrice = products.reduce(
-      (max, p) => Math.max(max, Number(p.price) || 0),
-      DEFAULT_MAX_PRICE
-    );
-
-    return Math.ceil(maxPrice / 500) * 500;
-  }, [products]);
-
-  useEffect(() => {
-    setPriceRange([0, priceLimit]);
-  }, [priceLimit]);
+  const priceLimit = DEFAULT_MAX_PRICE;
 
   // Price filter stays client-side (slider UX)
   const filteredProducts = products.filter((p) =>

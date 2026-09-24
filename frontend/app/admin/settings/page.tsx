@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   AlertCircle,
   MessageSquare,
+  Gift,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,13 +26,15 @@ import { Label } from "@/components/ui/label"
 import { fetchPolicies, updatePolicyApi, type Policy } from "@/lib/policies"
 
 const navItems = [
-  { href: "/admin", label: "Dashboard", icon: BarChart3 },
-  { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
-  { href: "/admin/orders", label: "คำสั่งซื้อ", icon: ShoppingCart },
-  { href: "/admin/chat", label: "แชทลูกค้า", icon: MessageSquare },
-  { href: "/admin/users", label: "จัดการผู้ใช้", icon: Users },
-  { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
+    { href: "/admin", label: "Dashboard", icon: BarChart3 },
+    { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
+    { href: "/admin/orders", label: "คำสั่งซื้อ", icon: ShoppingCart },
+    { href: "/admin/chat", label: "แชทลูกค้า", icon: MessageSquare },
+    { href: "/admin/discounts", label: "โค้ดส่วนลด", icon: Gift },
+    { href: "/admin/users", label: "จัดการผู้ใช้", icon: Users },
+    { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
 ]
+
 
 const POLICY_TYPES = ["SHIPPING", "RETURN", "PAYMENT"]
 

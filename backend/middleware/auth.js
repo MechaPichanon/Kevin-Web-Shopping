@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.headers.authorization;
 
   if (!header) {
@@ -10,12 +10,34 @@ function auth(req, res, next) {
 
   const token = header.split(" ")[1];
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  // JWTs remain valid until they expire, so checking the account here is
+  // necessary to immediately revoke access when an admin deactivates a user.
+  try {
+    const result = await pool.query(
+      "SELECT is_active FROM users WHERE id = $1",
+      [decoded.id]
+    );
+    const user = result.rows[0];
+
+    if (!user || user.is_active !== true) {
+      return res.status(403).json({
+        error: "Account has been deactivated",
+        code: "ACCOUNT_DEACTIVATED",
+      });
+    }
+
     req.user = decoded;
     next();
-  } catch {
-    res.status(401).json({ error: "Invalid token" });
+  } catch (err) {
+    console.error("AUTH ACCOUNT CHECK ERROR:", err.message);
+    res.status(500).json({ error: "Server error" });
   }
 }
 

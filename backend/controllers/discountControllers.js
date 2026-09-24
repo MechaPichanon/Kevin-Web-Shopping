@@ -4,7 +4,7 @@ const db = require("../db");
 // endpoint and createOrder (so a discount is always re-checked server-side
 // at order time, never trusted from the client).
 // Returns { error } or { discount, discountAmount }.
-async function getValidDiscount(code, subtotal, client = db) {
+async function getValidDiscount(code, subtotal, client = db, userId = null) {
   if (!code || !code.trim()) {
     return { error: "กรุณากรอกรหัสส่วนลด" };
   }
@@ -23,6 +23,24 @@ async function getValidDiscount(code, subtotal, client = db) {
   }
   if (!discount.is_active) {
     return { error: "รหัสส่วนลดนี้ถูกปิดใช้งานแล้ว" };
+  }
+
+  // A customer may redeem each code once. Cancelled orders do not consume the
+  // customer's redemption, matching the existing global used_count rollback.
+  if (userId !== null) {
+    const previousUse = await client.query(
+      `SELECT 1
+       FROM orders
+       WHERE user_id = $1
+         AND UPPER(TRIM(discount_code)) = $2
+         AND status <> 'cancelled'
+       LIMIT 1`,
+      [userId, discount.code]
+    );
+
+    if (previousUse.rows.length > 0) {
+      return { error: "คุณใช้รหัสส่วนลดนี้ไปแล้ว" };
+    }
   }
 
   const now = new Date();
@@ -57,7 +75,7 @@ async function getValidDiscount(code, subtotal, client = db) {
 const validateDiscount = async (req, res) => {
   try {
     const { code, subtotal } = req.body;
-    const result = await getValidDiscount(code, subtotal);
+    const result = await getValidDiscount(code, subtotal, db, req.user.id);
 
     if (result.error) {
       return res.status(400).json({ error: result.error });
