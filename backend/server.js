@@ -29,6 +29,7 @@ const wishlistRoutes = require("./routes/wishlistRoutes");
 const discountRoutes = require("./routes/discountRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const liveChatRoutes = require("./routes/liveChatRoutes");
+const adminDiscountRoutes = require("./routes/adminRoutes");
 // Comma-separated, matching CORS_ORIGINS on the chatbot service — a single
 // value (the common case) still works unchanged since split() on a string
 // with no commas just returns a one-element array.
@@ -52,6 +53,7 @@ app.use("/wishlist", wishlistRoutes);
 app.use("/discount", discountRoutes);
 app.use("/reviews", reviewRoutes);
 app.use("/live-chat", liveChatRoutes);
+app.use("/", adminDiscountRoutes);
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Auth backend is running" });
 });
@@ -208,6 +210,14 @@ app.post("/auth/login", async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    if (user.is_active !== true) {
+      return res.status(403).json({
+        error: "Account has been deactivated",
+        code: "ACCOUNT_DEACTIVATED",
+      });
+    }
+
     const match = await bcrypt.compare(password, user.password);
 
     if (!match) {

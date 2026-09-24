@@ -127,7 +127,7 @@ const createOrder = async (req, res) => {
     let appliedDiscountCodeId = null;
 
     if (discount_code) {
-      const discountResult = await getValidDiscount(discount_code, subtotal, client);
+      const discountResult = await getValidDiscount(discount_code, subtotal, client, user_id);
       if (discountResult.error) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: discountResult.error });
@@ -685,8 +685,8 @@ const updateOrderStatus = async (req, res) => {
     // and must not be reset by unrelated later updates (e.g. tracking info).
     await client.query(
       `UPDATE orders
-       SET status = $2,
-           shipped_at = CASE WHEN $2 = 'shipped' AND status <> 'shipped'
+       SET status = $2::varchar,
+           shipped_at = CASE WHEN $2::varchar = 'shipped'::varchar AND status <> 'shipped'
                               THEN NOW() ELSE shipped_at END,
            updated_at = NOW()
        WHERE order_id = $1`,
