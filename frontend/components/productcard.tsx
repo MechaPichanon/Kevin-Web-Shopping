@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Heart } from "lucide-react";
 import { useWishlist } from "@/lib/wishlist-context";
 import { useLang } from "@/lib/language-context";
+import { API_BASE, resolveApiUrl } from "@/lib/api";
 
 type Product = {
   id: number;
@@ -63,7 +64,7 @@ export default function ProductCard({
     }
 
     try {
-      const res = await fetch("http://localhost:5000/cart/add", {
+      const res = await fetch(`${API_BASE}/cart/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -113,7 +114,7 @@ export default function ProductCard({
       {/* IMAGE */}
       <div className="relative aspect-[3/4] overflow-hidden bg-[#f4ede3]">
         <img
-          src={product.image}
+          src={resolveApiUrl(product.image)}
           alt={product.name}
           className="h-full w-full object-cover"
         />

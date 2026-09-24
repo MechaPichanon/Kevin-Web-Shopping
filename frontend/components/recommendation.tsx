@@ -5,6 +5,7 @@ import Link from "next/link";
 import ProductCard from "@/components/productcard";
 import { ArrowRight } from "lucide-react";
 import { useLang } from "@/lib/language-context";
+import { API_BASE } from "@/lib/api";
 
 type BestSellerApi = {
   product_id: string;
@@ -23,7 +24,7 @@ export default function Recommendation() {
   const { t, pick } = useLang();
 
   useEffect(() => {
-    fetch("http://localhost:5000/products/best-sellers?limit=4")
+    fetch(`${API_BASE}/products/best-sellers?limit=4`)
       .then((res) => res.json())
       .then((data: BestSellerApi[]) => setProducts(data))
       .catch(console.error);

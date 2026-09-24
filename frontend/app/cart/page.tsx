@@ -6,6 +6,7 @@ import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Lock } from "lucide-react
 import { Button } from "@/components/ui/button"
 import { colorToHex } from "@/lib/color-map"
 import { useLang } from "@/lib/language-context"
+import { API_BASE, resolveApiUrl } from "@/lib/api"
 type CartItem = {
     cart_item_id: number;
     quantity: number;
@@ -35,7 +36,7 @@ export default function CartPage() {
             if (!user.id) return;
 
             const res = await fetch(
-                `http://localhost:5000/cart/${user.id}`
+                `${API_BASE}/cart/${user.id}`
             );
 
             if (!res.ok) {
@@ -58,7 +59,7 @@ export default function CartPage() {
     ) => {
         try {
             const res = await fetch(
-                `http://localhost:5000/cart/${cart_item_id}`,
+                `${API_BASE}/cart/${cart_item_id}`,
                 {
                     method: "DELETE",
                 }
@@ -77,7 +78,7 @@ export default function CartPage() {
         quantity: number
     ) => {
         await fetch(
-            `http://localhost:5000/cart/${cart_item_id}`,
+            `${API_BASE}/cart/${cart_item_id}`,
             {
                 method: "PUT",
                 headers: {
@@ -153,8 +154,9 @@ export default function CartPage() {
                             >
                                 <img
                                     src={
-                                        item.image_url ||
-                                        "https://placehold.co/300x400"
+                                        item.image_url
+                                            ? resolveApiUrl(item.image_url)
+                                            : "https://placehold.co/300x400"
                                     }
                                     className="h-32 w-[104px] rounded-[11px] object-cover"
                                 />

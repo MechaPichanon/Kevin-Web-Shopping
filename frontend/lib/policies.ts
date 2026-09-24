@@ -1,5 +1,5 @@
 // Client-safe: talks to the Express backend directly (not a Next.js API route).
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+import { API_BASE as BACKEND_URL } from "@/lib/api"
 const API_BASE = `${BACKEND_URL}/policies`
 
 export type Policy = {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/language-context";
+import { API_BASE } from "@/lib/api";
 
 type CategoryItem = {
   category: string;
@@ -15,7 +16,7 @@ export default function CategoryShowcase() {
   const { t, pick } = useLang();
 
   useEffect(() => {
-    fetch("http://localhost:5000/products/categories")
+    fetch(`${API_BASE}/products/categories`)
       .then((res) => res.json())
       .then((data: CategoryItem[]) => setCategories(data))
       .catch(console.error);

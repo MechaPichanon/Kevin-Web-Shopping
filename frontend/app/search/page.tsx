@@ -6,6 +6,7 @@ import { CheckCircle2, Filter, Grid3X3, LayoutGrid } from "lucide-react";
 import ProductCard from "@/components/productcard";
 import { Slider } from "@/components/ui/slider";
 import { useLang } from "@/lib/language-context";
+import { API_BASE } from "@/lib/api";
 
 const DEFAULT_MAX_PRICE = 700;
 
@@ -92,7 +93,7 @@ function SearchResults() {
 
   // Fetch category list once for display names / Thai translations
   useEffect(() => {
-    fetch("http://localhost:5000/products/categories")
+    fetch(`${API_BASE}/products/categories`)
       .then((res) => res.json())
       .then((data: CategoryItem[]) => setCategories(data))
       .catch(console.error);
@@ -106,7 +107,7 @@ function SearchResults() {
     }
     setSelectedCategory("all");
     setSelectedSubCategory("all");
-    fetch(`http://localhost:5000/products/search?q=${encodeURIComponent(search)}`)
+    fetch(`${API_BASE}/products/search?q=${encodeURIComponent(search)}`)
       .then((res) => res.json())
       .then(setProducts)
       .catch(console.error);

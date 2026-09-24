@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { API_BASE, resolveApiUrl } from "@/lib/api"
 
 // Product write routes now require a JWT (auth + admin/staff). Mutations here
 // previously sent no Authorization header.
@@ -397,7 +398,7 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     let ignore = false
-    fetch("http://localhost:5000/products")
+    fetch(`${API_BASE}/products`)
       .then((r) => r.json())
       .then((data: ProductRow[]) => { if (!ignore) setProducts(data) })
       .catch(console.error)
@@ -405,14 +406,14 @@ export default function AdminProductsPage() {
   }, [])
 
   const fetchProducts = () => {
-    fetch("http://localhost:5000/products")
+    fetch(`${API_BASE}/products`)
       .then((r) => r.json())
       .then((data: ProductRow[]) => setProducts(data))
       .catch(console.error)
   }
 
   const fetchProductImages = (productId: string) => {
-    fetch(`http://localhost:5000/products/${encodeURIComponent(productId)}/images`)
+    fetch(`${API_BASE}/products/${encodeURIComponent(productId)}/images`)
       .then((r) => r.json())
       .then((data: ProductImage[]) => setProductImages(data))
       .catch(console.error)
@@ -480,7 +481,7 @@ export default function AdminProductsPage() {
       subcategory: subVal,
       subcategoryTh: subObj?.labelTh ?? "",
       imageFile: null,
-      imagePreview: p.image_url ?? "",
+      imagePreview: p.image_url ? resolveApiUrl(p.image_url) : "",
       variants: variantDrafts,
       editingVariantKey: null,
     })
@@ -728,7 +729,7 @@ export default function AdminProductsPage() {
     if (imgUploadColor) fd.append("color", imgUploadColor)
     try {
       const res = await fetch(
-        `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images`,
+        `${API_BASE}/products/${encodeURIComponent(editingProduct.product_id)}/images`,
         { method: "POST", body: fd, headers: authHeaders() }
       )
       if (!res.ok) { alert("อัพโหลดไม่สำเร็จ"); return }
@@ -746,7 +747,7 @@ export default function AdminProductsPage() {
     if (!editingProduct) return
     if (!confirm("ลบรูปนี้?")) return
     await fetch(
-      `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}`,
+      `${API_BASE}/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}`,
       { method: "DELETE", headers: authHeaders() }
     )
     fetchProductImages(editingProduct.product_id)
@@ -755,7 +756,7 @@ export default function AdminProductsPage() {
   const handleSetPrimaryImage = async (imageId: number) => {
     if (!editingProduct) return
     await fetch(
-      `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}/primary`,
+      `${API_BASE}/products/${encodeURIComponent(editingProduct.product_id)}/images/${imageId}/primary`,
       { method: "PUT", headers: authHeaders() }
     )
     fetchProductImages(editingProduct.product_id)
@@ -856,11 +857,11 @@ export default function AdminProductsPage() {
       let res: Response
       if (editingProduct) {
         res = await fetch(
-          `http://localhost:5000/products/${encodeURIComponent(editingProduct.product_id)}`,
+          `${API_BASE}/products/${encodeURIComponent(editingProduct.product_id)}`,
           { method: "PUT", body: fd, headers: authHeaders() }
         )
       } else {
-        res = await fetch("http://localhost:5000/products", {
+        res = await fetch(`${API_BASE}/products`, {
           method: "POST",
           body: fd,
           headers: authHeaders(),
@@ -880,7 +881,7 @@ export default function AdminProductsPage() {
           // Land on the edit view for the product we just created instead of
           // the list, so the photo just uploaded (now correctly tagged with
           // its color) is visible right away — no reason left to re-upload it.
-          const listRes = await fetch("http://localhost:5000/products")
+          const listRes = await fetch(`${API_BASE}/products`)
           const list: ProductRow[] = await listRes.json()
           setProducts(list)
           const created = list.find((p) => p.product_id === data.product_id)
@@ -908,7 +909,7 @@ export default function AdminProductsPage() {
     try {
       setIsDeleting(true)
       const res = await fetch(
-        `http://localhost:5000/products/${encodeURIComponent(deleteTarget.product_id)}`,
+        `${API_BASE}/products/${encodeURIComponent(deleteTarget.product_id)}`,
         { method: "DELETE", headers: authHeaders() }
       )
       if (!res.ok) {
@@ -1218,7 +1219,7 @@ export default function AdminProductsPage() {
                             <td className="px-4 py-3">
                               {product.image_url ? (
                                 <img
-                                  src={product.image_url}
+                                  src={resolveApiUrl(product.image_url)}
                                   alt={product.product_name}
                                   className="h-16 w-16 rounded object-cover"
                                 />
@@ -2477,7 +2478,7 @@ export default function AdminProductsPage() {
                               {imgs.map((img) => (
                                 <div key={img.image_id} style={{ position: "relative", width: 90, height: 90 }}>
                                   <img
-                                    src={img.image_url}
+                                    src={resolveApiUrl(img.image_url)}
                                     alt={img.alt_text ?? ""}
                                     style={{
                                       width: 90, height: 90, objectFit: "cover", borderRadius: 8,

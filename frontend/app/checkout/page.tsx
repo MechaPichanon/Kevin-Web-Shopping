@@ -12,8 +12,7 @@ import { useRouter } from "next/navigation"
 import { getToken } from "@/lib/auth"
 import type { ShippingAddress } from "@/types/address"
 import { useLang } from "@/lib/language-context"
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+import { API_BASE as API } from "@/lib/api"
 
 const paymentMethods = [
   { id: "promptpay", nameKey: "checkout.promptpay" as const, icon: QrCode },

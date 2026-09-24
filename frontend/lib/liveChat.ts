@@ -1,6 +1,6 @@
 // Client-safe helper for the "talk to a human" live-chat handoff.
 // Talks to the Express backend directly (same pattern as lib/orders.ts).
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+import { API_BASE as BACKEND_URL } from "@/lib/api"
 const API_BASE = `${BACKEND_URL}/live-chat`
 
 // ⚠️ Admin calls assume the login page stores the JWT under localStorage "token".

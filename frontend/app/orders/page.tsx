@@ -10,8 +10,7 @@ import { useRouter } from "next/navigation"
 import { useLang } from "@/lib/language-context"
 import { th as thDict, type TranslationKey } from "@/lib/i18n/dictionaries"
 import { getCourier } from "@/lib/couriers"
-
-const API = "http://localhost:5000"
+import { API_BASE as API, resolveApiUrl } from "@/lib/api"
 
 type TFn = (key: TranslationKey, vars?: Record<string, string | number>) => string
 
@@ -197,7 +196,7 @@ export default function OrdersPage() {
     })
   }
 
-  const handleViewSlip = (url: string) => setSlipPreviewUrl(url)
+  const handleViewSlip = (url: string) => setSlipPreviewUrl(resolveApiUrl(url))
 
   const handleReuploadFile = (e: React.ChangeEvent<HTMLInputElement>, orderId: number) => {
     const file = e.target.files?.[0]
@@ -761,7 +760,7 @@ export default function OrdersPage() {
                                           className="flex items-center gap-3 rounded-lg border border-border p-2"
                                         >
                                           <img
-                                            src={slip.url}
+                                            src={resolveApiUrl(slip.url)}
                                             alt={t("orders.slipN", { n: i + 1 })}
                                             className="h-14 w-14 flex-none cursor-pointer rounded object-cover"
                                             onClick={() => handleViewSlip(slip.url)}

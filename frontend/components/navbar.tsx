@@ -7,6 +7,7 @@ import { Heart } from "lucide-react";
 import ImageSearchButton from "./ImageSearchButton";
 import { useWishlist } from "@/lib/wishlist-context";
 import { useLang } from "@/lib/language-context";
+import { API_BASE } from "@/lib/api";
 
 type User = {
   id: number;
@@ -29,7 +30,7 @@ export default function Navbar() {
 
   const fetchCartCount = async (userId: number) => {
     try {
-      const res = await fetch(`http://localhost:5000/cart/${userId}`);
+      const res = await fetch(`${API_BASE}/cart/${userId}`);
       const data = await res.json();
       const total = data.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
       setCartCount(total);
@@ -50,7 +51,7 @@ export default function Navbar() {
           try { storedRole = JSON.parse(storedUser)?.role; } catch { storedRole = undefined; }
         }
 
-        const res = await fetch("http://localhost:5000/profile", {
+        const res = await fetch(`${API_BASE}/profile`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();

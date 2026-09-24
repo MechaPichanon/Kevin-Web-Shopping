@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect } from "react"
+import { API_BASE as API } from "@/lib/api"
 
 export interface CartItem {
   id: string | number
@@ -27,8 +28,6 @@ interface CartContextType {
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])

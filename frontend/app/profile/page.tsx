@@ -23,6 +23,7 @@ import { getToken } from "@/lib/auth";
 import type { ShippingAddress } from "@/types/address";
 import { useLang } from "@/lib/language-context";
 import { Check } from "lucide-react"
+import { API_BASE } from "@/lib/api";
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
@@ -95,7 +96,7 @@ export default function ProfilePage() {
       return;
     }
 
-    fetch("http://localhost:5000/profile", {
+    fetch(`${API_BASE}/profile`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -137,7 +138,7 @@ export default function ProfilePage() {
     setProfileError("");
 
     try {
-      const res = await fetch("http://localhost:5000/profile", {
+      const res = await fetch(`${API_BASE}/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -216,7 +217,7 @@ export default function ProfilePage() {
 
     setIsChangingPassword(true);
     try {
-      const res = await fetch("http://localhost:5000/change-password", {
+      const res = await fetch(`${API_BASE}/change-password`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

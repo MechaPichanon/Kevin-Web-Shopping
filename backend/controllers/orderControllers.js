@@ -845,7 +845,7 @@ const uploadPaymentSlip = async (req, res) => {
       });
     }
 
-    const slipUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    const slipUrl = `/uploads/${req.file.filename}`;
 
     await client.query("BEGIN");
 
@@ -914,7 +914,7 @@ const customerReuploadPaymentSlip = async (req, res) => {
       return res.status(400).json({ error: "No slip file uploaded" });
     }
 
-    const slipUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    const slipUrl = `/uploads/${req.file.filename}`;
 
     await client.query("BEGIN");
 

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { getToken } from "@/lib/auth"
+import { API_BASE as API } from "@/lib/api"
 
 // ─────────────────────────────────────────────
 // Types
@@ -30,8 +31,6 @@ interface WishlistContextType {
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-
 const authHeaders = (token: string) => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${token}`,

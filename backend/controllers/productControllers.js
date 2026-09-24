@@ -241,7 +241,7 @@ const addProduct = async (req, res) => {
 
     let image_url = null
     if (req.file) {
-      image_url = `http://localhost:5000/uploads/${req.file.filename}`
+      image_url = `/uploads/${req.file.filename}`
     }
 
     const now = Date.now()
@@ -352,7 +352,7 @@ const updateProduct = async (req, res) => {
 
     let image_url = null
     if (req.file) {
-      image_url = `http://localhost:5000/uploads/${req.file.filename}`
+      image_url = `/uploads/${req.file.filename}`
     }
 
     const firstV = variants[0]

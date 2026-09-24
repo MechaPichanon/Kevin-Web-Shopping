@@ -23,6 +23,13 @@ services:
       start_period: 30s
 
   frontend:
+    # NEXT_PUBLIC_API_URL must be the browser-facing URL of the VM (not an
+    # internal docker hostname) — it's inlined into the client bundle by
+    # `npm run build` below, so this env var has to be set correctly BEFORE
+    # this command runs, e.g. in the deploy machine's .env: set it to
+    # https://your-vm-domain.com or http://VM_IP:5000.
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL to the VM's public URL before deploying}
     command: sh -c "npm ci && npm run build && npm run start -- --hostname 0.0.0.0 --port 3000"
     restart: unless-stopped
     healthcheck:
