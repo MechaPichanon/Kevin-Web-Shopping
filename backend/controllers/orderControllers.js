@@ -1,21 +1,16 @@
 const db = require("../db");
 const { getValidDiscount } = require("./discountControllers");
 
-const VALID_ORDER_STATUSES = [
-  "pending",
-  "confirmed",
-  "shipped",
-  "delivered",
-  "cancelled",
-  "refunded",
-];
+const VALID_ORDER_STATUSES = ["pending", "confirmed", "shipped", "cancelled"];
 const VALID_PAYMENT_STATUSES = [
   "unpaid",
   "pending_verification",
   "paid",
   "rejected",
-  "refunded",
 ];
+// Orders auto-confirm this many days after being marked 'shipped' if the
+// customer never clicks "I received it".
+const ORDER_AUTO_CONFIRM_DAYS = Number(process.env.ORDER_AUTO_CONFIRM_DAYS) || 7;
 // Slugs, not display labels — the frontend maps each to a Thai label + the
 // courier's own tracking-page URL (see frontend/lib/couriers.ts).
 const VALID_COURIERS = [
@@ -321,7 +316,7 @@ const createOrder = async (req, res) => {
 // of createOrder. CONTRACT: the caller must already hold
 // `SELECT ... FROM orders WHERE order_id = $1 FOR UPDATE` in the same
 // transaction AND must only call this when the order is NOT already
-// 'cancelled' / 'refunded' — otherwise stock is inflated on a repeat call.
+// 'cancelled' — otherwise stock is inflated on a repeat call.
 async function restoreOrderStock(client, orderId) {
   const { rows: items } = await client.query(
     `SELECT variant_id, quantity FROM order_items WHERE order_id = $1`,
@@ -633,7 +628,7 @@ const getOrderById = async (req, res) => {
   }
 };
 
-// ---- Admin: update order status (pending / confirmed / shipped / delivered / cancelled / refunded) ----
+// ---- Admin: update order status (pending / confirmed / shipped / cancelled) ----
 const updateOrderStatus = async (req, res) => {
   const client = await db.connect();
 
@@ -661,20 +656,20 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    const wasReversed = ["cancelled", "refunded"].includes(current.rows[0].status);
-    const nowReversed = ["cancelled", "refunded"].includes(status);
+    const wasReversed = current.rows[0].status === "cancelled";
+    const nowReversed = status === "cancelled";
 
-    // cancelled / refunded are terminal: stock and the discount use have already
-    // been handed back, so moving back to pending/etc. would be a lie and would
+    // cancelled is terminal: stock and the discount use have already been
+    // handed back, so moving back to pending/etc. would be a lie and would
     // let the restock run a second time on the next cancel. Refuse it.
     if (wasReversed && !nowReversed) {
       await client.query("ROLLBACK");
       return res.status(409).json({
-        error: "คำสั่งซื้อที่ยกเลิก/คืนเงินแล้ว ไม่สามารถเปลี่ยนสถานะได้",
+        error: "คำสั่งซื้อที่ยกเลิกแล้ว ไม่สามารถเปลี่ยนสถานะได้",
       });
     }
 
-    // First transition into cancelled/refunded: hand stock + discount use back.
+    // First transition into cancelled: hand stock + discount use back.
     // The wasReversed guard above means this runs at most once per order.
     if (nowReversed && !wasReversed) {
       await restoreOrderStock(client, id);
@@ -685,8 +680,16 @@ const updateOrderStatus = async (req, res) => {
       );
     }
 
+    // Stamp shipped_at the first time status becomes 'shipped' — it drives
+    // the "I received it" button's eligibility and the auto-confirm sweep,
+    // and must not be reset by unrelated later updates (e.g. tracking info).
     await client.query(
-      `UPDATE orders SET status = $2, updated_at = NOW() WHERE order_id = $1`,
+      `UPDATE orders
+       SET status = $2,
+           shipped_at = CASE WHEN $2 = 'shipped' AND status <> 'shipped'
+                              THEN NOW() ELSE shipped_at END,
+           updated_at = NOW()
+       WHERE order_id = $1`,
       [id, status]
     );
 
@@ -858,8 +861,8 @@ const uploadPaymentSlip = async (req, res) => {
 
     const { status, payment_status } = orderResult.rows[0];
     if (
-      ["paid", "refunded"].includes(payment_status) ||
-      ["confirmed", "shipped", "delivered", "cancelled", "refunded"].includes(status)
+      payment_status === "paid" ||
+      ["confirmed", "shipped", "cancelled"].includes(status)
     ) {
       await client.query("ROLLBACK");
       return res
@@ -1035,6 +1038,53 @@ const cancelMyOrder = async (req, res) => {
   }
 };
 
+// ---- Customer: "I received it" — confirm receipt of a shipped order ----
+const confirmMyOrderReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await db.query(
+      `UPDATE orders SET status = 'confirmed', updated_at = NOW()
+       WHERE order_id = $1 AND user_id = $2 AND status = 'shipped'
+       RETURNING order_id`,
+      [id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(409).json({
+        error: "ไม่สามารถยืนยันการรับสินค้าสำหรับคำสั่งซื้อนี้ได้",
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// ---- Background sweep: auto-confirm orders shipped for too long without the
+// customer confirming receipt themselves. Called once at server startup and
+// then on an hourly setInterval (see server.js) — no cron dependency needed
+// since a plain periodic UPDATE is all this requires. ----
+const autoConfirmShippedOrders = async () => {
+  try {
+    const result = await db.query(
+      `UPDATE orders SET status = 'confirmed', updated_at = NOW()
+       WHERE status = 'shipped'
+         AND shipped_at < NOW() - ($1 || ' days')::INTERVAL
+       RETURNING order_id`,
+      [ORDER_AUTO_CONFIRM_DAYS]
+    );
+
+    if (result.rows.length > 0) {
+      console.log(`Auto-confirmed ${result.rows.length} order(s) shipped for over ${ORDER_AUTO_CONFIRM_DAYS} day(s).`);
+    }
+  } catch (err) {
+    console.error("autoConfirmShippedOrders error:", err);
+  }
+};
+
 module.exports = {
   createOrder,
   getMyOrders,
@@ -1047,4 +1097,6 @@ module.exports = {
   uploadPaymentSlip,
   customerReuploadPaymentSlip,
   cancelMyOrder,
+  confirmMyOrderReceipt,
+  autoConfirmShippedOrders,
 };

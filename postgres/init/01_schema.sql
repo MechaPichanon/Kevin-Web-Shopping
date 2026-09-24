@@ -265,13 +265,14 @@
     payment_slip_url  TEXT          DEFAULT NULL,  -- customer-uploaded transfer slip image
     tracking_number   VARCHAR(100)  DEFAULT NULL,
     courier_name      VARCHAR(100)  DEFAULT NULL,
+    shipped_at        TIMESTAMPTZ   DEFAULT NULL,  -- stamped once, first time status becomes 'shipped' (drives the auto-confirm sweep)
     notes             TEXT          DEFAULT NULL,
     discount_code     TEXT          DEFAULT NULL,
     discount_amount   NUMERIC       NOT NULL DEFAULT 0,
     ordered_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_orders_status         CHECK (status         IN ('pending','confirmed','shipped','delivered','cancelled','refunded')),
-    CONSTRAINT chk_orders_payment_status CHECK (payment_status IN ('unpaid','pending_verification','paid','rejected','refunded'))
+    CONSTRAINT chk_orders_status         CHECK (status         IN ('pending','confirmed','shipped','cancelled')),
+    CONSTRAINT chk_orders_payment_status CHECK (payment_status IN ('unpaid','pending_verification','paid','rejected'))
   );
 
   CREATE INDEX IF NOT EXISTS orders_user_id_idx         ON orders (user_id);
@@ -315,7 +316,7 @@
     paid_at     TIMESTAMPTZ   DEFAULT NULL,
     created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_payments_method CHECK (method IN ('card','promptpay','bank','cod','wallet')),
-    CONSTRAINT chk_payments_status CHECK (status IN ('pending','success','failed','refunded'))
+    CONSTRAINT chk_payments_status CHECK (status IN ('pending','success','failed'))
   );
 
   CREATE INDEX IF NOT EXISTS payments_order_id_idx ON payments (order_id);

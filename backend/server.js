@@ -23,6 +23,7 @@ const path = require("path")
 const { upload, handleUploadErrors } = require("./middleware/upload")
 const orderRoutes =
   require("./routes/orderRoutes");
+const { autoConfirmShippedOrders } = require("./controllers/orderControllers");
 const paymentRoutes = require("./routes/payment");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const discountRoutes = require("./routes/discountRoutes");
@@ -616,16 +617,16 @@ app.get("/admin/stats", auth, requireAdminOrStaff, async (req, res) => {
       SELECT
         COALESCE((SELECT SUM(total_price) FROM orders
           WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
-            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales,
+            AND status != 'cancelled'), 0)::numeric AS sales,
         COALESCE((SELECT SUM(total_price) FROM orders
           WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $2::date
-            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales_yesterday,
+            AND status != 'cancelled'), 0)::numeric AS sales_yesterday,
         COALESCE((SELECT SUM(total_price) FROM orders
           WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date BETWEEN $3::date AND $1::date
-            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales_month,
+            AND status != 'cancelled'), 0)::numeric AS sales_month,
         COALESCE((SELECT SUM(total_price) FROM orders
           WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date BETWEEN $4::date AND $5::date
-            AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales_prev_month,
+            AND status != 'cancelled'), 0)::numeric AS sales_prev_month,
         (SELECT COUNT(*) FROM orders WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date)::integer AS orders,
         (SELECT COUNT(*) FROM orders WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $2::date)::integer AS orders_yesterday,
         (SELECT COUNT(*) FROM products)::integer AS products,
@@ -638,7 +639,7 @@ app.get("/admin/stats", auth, requireAdminOrStaff, async (req, res) => {
           JOIN orders o ON o.order_id = oi.order_id
           JOIN variants v ON v.variant_id = oi.variant_id
           WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
-            AND o.status NOT IN ('cancelled','refunded')
+            AND o.status != 'cancelled'
             AND v.cost_price IS NOT NULL
         ), 0)::numeric AS profit,
         COALESCE((
@@ -647,7 +648,7 @@ app.get("/admin/stats", auth, requireAdminOrStaff, async (req, res) => {
           JOIN orders o ON o.order_id = oi.order_id
           JOIN variants v ON v.variant_id = oi.variant_id
           WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $2::date
-            AND o.status NOT IN ('cancelled','refunded')
+            AND o.status != 'cancelled'
             AND v.cost_price IS NOT NULL
         ), 0)::numeric AS profit_yesterday
       `,
@@ -689,7 +690,7 @@ app.get("/admin/revenue-daily", auth, requireAdmin, async (req, res) => {
       daily AS (
         SELECT (ordered_at AT TIME ZONE 'Asia/Bangkok')::date AS day, SUM(total_price) AS revenue
         FROM orders
-        WHERE status NOT IN ('cancelled','refunded')
+        WHERE status != 'cancelled'
           AND (ordered_at AT TIME ZONE 'Asia/Bangkok')::date BETWEEN $1::date - INTERVAL '59 days' AND $1::date
         GROUP BY 1
       )
@@ -765,7 +766,7 @@ app.get("/admin/reports/daily", auth, requireAdmin, async (req, res) => {
         SELECT
           COALESCE((SELECT SUM(total_price) FROM orders
             WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
-              AND status NOT IN ('cancelled','refunded')), 0)::numeric AS sales,
+              AND status != 'cancelled'), 0)::numeric AS sales,
           (SELECT COUNT(*) FROM orders
             WHERE (ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date)::integer AS orders,
           (SELECT COUNT(*) FROM users
@@ -776,7 +777,7 @@ app.get("/admin/reports/daily", auth, requireAdmin, async (req, res) => {
             JOIN orders o ON o.order_id = oi.order_id
             JOIN variants v ON v.variant_id = oi.variant_id
             WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
-              AND o.status NOT IN ('cancelled','refunded')
+              AND o.status != 'cancelled'
               AND v.cost_price IS NOT NULL
           ), 0)::numeric AS profit
         `,
@@ -793,7 +794,7 @@ app.get("/admin/reports/daily", auth, requireAdmin, async (req, res) => {
         JOIN variants v ON v.variant_id = oi.variant_id
         JOIN products p ON p.product_id = v.product_id
         WHERE (o.ordered_at AT TIME ZONE 'Asia/Bangkok')::date = $1::date
-          AND o.status NOT IN ('cancelled','refunded')
+          AND o.status != 'cancelled'
         GROUP BY p.product_id, p.product_name, p.product_name_th
         ORDER BY qty_sold DESC
         LIMIT 10
@@ -877,6 +878,12 @@ ensureUserProfileColumns()
     app.listen(PORT, () => {
       console.log(` Server running on http://localhost:${PORT}`);
     });
+
+    // Auto-confirm orders shipped too long without the customer clicking
+    // "I received it" — run once at boot, then hourly. No cron dependency
+    // needed for a once-an-hour sweep on a single long-lived process.
+    autoConfirmShippedOrders();
+    setInterval(autoConfirmShippedOrders, 60 * 60 * 1000);
   })
   .catch((err) => {
     console.error("SCHEMA INIT ERROR:", err.message);

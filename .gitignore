@@ -25,3 +25,9 @@ node_modules/
 backend/db_backups/
 
 backend/uploads/
+
+backend.txt
+digest.txt
+frontend.txt
+postgres.txt
+project_summary.md

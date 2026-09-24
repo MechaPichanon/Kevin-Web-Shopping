@@ -789,10 +789,10 @@ export default function AdminOrdersPage() {
                             <h4 className="text-sm font-semibold text-foreground">อัปเดตสถานะ</h4>
                           </div>
                           {(() => {
-                            // cancelled / refunded are terminal server-side (stock + discount
-                            // already returned) — the backend 409s on any move out, so lock
-                            // the buttons instead of letting the admin click into a silent failure.
-                            const isTerminal = ["cancelled", "refunded"].includes(selectedOrder.status)
+                            // cancelled is terminal server-side (stock + discount already
+                            // returned) — the backend 409s on any move out, so lock the
+                            // buttons instead of letting the admin click into a silent failure.
+                            const isTerminal = selectedOrder.status === "cancelled"
                             return (
                               <>
                                 <div className="grid grid-cols-2 gap-2">
@@ -822,7 +822,7 @@ export default function AdminOrdersPage() {
                                 </div>
                                 {isTerminal && (
                                   <p className="mt-2 text-xs text-muted-foreground">
-                                    คำสั่งซื้อที่ยกเลิก/คืนเงินแล้วไม่สามารถเปลี่ยนสถานะได้
+                                    คำสั่งซื้อที่ยกเลิกแล้วไม่สามารถเปลี่ยนสถานะได้
                                   </p>
                                 )}
                               </>

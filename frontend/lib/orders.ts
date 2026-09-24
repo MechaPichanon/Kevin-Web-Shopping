@@ -25,7 +25,7 @@ export type Order = {
   subtotal: number
   shippingFee: number
   total: number
-  status: string // pending | shipping | completed | cancelled
+  status: string // pending | confirmed | shipped | cancelled
   paymentStatus: string // unpaid | pending_verification | paid | rejected
   paymentSlipUrl?: string
   paymentMethod?: string

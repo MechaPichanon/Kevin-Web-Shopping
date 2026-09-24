@@ -197,6 +197,7 @@ backend/data/products.json — seed/import tool only; NOT read at chatbot runtim
   - `017_payment_slips.sql` — adds `payment_slips(slip_id, order_id, slip_url, status, reject_reason, reviewed_by, reviewed_at, uploaded_at)`, a per-upload history table backing the payment-slip **rejection & re-submission loop** (see the subsection below). One row per customer slip upload — rows are never deleted, so a rejected slip stays on record after the customer sends a new one. `orders.payment_slip_url` is kept as a plain mirror of the newest slip's URL so the existing customer/admin order views work unchanged. Backfilled: one row per existing order that already had a `payment_slip_url` (status derived from the order's `payment_status`). No CHECK-constraint change on `orders` — `rejected` was already allowed since `009_`.
   - `018_live_chat_handoff.sql` — adds `chat_sessions`, `chat_messages`, `admin_presence` for the **"talk to a human" live-chat handoff** (see the subsection below). Required as persisted tables because the FastAPI chatbot keeps conversation state in memory only (single uvicorn process, no `--workers`) — an admin reading the thread from Express needs it in the DB, and it must survive a chatbot restart. No changes to `users`/`orders`/existing `/chat` response keys.
   - `019_order_courier.sql` — adds `orders.courier_name VARCHAR(100)` (see **Courier tracking number** below). `orders.tracking_number` already existed in the schema since `005_` but was never written by any endpoint — this migration is really about making both columns writable, not adding tracking_number itself.
+  - `020_simplify_order_status.sql` — simplifies `orders.status` from 6 values to 4 (`pending/confirmed/shipped/cancelled`, dropping `delivered` — merged into `confirmed`, which was already the app's real "complete" state — and `refunded`, which no endpoint ever set) and drops `refunded` from `orders.payment_status` and `payments.status` too (also never set by any code path). Adds `orders.shipped_at TIMESTAMPTZ`, stamped once the first time an order's status becomes `shipped`. See **Order status simplification & receipt confirmation** below.
 
 ### Courier tracking number (no courier API — manual admin entry)
 
@@ -237,6 +238,48 @@ courier's own tracking page to check status themselves.
   set, with a button linking out to the courier's tracking page via
   `getCourier().trackingUrl()`.
 
+### Order status simplification & receipt confirmation
+
+`orders.status` was originally 6 values (`pending/confirmed/shipped/delivered/
+cancelled/refunded`) but the admin UI only ever exposed 4 buttons, and
+`delivered`/`refunded` were vestigial — `delivered` was never set by any
+endpoint (only a hardcoded seed row), and `refunded` was never set on any of
+`orders.status`, `orders.payment_status`, or `payments.status` by any code
+path despite being an allowed value in all three. Migration `020_` merges
+`delivered` into `confirmed` (already the app's real "complete" state — review
+eligibility gates on it) and drops `refunded` from all three columns.
+
+Previously an admin had no signal that a package actually reached the
+customer — marking an order `confirmed` was a pure guess. Now:
+
+- **DB:** `orders.shipped_at TIMESTAMPTZ` (new, `020_`) — stamped once, the
+  first time an order's status transitions to `shipped` (inside
+  `updateOrderStatus`'s `UPDATE`, guarded so a later, unrelated update like
+  `updateOrderTracking` never resets it).
+- **Customer "I received it":** `PATCH /orders/my/:id/confirm-receipt`
+  (`orderControllers.js` `confirmMyOrderReceipt`, `auth` + ownership check via
+  `WHERE order_id=$1 AND user_id=$2`) — allowed only while `status='shipped'`,
+  sets `status='confirmed'`. No stock/discount reversal needed (forward-only),
+  so unlike `cancelMyOrder` it's a single atomic `UPDATE ... RETURNING`, no
+  explicit transaction.
+- **Auto-confirm sweep:** `autoConfirmShippedOrders()` in `orderControllers.js`
+  — one `UPDATE orders SET status='confirmed' WHERE status='shipped' AND
+  shipped_at < NOW() - INTERVAL '<N> days'`, `N` from env var
+  `ORDER_AUTO_CONFIRM_DAYS` (default `7`). Called once at boot and then on an
+  hourly `setInterval` in `server.js` — no cron/scheduler dependency added;
+  this is the first periodic background job in the repo (previously the only
+  "staleness" pattern was `admin_presence`'s lazy read-time `WHERE last_seen_at
+  > NOW() - INTERVAL '60 seconds'` check, which never mutates rows — this
+  sweep does, since a customer's review eligibility and the admin dashboard
+  both depend on `status` actually reaching `confirmed`).
+- **Frontend:** customer `frontend/app/orders/page.tsx` shows a
+  "ได้รับสินค้าแล้ว" button (Actions block, same confirm-dialog pattern as the
+  existing cancel-order button) only when `status='shipped'`, calling the
+  endpoint above then refetching. Admin `frontend/app/admin/orders/page.tsx`'s
+  terminal-status guard simplified to `status === 'cancelled'` (was
+  `['cancelled','refunded']`); `frontend/app/admin/page.tsx`'s dashboard
+  status-badge switch no longer has `delivered`/`refunded` cases.
+
 ### Payment-slip rejection & re-submission loop
 
 Previously an admin rejecting a slip was a dead end: `orders.payment_status = 'rejected'`, no reason recorded, no customer recovery, stock never returned. Now:
@@ -244,8 +287,8 @@ Previously an admin rejecting a slip was a dead end: `orders.payment_status = 'r
 - **`updatePaymentStatus`** (`PATCH /orders/admin/:id/payment-status`) takes an optional `reason` in the body. On `rejected` it writes `status='rejected' + reject_reason + reviewed_by + reviewed_at` onto the **latest** `payment_slips` row (keeping the existing `orders.payment_status` + `payments.status='failed'` sync). On `paid` it marks that row `approved`. Re-rejecting an already-rejected order just overwrites `reject_reason` — this is how the admin "sends more detail".
 - **`POST /orders/my/:id/payment-slip`** (`customerReuploadPaymentSlip`, `auth` + ownership check) — customer re-upload from order history. Allowed **only** when `payment_status='rejected'`. Inserts a new `payment_slips` row (old rows untouched), re-mirrors `orders.payment_slip_url`, sets `payment_status='pending_verification'`, resets `payments.status='pending'`. The original checkout upload endpoint `POST /orders/:id/payment-slip` is unchanged except it now also writes a `payment_slips` row and refuses (409) once the order is paid/shipped/cancelled.
 - **`PATCH /orders/my/:id/cancel`** (`cancelMyOrder`, `auth` + ownership check) — customer cancels their own order. Allowed only while `status='pending'` AND `payment_status IN ('unpaid','pending_verification','rejected')`. Restores stock and reverses one discount-code use, sets `status='cancelled'`, `payments.status='failed'`.
-- **Behaviour change:** admin `updateOrderStatus` (`PATCH /orders/admin/:id/status`) now also restores stock + reverses the discount-code use + sets `payments.status='failed'` the first time an order moves into `cancelled`/`refunded` (it was previously a pure label change — a latent bug). `cancelled`/`refunded` are now **terminal** — trying to move an order back out of them returns 409 — so the restock runs at most once per order (a customer-cancel then admin re-cancel can't double-restock).
-- New shared helpers in `orderControllers.js`: `restoreOrderStock(client, orderId)` (exact reverse of `createOrder`'s decrement loop — handles set components; relies on `trg_variants_stock_cascade` for derived set stock) and `restoreDiscountUse(client, discountCode)`. **Caller contract:** hold `SELECT … FROM orders WHERE order_id=$1 FOR UPDATE` in the same transaction and only call when the order is not already `cancelled`/`refunded`.
+- **Behaviour change:** admin `updateOrderStatus` (`PATCH /orders/admin/:id/status`) now also restores stock + reverses the discount-code use + sets `payments.status='failed'` the first time an order moves into `cancelled` (it was previously a pure label change — a latent bug). `cancelled` is now **terminal** — trying to move an order back out of it returns 409 — so the restock runs at most once per order (a customer-cancel then admin re-cancel can't double-restock). (Originally `cancelled`/`refunded` were both treated as terminal; `refunded` was removed entirely in `020_` — see **Order status simplification & receipt confirmation** below.)
+- New shared helpers in `orderControllers.js`: `restoreOrderStock(client, orderId)` (exact reverse of `createOrder`'s decrement loop — handles set components; relies on `trg_variants_stock_cascade` for derived set stock) and `restoreDiscountUse(client, discountCode)`. **Caller contract:** hold `SELECT … FROM orders WHERE order_id=$1 FOR UPDATE` in the same transaction and only call when the order is not already `cancelled`.
 - Order read responses (`formatOrderRow`) gain `slips: [{url, status, rejectReason, uploadedAt}]` (oldest→newest) and `paymentRejectReason` (latest rejected slip's reason). Fetched via a separate `slipsByOrderId`/`slipsForOrder` query, **not** a JOIN into `ORDER_SELECT` (a one-to-many JOIN would fan out order rows).
 - Frontend for this loop is built: customer `frontend/app/orders/page.tsx` shows the reject reason + a re-upload control (`POST /orders/my/:id/payment-slip` with the auth token) + a "ยกเลิกคำสั่งซื้อ" button (confirm dialog → `PATCH /orders/my/:id/cancel`) + a read-only "ประวัติสลิป" list; admin `frontend/app/admin/orders/page.tsx` has a reason `<Textarea>` (seeded from `paymentRejectReason`, re-usable while already rejected — button relabels to "ส่งเหตุผลอีกครั้ง") and a per-slip history list replacing the single `<img>`; `frontend/lib/orders.ts` `updatePaymentStatusApi` now takes an optional `reason`. The admin payment confirm/reject handler switched from optimistic update to refetch (server mutates `payment_slips`).
 
@@ -387,6 +430,7 @@ psql "$DATABASE_URL" -f postgres/migrations/016_order_addcolumn.sql
 psql "$DATABASE_URL" -f postgres/migrations/017_payment_slips.sql
 psql "$DATABASE_URL" -f postgres/migrations/018_live_chat_handoff.sql
 psql "$DATABASE_URL" -f postgres/migrations/019_order_courier.sql
+psql "$DATABASE_URL" -f postgres/migrations/020_simplify_order_status.sql
 node backend/scripts/import_products.js           # re-seed products with new schema
 node backend/scripts/backfill_chunk_embeddings.js # regenerate embeddings
 ```
@@ -625,6 +669,7 @@ RAG_TOP_K=3
 RAG_MIN_SCORE=0.20
 JWT_SECRET=...
 FASTAPI_BASE_URL=http://localhost:8000
+ORDER_AUTO_CONFIRM_DAYS=7           # days a shipped order waits before auto-confirming if the customer never clicks "I received it"
 ```
 
 ## Conventions

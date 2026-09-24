@@ -35,8 +35,8 @@ type Order = {
   subtotal: number
   shippingFee: number
   total: number
-  status: "pending" | "confirmed" | "shipped" | "delivered" | "cancelled" | "refunded"
-  paymentStatus: "unpaid" | "pending_verification" | "paid" | "rejected" | "refunded"
+  status: "pending" | "confirmed" | "shipped" | "cancelled"
+  paymentStatus: "unpaid" | "pending_verification" | "paid" | "rejected"
   paymentSlipUrl?: string
   paymentMethod?: string
   trackingNumber?: string
@@ -55,7 +55,6 @@ const getStatusIcon = (status: string) => {
     case "pending": return <Clock className="h-5 w-5" />
     case "shipped": return <Truck className="h-5 w-5" />
     case "confirmed": return <CheckCircle2 className="h-5 w-5" />
-    case "delivered": return <CheckCircle2 className="h-5 w-5" />
     case "cancelled": return <AlertCircle className="h-5 w-5" />
     default: return <Package className="h-5 w-5" />
   }
@@ -66,7 +65,6 @@ const getStatusColor = (status: string) => {
     case "pending": return "bg-yellow-100 text-yellow-800"
     case "shipped": return "bg-blue-100 text-blue-800"
     case "confirmed": return "bg-green-100 text-green-800"
-    case "delivered": return "bg-green-100 text-green-800"
     case "cancelled": return "bg-red-100 text-red-800"
     default: return "bg-gray-100 text-gray-800"
   }
@@ -86,9 +84,7 @@ const ORDER_STATUS_KEYS: Record<string, TranslationKey> = {
   pending: "orders.os.pending",
   confirmed: "orders.os.confirmed",
   shipped: "orders.os.shipped",
-  delivered: "orders.os.delivered",
   cancelled: "orders.os.cancelled",
-  refunded: "orders.os.refunded",
 }
 
 const PAYMENT_STATUS_KEYS: Record<string, TranslationKey> = {
@@ -96,7 +92,6 @@ const PAYMENT_STATUS_KEYS: Record<string, TranslationKey> = {
   pending_verification: "orders.ps.pending_verification",
   unpaid: "orders.ps.unpaid",
   rejected: "orders.ps.rejected",
-  refunded: "orders.ps.refunded",
 }
 
 const getStatusLabel = (status: string, t: TFn) =>
@@ -126,7 +121,7 @@ export default function OrdersPage() {
 
   const [orders, setOrders] = useState<Order[]>([])
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set())
-  const [filter, setFilter] = useState<"all" | "pending" | "shipped" | "confirmed" | "delivered" | "cancelled">("all")
+  const [filter, setFilter] = useState<"all" | "pending" | "shipped" | "confirmed" | "cancelled">("all")
   const [pageError, setPageError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
@@ -141,6 +136,10 @@ export default function OrdersPage() {
   // ── cancel-order confirm ──
   const [cancelTarget, setCancelTarget] = useState<number | null>(null)
   const [cancelState, setCancelState] = useState<{ error: string; busy: boolean }>({ error: "", busy: false })
+
+  // ── "I received it" confirm ──
+  const [receiveTarget, setReceiveTarget] = useState<number | null>(null)
+  const [receiveState, setReceiveState] = useState<{ error: string; busy: boolean }>({ error: "", busy: false })
 
   // ── review dialog ──
   const [reviewedKeys, setReviewedKeys] = useState<Set<string>>(new Set())
@@ -262,6 +261,29 @@ export default function OrdersPage() {
       await loadOrders()
     } catch {
       setCancelState({ error: t("orders.connectionError"), busy: false })
+    }
+  }
+
+  const confirmReceipt = async () => {
+    if (receiveTarget == null) return
+    const token = getToken()
+    if (!token) { router.push("/login"); return }
+    setReceiveState({ error: "", busy: true })
+    try {
+      const res = await fetch(`${API}/orders/my/${receiveTarget}/confirm-receipt`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setReceiveState({ error: data.error || t("orders.receiveFailed"), busy: false })
+        return
+      }
+      setReceiveTarget(null)
+      setReceiveState({ error: "", busy: false })
+      await loadOrders()
+    } catch {
+      setReceiveState({ error: t("orders.connectionError"), busy: false })
     }
   }
 
@@ -476,7 +498,7 @@ export default function OrdersPage() {
 
           {/* Filter Tabs */}
           <div className="mb-6 flex flex-wrap gap-2">
-            {(["all", "pending", "shipped", "confirmed", "delivered", "cancelled"] as const).map((f) => (
+            {(["all", "pending", "shipped", "confirmed", "cancelled"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -489,7 +511,6 @@ export default function OrdersPage() {
                 {f === "pending" && `${t("orders.os.pending")} (${countOf("pending")})`}
                 {f === "shipped" && `${t("orders.os.shipped")} (${countOf("shipped")})`}
                 {f === "confirmed" && `${t("orders.os.confirmed")} (${countOf("confirmed")})`}
-                {f === "delivered" && `${t("orders.os.delivered")} (${countOf("delivered")})`}
                 {f === "cancelled" && `${t("orders.os.cancelled")} (${countOf("cancelled")})`}
               </button>
             ))}
@@ -799,6 +820,18 @@ export default function OrdersPage() {
                                   {t("orders.cancelOrder")}
                                 </Button>
                               )}
+                            {order.status === "shipped" && (
+                              <Button
+                                onClick={() => {
+                                  setReceiveTarget(order.id)
+                                  setReceiveState({ error: "", busy: false })
+                                }}
+                                className="gap-2"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                {t("orders.receiveOrder")}
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </>
@@ -888,6 +921,38 @@ export default function OrdersPage() {
                 disabled={cancelState.busy}
               >
                 {cancelState.busy ? t("orders.cancelling") : t("orders.confirmCancel")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receive Confirm Dialog */}
+      <Dialog open={receiveTarget != null} onOpenChange={(open) => !open && setReceiveTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("orders.receiveConfirmTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {t("orders.receiveConfirmBody")}
+            </p>
+            {receiveState.error && <p className="text-sm text-destructive">{receiveState.error}</p>}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setReceiveTarget(null)}
+                disabled={receiveState.busy}
+              >
+                {t("orders.notYet")}
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={confirmReceipt}
+                disabled={receiveState.busy}
+              >
+                {receiveState.busy ? t("orders.receiving") : t("orders.confirmReceive")}
               </Button>
             </div>
           </div>

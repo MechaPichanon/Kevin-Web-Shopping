@@ -152,7 +152,7 @@ BEGIN
   ) VALUES (
     v_user_id, v_addr_id, v_snapshot,
     1497.00, 50.00, 1547.00,
-    'delivered', 'paid', 'TH123456789TH',
+    'confirmed', 'paid', 'TH123456789TH',
     NOW() - INTERVAL '10 days'
   ) RETURNING order_id INTO v_order_id;
 

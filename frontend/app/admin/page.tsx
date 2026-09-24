@@ -94,9 +94,7 @@ const quickActions = [
   { href: "/admin/products", icon: Package, title: "จัดการสินค้า", subtitle: "แก้ไขและลบสินค้า", iconBg: "bg-purple-100", iconColor: "text-purple-600" },
 ]
 
-// Covers all 6 orders.status DB values (pending/confirmed/shipped/delivered/
-// cancelled/refunded) — the previous version only handled 4 and silently
-// fell through to raw English for delivered/refunded orders.
+// Covers all 4 orders.status DB values (pending/confirmed/shipped/cancelled).
 const getStatusColor = (status: string) => {
   switch (status) {
     case "pending":
@@ -105,12 +103,8 @@ const getStatusColor = (status: string) => {
       return "bg-green-100 text-green-800"
     case "shipped":
       return "bg-blue-100 text-blue-800"
-    case "delivered":
-      return "bg-green-100 text-green-800"
     case "cancelled":
       return "bg-red-100 text-red-800"
-    case "refunded":
-      return "bg-orange-100 text-orange-800"
     default:
       return "bg-gray-100 text-gray-800"
   }
@@ -124,19 +118,15 @@ const getStatusText = (status: string) => {
       return "สำเร็จ"
     case "shipped":
       return "กำลังจัดส่ง"
-    case "delivered":
-      return "จัดส่งสำเร็จ"
     case "cancelled":
       return "ยกเลิก"
-    case "refunded":
-      return "คืนเงินแล้ว"
     default:
       return status
   }
 }
 
 // Matches the allow-list in backend/server.js updatePaymentStatus (unpaid/
-// pending_verification/paid/rejected/refunded).
+// pending_verification/paid/rejected).
 const getPaymentStatusText = (status: string) => {
   switch (status) {
     case "paid":
@@ -147,8 +137,6 @@ const getPaymentStatusText = (status: string) => {
       return "ยังไม่ชำระ"
     case "rejected":
       return "ปฏิเสธ"
-    case "refunded":
-      return "คืนเงินแล้ว"
     default:
       return status
   }

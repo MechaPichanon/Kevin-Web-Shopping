@@ -16,6 +16,7 @@ const {
   uploadPaymentSlip,
   customerReuploadPaymentSlip,
   cancelMyOrder,
+  confirmMyOrderReceipt,
 } = require("../controllers/orderControllers");
 
 router.post("/create", createOrder);
@@ -26,6 +27,7 @@ router.get("/my", auth, getMyOrders);
 router.get("/my/:id", auth, getMyOrderById);
 router.post("/my/:id/payment-slip", auth, upload.single("slip"), customerReuploadPaymentSlip);
 router.patch("/my/:id/cancel", auth, cancelMyOrder);
+router.patch("/my/:id/confirm-receipt", auth, confirmMyOrderReceipt);
 
 // Admin + staff — staff run fulfillment (status) and payment verification
 router.get("/admin", auth, requireAdminOrStaff, getAllOrders);
