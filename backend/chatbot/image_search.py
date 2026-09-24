@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 
 CLIP_MODEL_NAME = "clip-ViT-B-32"
 
-# product_images.image_url is stored as the browser-facing URL
-# (http://localhost:5000/uploads/...), which isn't reachable by that
-# hostname from inside another container. Rewrite it to the auth-backend
-# service's internal docker-network hostname, matching how docker-compose.yml
-# already reaches it elsewhere (e.g. FASTAPI_BASE_URL). Override to e.g.
-# http://localhost:5000 if running outside Docker.
+# product_images.image_url is stored as a relative path (/uploads/...);
+# the frontend resolves it against NEXT_PUBLIC_API_URL, but this backend
+# process needs a real host to fetch it over HTTP. Rewrite it to the
+# auth-backend service's internal docker-network hostname, matching how
+# docker-compose.yml already reaches it elsewhere (e.g. FASTAPI_BASE_URL).
+# Override to e.g. http://localhost:5000 if running outside Docker.
 UPLOADS_BASE_URL = os.getenv("UPLOADS_BASE_URL", "http://auth-backend:5000")
 
 

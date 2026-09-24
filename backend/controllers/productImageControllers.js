@@ -33,7 +33,7 @@ const addProductImage = async (req, res) => {
       return res.status(400).json({ error: "No image file provided" })
     }
 
-    const image_url = `http://localhost:5000/uploads/${req.file.filename}`
+    const image_url = `/uploads/${req.file.filename}`
 
     const primaryCheck = await pool.query(
       `SELECT 1 FROM product_images WHERE product_id = $1 AND is_primary = TRUE`,

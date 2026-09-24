@@ -88,7 +88,7 @@ app.post(
   (req, res) => {
     res.json({
       imageUrl:
-        "http://localhost:5000/uploads/" +
+        "/uploads/" +
         req.file.filename,
     })
   }

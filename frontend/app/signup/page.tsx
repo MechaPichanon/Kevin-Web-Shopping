@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useLang } from "@/lib/language-context"
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+import { API_BASE as API } from "@/lib/api"
 
 export default function SignupPage() {
   const router = useRouter()

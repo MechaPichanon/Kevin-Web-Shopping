@@ -30,6 +30,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog"
+import { API_BASE as API_BASE_URL } from "@/lib/api"
 
 const navItems = [
     { href: "/admin", label: "Dashboard", icon: BarChart3 },
@@ -62,8 +63,6 @@ type User = {
     is_active: boolean
     created_at: string
 }
-
-const API_BASE_URL = "http://localhost:5000"
 
 export default function AdminUsersPage() {
     const router = useRouter()

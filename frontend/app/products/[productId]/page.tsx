@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { colorToHex } from "@/lib/color-map";
 import { useLang } from "@/lib/language-context";
+import { API_BASE, resolveApiUrl } from "@/lib/api";
 
 type Variant = {
   variant_id: string;
@@ -99,17 +100,17 @@ export default function ProductDetailPage() {
     setNotFound(false);
 
     Promise.all([
-      fetch(`http://localhost:5000/products/${productId}`).then((r) => {
+      fetch(`${API_BASE}/products/${productId}`).then((r) => {
         if (r.status === 404) {
           setNotFound(true);
           return null;
         }
         return r.json();
       }),
-      fetch(`http://localhost:5000/products/${productId}/images`).then((r) =>
+      fetch(`${API_BASE}/products/${productId}/images`).then((r) =>
         r.json()
       ),
-      fetch(`http://localhost:5000/products/${productId}/reviews`).then((r) =>
+      fetch(`${API_BASE}/products/${productId}/reviews`).then((r) =>
         r.json()
       ),
     ])
@@ -227,7 +228,7 @@ export default function ProductDetailPage() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/cart/add", {
+      const res = await fetch(`${API_BASE}/cart/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -355,7 +356,7 @@ export default function ProductDetailPage() {
           <div className="flex flex-col gap-3 rounded-xl border border-black/10 bg-white p-4">
             <div className="relative aspect-[4/5] overflow-hidden rounded-lg bg-gray-100">
               <img
-                src={activeImage?.image_url || "https://placehold.co/600x800"}
+                src={activeImage?.image_url ? resolveApiUrl(activeImage.image_url) : "https://placehold.co/600x800"}
                 alt={
                   activeImage?.alt_text ||
                   pick(product.product_name_th, product.product_name)
@@ -399,7 +400,7 @@ export default function ProductDetailPage() {
                     }`}
                   >
                     <img
-                      src={img.image_url}
+                      src={resolveApiUrl(img.image_url)}
                       alt=""
                       className="h-full w-full object-cover"
                     />

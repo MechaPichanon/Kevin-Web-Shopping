@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useLang } from "@/lib/language-context";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
+import { API_BASE } from "@/lib/api";
 
 type Policy = {
   policy_type: "SHIPPING" | "RETURN" | "PAYMENT" | string;
@@ -23,7 +24,7 @@ export default function PolicyPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:5000/policies")
+    fetch(`${API_BASE}/policies`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
