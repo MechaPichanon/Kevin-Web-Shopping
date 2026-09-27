@@ -13,14 +13,12 @@ const {
   updateOrderStatus,
   updateOrderTracking,
   updatePaymentStatus,
-  uploadPaymentSlip,
   customerReuploadPaymentSlip,
   cancelMyOrder,
   confirmMyOrderReceipt,
 } = require("../controllers/orderControllers");
 
 router.post("/create", upload.single("slip"), createOrder);
-router.post("/:id/payment-slip", upload.single("slip"), uploadPaymentSlip);
 
 // Customer — logged-in user's own orders
 router.get("/my", auth, getMyOrders);

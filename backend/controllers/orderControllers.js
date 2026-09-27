@@ -867,77 +867,6 @@ const updatePaymentStatus = async (req, res) => {
   }
 };
 
-// ---- Customer: upload a payment slip for an existing order (checkout flow) ----
-const uploadPaymentSlip = async (req, res) => {
-  const client = await db.connect();
-
-  try {
-    const { id } = req.params;
-
-    if (!req.file) {
-      return res.status(400).json({
-        error: "No slip file uploaded",
-      });
-    }
-
-    const slipUrl = `/uploads/${req.file.filename}`;
-
-    await client.query("BEGIN");
-
-    const orderResult = await client.query(
-      `SELECT status, payment_status FROM orders WHERE order_id = $1 FOR UPDATE`,
-      [id]
-    );
-
-    if (orderResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Order Not Found" });
-    }
-
-    const { status, payment_status } = orderResult.rows[0];
-    if (
-      payment_status === "paid" ||
-      ["confirmed", "shipped", "cancelled"].includes(status)
-    ) {
-      await client.query("ROLLBACK");
-      return res
-        .status(409)
-        .json({ error: "ไม่สามารถอัปโหลดสลิปสำหรับคำสั่งซื้อนี้ได้" });
-    }
-
-    await client.query(
-      `INSERT INTO payment_slips (order_id, slip_url) VALUES ($1, $2)`,
-      [id, slipUrl]
-    );
-
-    await client.query(
-      `
-      UPDATE orders
-      SET payment_status = 'pending_verification', updated_at = NOW()
-      WHERE order_id = $1
-      `,
-      [id]
-    );
-
-    await client.query("COMMIT");
-
-    res.json({
-      success: true,
-      payment_slip_url: slipUrl,
-      payment_status: "pending_verification",
-    });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.log(err);
-
-    res.status(500).json({
-      error: "Server Error",
-    });
-  } finally {
-    client.release();
-  }
-};
-
 // ---- Customer: re-upload a slip after the previous one was rejected ----
 const customerReuploadPaymentSlip = async (req, res) => {
   const client = await db.connect();
@@ -1130,7 +1059,6 @@ module.exports = {
   updateOrderStatus,
   updateOrderTracking,
   updatePaymentStatus,
-  uploadPaymentSlip,
   customerReuploadPaymentSlip,
   cancelMyOrder,
   confirmMyOrderReceipt,
