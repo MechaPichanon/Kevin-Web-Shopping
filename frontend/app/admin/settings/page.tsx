@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { fetchPolicies, updatePolicyApi, type Policy } from "@/lib/policies"
 
 const navItems = [
@@ -105,6 +106,11 @@ export default function AdminSettingsPage() {
   }
 
   const handleSave = async (type: string) => {
+    const draft = drafts[type]
+    if (!draft?.content_th.trim() || !draft?.content_en.trim()) {
+      setSaveErrorByType((prev) => ({ ...prev, [type]: "กรุณากรอกเนื้อหาทั้งภาษาไทยและภาษาอังกฤษ" }))
+      return
+    }
     setSavingType(type)
     setSavedType(null)
     setSaveErrorByType((prev) => ({ ...prev, [type]: "" }))
@@ -230,7 +236,7 @@ export default function AdminSettingsPage() {
                     </CardHeader>
                     <CardContent className="space-y-4 px-6 pb-6">
                       <div className="space-y-1.5">
-                        <Label htmlFor={`${type}-th`}>ภาษาไทย</Label>
+                        <Label htmlFor={`${type}-th`}>ภาษาไทย<RequiredMark /></Label>
                         <Textarea
                           id={`${type}-th`}
                           rows={6}
@@ -239,7 +245,7 @@ export default function AdminSettingsPage() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor={`${type}-en`}>English</Label>
+                        <Label htmlFor={`${type}-en`}>English<RequiredMark /></Label>
                         <Textarea
                           id={`${type}-en`}
                           rows={6}

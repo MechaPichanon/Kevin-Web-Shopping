@@ -633,7 +633,8 @@ _THAI_TO_EN = {
 def _preprocess_query(query: str) -> str:
     """Translate Thai product terms to English so tokenization and embedding work correctly."""
     text = (query or "").strip()
-    for thai, en in _THAI_TO_EN.items():
+    # Longest first, so "เสื้อยืด" isn't eaten by its prefix "เสื้อ" (→ "shirt ยืด").
+    for thai, en in sorted(_THAI_TO_EN.items(), key=lambda kv: len(kv[0]), reverse=True):
         text = text.replace(thai, f" {en} ")
     return text
 

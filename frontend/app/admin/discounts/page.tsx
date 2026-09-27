@@ -7,6 +7,7 @@ import { BarChart3, Check, Copy, Gift, LogOut, Menu, Package, Plus, Settings, Me
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { getToken } from "@/lib/auth"
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -254,7 +255,7 @@ export default function AdminDiscountsPage() {
                             </CardHeader>
                             <CardContent className="grid gap-4 px-6 pb-6 sm:grid-cols-2 lg:grid-cols-3">
                                 <div>
-                                    <label className="mb-2 block text-sm font-medium">ชื่อโค้ด *</label>
+                                    <label className="mb-2 block text-sm font-medium">ชื่อโค้ด<RequiredMark /></label>
                                     <Input
                                         placeholder="เช่น SUMMER20"
                                         value={form.code}
@@ -262,7 +263,7 @@ export default function AdminDiscountsPage() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="mb-2 block text-sm font-medium">ประเภทส่วนลด *</label>
+                                    <label className="mb-2 block text-sm font-medium">ประเภทส่วนลด<RequiredMark /></label>
                                     <select
                                         className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                                         value={form.discount_type}
@@ -274,7 +275,7 @@ export default function AdminDiscountsPage() {
                                 </div>
                                 <div>
                                     <label className="mb-2 block text-sm font-medium">
-                                        มูลค่าส่วนลด * {form.discount_type === "percent" ? "(%)" : "(฿)"}
+                                        มูลค่าส่วนลด {form.discount_type === "percent" ? "(%)" : "(฿)"}<RequiredMark />
                                     </label>
                                     <Input
                                         type="number"

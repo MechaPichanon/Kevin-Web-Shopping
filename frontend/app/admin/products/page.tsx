@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { API_BASE, resolveApiUrl } from "@/lib/api"
 
 // Product write routes now require a JWT (auth + admin/staff). Mutations here
@@ -47,6 +48,7 @@ const CATEGORIES = [
   { value: "shirt", label: "Shirt", labelTh: "เชิ้ต" },
   { value: "polo", label: "Polo", labelTh: "โปโล" },
   { value: "pant", label: "Pant", labelTh: "กางเกง" },
+  { value: "tshirt", label: "T-shirt", labelTh: "เสื้อยืด" },
   { value: "set", label: "Set", labelTh: "ชุด" },
 ]
 
@@ -65,6 +67,10 @@ const SUBCATS: Record<string, { value: string; label: string; labelTh: string }[
   pant: [
     { value: "silk-pant", label: "Silk Pants", labelTh: "กางเกงไหม" },
     { value: "swim-shorts", label: "Swim Shorts", labelTh: "ขาสั้นว่ายน้ำ" },
+    { value: "heavyweight-shorts", label: "Heavyweight Shorts", labelTh: "กางเกงขาสั้นหนา" },
+  ],
+  tshirt: [
+    { value: "heavyweight-tshirt", label: "Heavyweight T-Shirt", labelTh: "เสื้อยืดหนา" },
   ],
 }
 
@@ -74,6 +80,7 @@ const PATTERNS = [
   { value: "checked", label: "Checked", labelTh: "ลายตาราง" },
   { value: "printed", label: "Printed", labelTh: "ลายพิมพ์" },
   { value: "herringbone", label: "Herringbone", labelTh: "ลายก้างปลา" },
+  { value: "knit", label: "Knit", labelTh: "ถัก" },
 ]
 
 const SLEEVE_OPTIONS = [
@@ -88,6 +95,7 @@ const COLLAR_OPTIONS = [
   { value: "band", label: "Band", labelTh: "คอตั้ง" },
   { value: "point", label: "Point", labelTh: "คอแหลม" },
   { value: "cutaway", label: "Cutaway", labelTh: "คอตัด" },
+  { value: "rounded", label: "Rounded", labelTh: "คอกลม" },
 ]
 
 const UPPER_SIZES = ["M", "L", "XL", "XXL"]
@@ -100,6 +108,8 @@ const PRESET_COLORS = [
   { hex: "#8a909c", name: "Grey", nameTh: "เทา" },
   { hex: "#d9c7a3", name: "Beige", nameTh: "เบจ" },
   { hex: "#5a6b3b", name: "Olive", nameTh: "เขียวมะกอก" },
+  { hex: "#4f7d5c", name: "Green", nameTh: "เขียว" },
+  { hex: "#01796f", name: "Pine Green", nameTh: "เขียวใบสน" },
   { hex: "#6e2733", name: "Maroon", nameTh: "แดงเลือดหมู" },
   { hex: "#7fb3d5", name: "Sky Blue", nameTh: "ฟ้า" },
   { hex: "#f2e8d5", name: "Cream", nameTh: "ครีม" },
@@ -110,6 +120,7 @@ const PRESET_COLORS = [
   { hex: "#40c9c9", name: "Cyan", nameTh: "ฟ้าอมเขียว" },
   { hex: "#e8a0bf", name: "Pink", nameTh: "ชมพู" },
   { hex: "#7a4b28", name: "Brown", nameTh: "น้ำตาล" },
+  { hex: "#6b3fa0", name: "Purple", nameTh: "ม่วง" },
 ]
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -231,11 +242,12 @@ type FormState = {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function isUpperCat(cat: string) {
-  return cat === "shirt" || cat === "polo"
+  return cat === "shirt" || cat === "polo" || cat === "tshirt"
 }
 
 function normCategory(raw: string): string {
   const l = (raw || "").toLowerCase()
+  if (l.startsWith("tshirt") || l.startsWith("t-shirt")) return "tshirt"
   if (l.startsWith("shirt")) return "shirt"
   if (l.startsWith("polo")) return "polo"
   if (l.startsWith("pant") || l.startsWith("trouser") || l.startsWith("short")) return "pant"
@@ -588,7 +600,25 @@ export default function AdminProductsPage() {
 
   // ── variant draft handlers ────────────────────────────────────────────────
 
+  // Required (*) variant fields — returns the Thai labels still empty, [] if OK.
+  // Sets only need a price (their stock is derived from the components).
+  const missingVariantFields = (): string[] => {
+    const missing: string[] = []
+    if (form.category !== "set") {
+      if (!form.colorName.trim()) missing.push("Color name (EN)")
+      if (!form.colorNameTh.trim()) missing.push("สีสินค้า (TH)")
+    }
+    if (form.price === "") missing.push("Selling price")
+    if (form.category !== "set" && form.stock === "") missing.push("Stock on hand")
+    return missing
+  }
+
   const handleSaveVariantRow = () => {
+    const missing = missingVariantFields()
+    if (missing.length > 0) {
+      alert(`กรุณากรอกช่องที่มีเครื่องหมาย * ให้ครบ: ${missing.join(", ")}`)
+      return
+    }
     const key = form.editingVariantKey ?? String(Date.now() + Math.random())
 
     if (form.category === "set") {
@@ -649,8 +679,12 @@ export default function AdminProductsPage() {
     }))
   }
 
-  const handleEditVariantRow = (key: string) => {
+  // asNew=true (duplicate): prefill the editor from this row but leave
+  // editingVariantKey null, so saving adds a fresh variant instead of
+  // overwriting the original.
+  const loadVariantIntoEditor = (key: string, asNew: boolean) => {
     const v = form.variants.find((r) => r._key === key)
+    const editKey = asNew ? null : key
     if (!v) return
 
     if (v.componentVariantIds && v.componentVariantIds.length > 0) {
@@ -664,7 +698,7 @@ export default function AdminProductsPage() {
       })
       setForm((f) => ({
         ...f,
-        editingVariantKey: key,
+        editingVariantKey: editKey,
         setComponents: picks,
         price: v.price,
         costPrice: v.costPrice,
@@ -676,7 +710,7 @@ export default function AdminProductsPage() {
 
     setForm((f) => ({
       ...f,
-      editingVariantKey: key,
+      editingVariantKey: editKey,
       size: v.size,
       colorHex: v.colorHex,
       colorName: v.colorName,
@@ -697,6 +731,9 @@ export default function AdminProductsPage() {
       status: v.isActive ? "active" : "draft",
     }))
   }
+
+  const handleEditVariantRow = (key: string) => loadVariantIntoEditor(key, false)
+  const handleDuplicateVariantRow = (key: string) => loadVariantIntoEditor(key, true)
 
   const handleRemoveVariantRow = (key: string) => {
     setForm((f) => ({ ...f, variants: f.variants.filter((v) => v._key !== key) }))
@@ -855,6 +892,15 @@ export default function AdminProductsPage() {
   const handleSave = async () => {
     if (isSubmitting) return
 
+    const missingProduct = [
+      !form.name.trim() && "Product name (EN)",
+      !form.nameTh.trim() && "ชื่อสินค้า (TH)",
+    ].filter(Boolean)
+    if (missingProduct.length > 0) {
+      alert(`กรุณากรอกช่องที่มีเครื่องหมาย * ให้ครบ: ${missingProduct.join(", ")}`)
+      return
+    }
+
     // Auto-commit the editor if price is filled but user forgot to click "เพิ่มไซส์นี้ลงรายการ"
     let variantsToSave = [...form.variants]
     if (form.category === "set") {
@@ -873,6 +919,11 @@ export default function AdminProductsPage() {
           : [...variantsToSave, pendingSet]
       }
     } else if (form.price !== "") {
+      const missing = missingVariantFields()
+      if (missing.length > 0) {
+        alert(`กรุณากรอกช่องที่มีเครื่องหมาย * ให้ครบ: ${missing.join(", ")}`)
+        return
+      }
       const key = form.editingVariantKey ?? String(Date.now() + Math.random())
       const pending: VariantDraft = {
         _key: key,
@@ -1702,6 +1753,7 @@ export default function AdminProductsPage() {
                           >
                             EN
                           </span>
+                          <RequiredMark />
                         </label>
                         <input
                           value={form.name}
@@ -1731,6 +1783,7 @@ export default function AdminProductsPage() {
                           >
                             TH
                           </span>
+                          <RequiredMark />
                         </label>
                         <input
                           value={form.nameTh}
@@ -1753,7 +1806,7 @@ export default function AdminProductsPage() {
                       }}
                     >
                       <div>
-                        <label style={labelStyle}>Category</label>
+                        <label style={labelStyle}>Category<RequiredMark /></label>
                         <select
                           value={form.category}
                           onChange={handleCategoryChange}
@@ -2018,7 +2071,7 @@ export default function AdminProductsPage() {
                       >
                         {/* Size */}
                         <div>
-                          <label style={labelStyle}>Size</label>
+                          <label style={labelStyle}>Size<RequiredMark /></label>
                           <select
                             value={form.size}
                             onChange={upd("size")}
@@ -2037,7 +2090,7 @@ export default function AdminProductsPage() {
 
                         {/* Color */}
                         <div>
-                          <label style={labelStyle}>Color</label>
+                          <label style={labelStyle}>Color<RequiredMark /></label>
                           <div
                             style={{
                               display: "flex",
@@ -2119,6 +2172,7 @@ export default function AdminProductsPage() {
                                 >
                                   EN
                                 </span>
+                                <RequiredMark />
                               </label>
                               <input
                                 value={form.colorName}
@@ -2151,6 +2205,7 @@ export default function AdminProductsPage() {
                                 >
                                   TH
                                 </span>
+                                <RequiredMark />
                               </label>
                               <input
                                 value={form.colorNameTh}
@@ -2317,7 +2372,7 @@ export default function AdminProductsPage() {
                       }}
                     >
                       <div>
-                        <label style={labelStyle}>Selling price</label>
+                        <label style={labelStyle}>Selling price<RequiredMark /></label>
                         <div style={{ position: "relative" }}>
                           <span
                             style={{
@@ -2365,7 +2420,7 @@ export default function AdminProductsPage() {
                         </div>
                       </div>
                       <div>
-                        <label style={labelStyle}>Stock on hand</label>
+                        <label style={labelStyle}>Stock on hand{!isSet && <RequiredMark />}</label>
                         <input
                           type="number"
                           value={form.stock}
@@ -2514,6 +2569,14 @@ export default function AdminProductsPage() {
                                       style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #dfe3ea", background: "#fff", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                                     >
                                       แก้ไข
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDuplicateVariantRow(v._key)}
+                                      title="คัดลอกเป็นตัวเลือกใหม่"
+                                      style={{ height: 28, padding: "0 10px", borderRadius: 6, border: "1px solid #dfe3ea", background: "#fff", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                                    >
+                                      คัดลอก
                                     </button>
                                     <button
                                       type="button"

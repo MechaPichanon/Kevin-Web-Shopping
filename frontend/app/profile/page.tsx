@@ -9,32 +9,34 @@ import {
   MapPin,
   Camera,
   Save,
-  Lock,
-  Bell,
-  CreditCard,
   Package,
-  Heart,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "@/components/ui/required-mark";
 import { getToken } from "@/lib/auth";
-import type { ShippingAddress } from "@/types/address";
 import { useLang } from "@/lib/language-context";
+import { en } from "@/lib/i18n/dictionaries";
+import AddressBook from "@/components/AddressBook";
 import { Check } from "lucide-react"
 import { API_BASE } from "@/lib/api";
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type ProfileUser = ShippingAddress & {
-  id: number;
-  username: string;
+// Addresses live in the address book (<AddressBook />, /addresses API),
+// not in this form.
+type ProfileForm = {
+  firstName: string;
+  lastName: string;
   email: string;
+  phone: string;
 };
 
-type ProfileForm = ShippingAddress & {
-  email: string;
+type ProfileUser = ProfileForm & {
+  id: number;
+  username: string;
 };
 
 type PasswordForm = {
@@ -48,11 +50,6 @@ const emptyForm: ProfileForm = {
   lastName: "",
   email: "",
   phone: "",
-  addressLine1: "",
-  addressLine2: "",
-  province: "",
-  postalCode: "",
-
 };
 
 const menuItems = [
@@ -64,9 +61,9 @@ const menuItems = [
 // ─────────────────────────────────────────────
 export default function ProfilePage() {
   const router = useRouter();
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
-  const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "security" | "addresses">("profile");
 
   // ── Profile state ──
   const [user, setUser] = useState<ProfileUser | null>(null);
@@ -111,10 +108,6 @@ export default function ProfilePage() {
             lastName: data.lastName || "",
             email: data.email || "",
             phone: data.phone || "",
-            addressLine1: data.addressLine1 || "",
-            addressLine2: data.addressLine2 || "",
-            province: data.province || "",
-            postalCode: data.postalCode || "",
           });
         }
       })
@@ -133,6 +126,11 @@ export default function ProfilePage() {
   const handleSave = async () => {
     const token = getToken();
     if (!token) { router.push("/login"); return; }
+
+    if (![form.firstName, form.lastName, form.email, form.phone].every((v) => v.trim())) {
+      setProfileError(t("profile.requiredFields"));
+      return;
+    }
 
     setIsSaving(true);
     setProfileError("");
@@ -160,10 +158,6 @@ export default function ProfilePage() {
         lastName: data.user.lastName || "",
         email: data.user.email || "",
         phone: data.user.phone || "",
-        addressLine1: data.user.addressLine1 || "",
-        addressLine2: data.user.addressLine2 || "",
-        province: data.user.province || "",
-        postalCode: data.user.postalCode || "",
       });
       setIsEditing(false);
       alert(t("profile.saved"));
@@ -183,10 +177,6 @@ export default function ProfilePage() {
       lastName: user.lastName || "",
       email: user.email || "",
       phone: user.phone || "",
-      addressLine1: user.addressLine1 || "",
-      addressLine2: user.addressLine2 || "",
-      province: user.province || "",
-      postalCode: user.postalCode || "",
     });
   };
 
@@ -203,6 +193,10 @@ export default function ProfilePage() {
     setPasswordError("");
     setPasswordSuccess("");
 
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordError(t("profile.requiredFields"));
+      return;
+    }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setPasswordError(t("profile.pwMismatch"));
       return;
@@ -291,6 +285,21 @@ export default function ProfilePage() {
 
               {/* Quick Menu */}
               <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("addresses")}
+                  aria-pressed={activeTab === "addresses"}
+                  className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors ${activeTab === "addresses"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card hover:bg-muted"
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <MapPin className={`h-5 w-5 ${activeTab === "addresses" ? "" : "text-muted-foreground"}`} />
+                    <span className={`text-sm font-medium ${activeTab === "addresses" ? "" : "text-foreground"}`}>{t("profile.addresses")}</span>
+                  </div>
+                  <ChevronRight className={`h-4 w-4 ${activeTab === "addresses" ? "" : "text-muted-foreground"}`} />
+                </button>
                 {menuItems.map((item) => (
                   <a
                     key={item.href}
@@ -355,7 +364,7 @@ export default function ProfilePage() {
                   <div className="grid gap-6 sm:grid-cols-2">
                     {/* ชื่อ */}
                     <div className="space-y-2">
-                      <Label htmlFor="firstName">{t("profile.firstName")}</Label>
+                      <Label htmlFor="firstName">{t("profile.firstName")}<RequiredMark /></Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -370,7 +379,7 @@ export default function ProfilePage() {
 
                     {/* นามสกุล */}
                     <div className="space-y-2">
-                      <Label htmlFor="lastName">{t("profile.lastName")}</Label>
+                      <Label htmlFor="lastName">{t("profile.lastName")}<RequiredMark /></Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -385,7 +394,7 @@ export default function ProfilePage() {
 
                     {/* อีเมล */}
                     <div className="space-y-2">
-                      <Label htmlFor="email">{t("profile.email")}</Label>
+                      <Label htmlFor="email">{t("profile.email")}<RequiredMark /></Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -401,7 +410,7 @@ export default function ProfilePage() {
 
                     {/* เบอร์โทร (กรองเฉพาะตัวเลข) */}
                     <div className="space-y-2">
-                      <Label htmlFor="phone">{t("profile.phone")}</Label>
+                      <Label htmlFor="phone">{t("profile.phone")}<RequiredMark /></Label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -414,65 +423,21 @@ export default function ProfilePage() {
                         />
                       </div>
                     </div>
-                    {/* ที่อยู่ */}
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="addressLine1">{t("profile.address")}</Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="addressLine1"
-                          value={form.addressLine1}
-                          onChange={(e) => handleChange("addressLine1", e.target.value)}
-                          disabled={!isEditing || isSaving}
-                          className="pl-10"
-                          placeholder={t("profile.addressPlaceholder")}
-                        />
-                      </div>
-                    </div>
-
-                    {/* ที่อยู่เพิ่มเติม (ไม่บังคับ) */}
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="addressLine2">{t("profile.addressLine2")}</Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          id="addressLine2"
-                          value={form.addressLine2}
-                          onChange={(e) => handleChange("addressLine2", e.target.value)}
-                          disabled={!isEditing || isSaving}
-                          className="pl-10"
-                          placeholder={t("profile.addressLine2Placeholder")}
-                        />
-                      </div>
-                    </div>
-
-                    {/* จังหวัด */}
-                    <div className="space-y-2">
-                      <Label htmlFor="province">{t("profile.province")}</Label>
-                      <Input
-                        id="province"
-                        value={form.province}
-                        onChange={(e) => handleChange("province", e.target.value)}
-                        disabled={!isEditing || isSaving}
-                        placeholder={t("profile.province")}
-                      />
-                    </div>
-
-                    {/* รหัสไปรษณีย์ */}
-                    <div className="space-y-2">
-                      <Label htmlFor="postalCode">{t("profile.postalCode")}</Label>
-                      <Input
-                        id="postalCode"
-                        value={form.postalCode}
-                        onChange={(e) => handleChange("postalCode", e.target.value)}
-                        disabled={!isEditing || isSaving}
-                        placeholder="10XXX"
-                      />
-                    </div>
-
                   </div>
                 </div>
               )}
+
+              {/* Address book header (Claude Design "Profile Addresses") */}
+              {activeTab === "addresses" && (
+                <div className="mb-6">
+                  <div className="mb-2 font-mono text-[11px] uppercase tracking-[3px] text-accent">Account · Addresses</div>
+                  <h2 className="font-serif text-3xl font-semibold leading-snug text-foreground">{t("address.bookTitle")}</h2>
+                  {lang === "th" && <div className="font-fraunces text-lg italic text-muted-foreground">{en["address.bookSubtitle"]}</div>}
+                </div>
+              )}
+
+              {/* ── Tab: Addresses ── */}
+              {activeTab === "addresses" && <AddressBook />}
 
               {/* ── Tab: Security ── */}
               {activeTab === "security" && (
@@ -490,7 +455,7 @@ export default function ProfilePage() {
 
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="currentPassword">{t("profile.currentPassword")}</Label>
+                        <Label htmlFor="currentPassword">{t("profile.currentPassword")}<RequiredMark /></Label>
                         <Input
                           id="currentPassword"
                           type="password"
@@ -501,7 +466,7 @@ export default function ProfilePage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="newPassword">{t("profile.newPassword")}</Label>
+                        <Label htmlFor="newPassword">{t("profile.newPassword")}<RequiredMark /></Label>
                         <Input
                           id="newPassword"
                           type="password"
@@ -524,7 +489,7 @@ export default function ProfilePage() {
                         ))}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="confirmPassword">{t("profile.confirmNewPassword")}</Label>
+                        <Label htmlFor="confirmPassword">{t("profile.confirmNewPassword")}<RequiredMark /></Label>
                         <Input
                           id="confirmPassword"
                           type="password"

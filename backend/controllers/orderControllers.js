@@ -34,20 +34,23 @@ const createOrder = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const {
-      user_id,
-      firstName,
-      lastName,
-      phone,
-      addressLine1,
-      addressLine2 = "",
-      province,
-      postalCode,
-      payment_method,
-      discount_code,
-    } = req.body;
+    const { user_id, address_id, payment_method, discount_code } = req.body;
 
-    const name = `${firstName || ""} ${lastName || ""}`.trim();
+    // The shipping address is picked from the user's saved address book
+    // (/addresses) — checkout never creates or edits an address itself.
+    const addressResult = await client.query(
+      `SELECT a.address_id, a.recipient_name, a.phone, a.address_line1, a.address_line2,
+              a.sub_district, a.district, a.province, a.postal_code
+       FROM user_addresses ua
+       JOIN addresses a ON a.address_id = ua.address_id
+       WHERE ua.user_id = $1 AND ua.address_id = $2`,
+      [user_id, Number(address_id) || 0]
+    );
+    if (addressResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "กรุณาเลือกที่อยู่จัดส่ง" });
+    }
+    const shippingAddress = addressResult.rows[0];
 
     const cartResult = await client.query(
       `
@@ -143,63 +146,18 @@ const createOrder = async (req, res) => {
 
     const totalPrice = Math.max(0, subtotal - discountAmount) + shippingFee;
 
-    const defaultAddressResult = await client.query(
-      `SELECT a.address_id
-       FROM user_addresses ua
-       JOIN addresses a ON a.address_id = ua.address_id
-       WHERE ua.user_id = $1 AND ua.is_default = TRUE`,
-      [user_id]
-    );
+    const addressId = shippingAddress.address_id;
 
-    let addressId;
-    if (defaultAddressResult.rows.length > 0) {
-      addressId = defaultAddressResult.rows[0].address_id;
-      await client.query(
-        `
-        UPDATE addresses
-        SET recipient_name = $1,
-            phone = $2,
-            address_line1 = $3,
-            address_line2 = $4,
-            province = $5,
-            postal_code = $6
-        WHERE address_id = $7
-        `,
-        [name, phone, addressLine1, addressLine2, province, postalCode, addressId]
-      );
-    } else {
-      const addressResult = await client.query(
-        `
-        INSERT INTO addresses (
-          user_id,
-          recipient_name,
-          phone,
-          address_line1,
-          address_line2,
-          province,
-          postal_code
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-        RETURNING address_id
-        `,
-        [user_id, name, phone, addressLine1, addressLine2, province, postalCode]
-      );
-
-      addressId = addressResult.rows[0].address_id;
-
-      await client.query(
-        `INSERT INTO user_addresses (user_id, address_id, is_default) VALUES ($1, $2, TRUE)`,
-        [user_id, addressId]
-      );
-    }
-
+    // Frozen copy — later edits to the saved address never change this order.
     const shippingSnapshot = {
-      recipient_name: name,
-      phone,
-      address_line1: addressLine1,
-      address_line2: addressLine2,
-      province,
-      postal_code: postalCode,
+      recipient_name: shippingAddress.recipient_name,
+      phone: shippingAddress.phone,
+      address_line1: shippingAddress.address_line1,
+      address_line2: shippingAddress.address_line2 || "",
+      sub_district: shippingAddress.sub_district,
+      district: shippingAddress.district,
+      province: shippingAddress.province,
+      postal_code: shippingAddress.postal_code,
     };
 
     const orderResult = await client.query(
@@ -486,7 +444,12 @@ function formatOrderRow(o, items, slips) {
   const recipient = snap.recipient_name || o.recipient_name;
   const phone = snap.phone || o.phone;
   const addressLine1 = snap.address_line1 || o.address_line1;
-  const addressLine2 = snap.address_line2 || o.address_line2;
+  const addressLine2 = snap.address_line2 ?? o.address_line2;
+  // Snapshot-only (no fallback to the live addresses row): an old order placed
+  // before 022_ simply has no district, and a later edit of the saved address
+  // must never rewrite what an old order shows.
+  const subDistrict = snap.sub_district || "";
+  const district = snap.district || "";
   const province = snap.province || o.province;
   const postalCode = snap.postal_code || o.postal_code;
 
@@ -494,9 +457,13 @@ function formatOrderRow(o, items, slips) {
     id: o.order_id,
     customer: recipient,
     phone,
-    address: [addressLine1, addressLine2, province, postalCode]
+    // Plain values, no แขวง/เขต prefixes — this string is shown as-is in the
+    // EN-locale orders page and receipt PDF too.
+    address: [addressLine1, addressLine2, subDistrict, district, province, postalCode]
       .filter(Boolean)
       .join(" "),
+    subDistrict,
+    district,
     items: items || [],
     subtotal: Number(o.subtotal),
     shippingFee: Number(o.shipping_fee),

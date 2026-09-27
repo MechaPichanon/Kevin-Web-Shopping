@@ -38,6 +38,7 @@ export default function CategoryShowcase() {
     shirt: "/images/categories/shirt.jpg",
     polo: "/images/categories/polo.jpg",
     pant: "/images/categories/pant.jpg",
+    tshirt: "/images/categories/tshirt.jpg",
     // set: "/images/categories/set.jpg",
   };
 

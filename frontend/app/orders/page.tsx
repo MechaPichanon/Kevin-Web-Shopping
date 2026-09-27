@@ -5,6 +5,7 @@ import { ChevronDown, Package, Clock, CheckCircle2, Truck, AlertCircle, Download
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { getToken } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import { useLang } from "@/lib/language-context"
@@ -721,7 +722,7 @@ export default function OrdersPage() {
                                       className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm hover:bg-muted"
                                     >
                                       <Upload className="h-4 w-4" />
-                                      {t("orders.chooseNewSlip")}
+                                      <span>{t("orders.chooseNewSlip")}<RequiredMark /></span>
                                     </label>
 
                                     {reupload.orderId === order.id && reupload.preview && (
@@ -851,7 +852,7 @@ export default function OrdersPage() {
           </DialogHeader>
           <div className="space-y-5">
             <div>
-              <p className="mb-2 text-sm font-medium text-foreground">{t("orders.rateProduct")}</p>
+              <p className="mb-2 text-sm font-medium text-foreground">{t("orders.rateProduct")}<RequiredMark /></p>
               <div className="flex gap-2" role="radiogroup" aria-label={t("orders.ratingAria")}>
                 {[1, 2, 3, 4, 5].map((rating) => (
                   <button key={rating} type="button" onClick={() => setReviewRating(rating)} aria-label={t("orders.starN", { n: rating })} aria-pressed={reviewRating === rating}>

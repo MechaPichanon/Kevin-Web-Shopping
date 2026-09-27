@@ -66,26 +66,43 @@ ON CONFLICT DO NOTHING;
 -- ADDRESSES
 -- ════════════════════════════════════════
 
-INSERT INTO addresses (user_id, recipient_name, phone, address_line1, address_line2, province, postal_code)
-SELECT
-  u.id, 'สมชาย ใจดี', '+6681000002',
-  '123/4 ซอยลาดพร้าว 5', 'แขวงลาดพร้าว', 'กรุงเทพมหานคร', '10230'
-FROM users u WHERE u.username = 'somchai99'
-ON CONFLICT DO NOTHING;
+-- Each address is linked to its user through user_addresses (the only
+-- users<->addresses link, see 024_). Skipped if the user already has one.
+WITH u AS (
+  SELECT id FROM users
+  WHERE username = 'somchai99'
+    AND NOT EXISTS (SELECT 1 FROM user_addresses ua WHERE ua.user_id = users.id)
+), ins AS (
+  INSERT INTO addresses (recipient_name, phone, address_line1, address_line2, province, postal_code)
+  SELECT 'สมชาย ใจดี', '+6681000002', '123/4 ซอยลาดพร้าว 5', 'แขวงลาดพร้าว', 'กรุงเทพมหานคร', '10230' FROM u
+  RETURNING address_id
+)
+INSERT INTO user_addresses (user_id, address_id, is_default)
+SELECT u.id, ins.address_id, TRUE FROM u, ins;
 
-INSERT INTO addresses (user_id, recipient_name, phone, address_line1, province, postal_code)
-SELECT
-  u.id, 'ณัฐมน สวยงาม', '+6681000003',
-  '56 ถนนนิมมานเหมินท์ ซอย 7', 'เชียงใหม่', '50200'
-FROM users u WHERE u.username = 'nattamon'
-ON CONFLICT DO NOTHING;
+WITH u AS (
+  SELECT id FROM users
+  WHERE username = 'nattamon'
+    AND NOT EXISTS (SELECT 1 FROM user_addresses ua WHERE ua.user_id = users.id)
+), ins AS (
+  INSERT INTO addresses (recipient_name, phone, address_line1, address_line2, province, postal_code)
+  SELECT 'ณัฐมน สวยงาม', '+6681000003', '56 ถนนนิมมานเหมินท์ ซอย 7', NULL, 'เชียงใหม่', '50200' FROM u
+  RETURNING address_id
+)
+INSERT INTO user_addresses (user_id, address_id, is_default)
+SELECT u.id, ins.address_id, TRUE FROM u, ins;
 
-INSERT INTO addresses (user_id, recipient_name, phone, address_line1, address_line2, province, postal_code)
-SELECT
-  u.id, 'วันชัย กรุงเทพ', '+6681000004',
-  '789 ถนนสุขุมวิท', 'แขวงคลองเตย', 'กรุงเทพมหานคร', '10110'
-FROM users u WHERE u.username = 'wanchai_bkk'
-ON CONFLICT DO NOTHING;
+WITH u AS (
+  SELECT id FROM users
+  WHERE username = 'wanchai_bkk'
+    AND NOT EXISTS (SELECT 1 FROM user_addresses ua WHERE ua.user_id = users.id)
+), ins AS (
+  INSERT INTO addresses (recipient_name, phone, address_line1, address_line2, province, postal_code)
+  SELECT 'วันชัย กรุงเทพ', '+6681000004', '789 ถนนสุขุมวิท', 'แขวงคลองเตย', 'กรุงเทพมหานคร', '10110' FROM u
+  RETURNING address_id
+)
+INSERT INTO user_addresses (user_id, address_id, is_default)
+SELECT u.id, ins.address_id, TRUE FROM u, ins;
 
 -- ════════════════════════════════════════
 -- CARTS
@@ -134,8 +151,8 @@ DECLARE
   v_snapshot  JSONB;
 BEGIN
   SELECT u.id INTO v_user_id FROM users u WHERE u.username = 'somchai99';
-  SELECT a.address_id INTO v_addr_id
-    FROM addresses a WHERE a.user_id = v_user_id LIMIT 1;
+  SELECT ua.address_id INTO v_addr_id
+    FROM user_addresses ua WHERE ua.user_id = v_user_id AND ua.is_default;
 
   IF v_user_id IS NULL OR v_addr_id IS NULL THEN
     RAISE NOTICE 'somchai99 or their address not found — skipping order 1';
@@ -175,8 +192,8 @@ DECLARE
   v_snapshot  JSONB;
 BEGIN
   SELECT u.id INTO v_user_id FROM users u WHERE u.username = 'somchai99';
-  SELECT a.address_id INTO v_addr_id
-    FROM addresses a WHERE a.user_id = v_user_id LIMIT 1;
+  SELECT ua.address_id INTO v_addr_id
+    FROM user_addresses ua WHERE ua.user_id = v_user_id AND ua.is_default;
 
   IF v_user_id IS NULL OR v_addr_id IS NULL THEN RETURN; END IF;
 
@@ -211,8 +228,8 @@ DECLARE
   v_snapshot  JSONB;
 BEGIN
   SELECT u.id INTO v_user_id FROM users u WHERE u.username = 'wanchai_bkk';
-  SELECT a.address_id INTO v_addr_id
-    FROM addresses a WHERE a.user_id = v_user_id LIMIT 1;
+  SELECT ua.address_id INTO v_addr_id
+    FROM user_addresses ua WHERE ua.user_id = v_user_id AND ua.is_default;
 
   IF v_user_id IS NULL OR v_addr_id IS NULL THEN RETURN; END IF;
 

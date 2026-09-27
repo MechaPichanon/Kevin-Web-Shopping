@@ -7,6 +7,7 @@ import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft, Check, FileText } from
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { useLang } from "@/lib/language-context"
 import { API_BASE as API } from "@/lib/api"
 
@@ -117,7 +118,7 @@ export default function SignupPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="username" className="text-sm font-medium text-foreground">
-                  {t("auth.username")}
+                  {t("auth.username")}<RequiredMark />
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -136,7 +137,7 @@ export default function SignupPage() {
 
               <div className="space-y-2">
                 <label htmlFor="name" className="text-sm font-medium text-foreground">
-                  {t("auth.name")}
+                  {t("auth.name")}<RequiredMark />
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -155,7 +156,7 @@ export default function SignupPage() {
 
               <div className="space-y-2">
                 <label htmlFor="phone" className="text-sm font-medium text-foreground">
-                  {t("auth.phone")}
+                  {t("auth.phone")}<RequiredMark />
                 </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -176,7 +177,7 @@ export default function SignupPage() {
 
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium text-foreground">
-                  {t("auth.email")}
+                  {t("auth.email")}<RequiredMark />
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -195,7 +196,7 @@ export default function SignupPage() {
 
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm font-medium text-foreground">
-                  {t("auth.password")}
+                  {t("auth.password")}<RequiredMark />
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -239,7 +240,7 @@ export default function SignupPage() {
 
               <div className="space-y-2">
                 <label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">
-                  {t("auth.confirmPassword")}
+                  {t("auth.confirmPassword")}<RequiredMark />
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />

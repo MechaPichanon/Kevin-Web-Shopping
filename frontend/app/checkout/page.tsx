@@ -2,16 +2,29 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { CheckCircle2, ArrowLeft, ShoppingBag, QrCode, Tag, X } from "lucide-react"
+import { CheckCircle2, ArrowLeft, ShoppingBag, QrCode, Tag, X, Plus } from "lucide-react"
 import Footer from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
 import { getToken } from "@/lib/auth"
-import type { ShippingAddress } from "@/types/address"
 import { useLang } from "@/lib/language-context"
+import {
+  type Address,
+  type AddressInput,
+  createAddress,
+  emptyAddressInput,
+  formatFullAddress,
+  formatPhone,
+  listAddresses,
+  updateAddress,
+} from "@/lib/addresses"
+import AddressForm from "@/components/AddressForm"
+import AddressDeleteDialog from "@/components/AddressDeleteDialog"
 import { API_BASE as API, resolveApiUrl } from "@/lib/api"
 
 const paymentMethods = [
@@ -42,15 +55,40 @@ export default function CheckoutPage() {
   const [discountError, setDiscountError] = useState("")
   const [isApplyingDiscount, setIsApplyingDiscount] = useState(false)
 
-  const [form, setForm] = useState<ShippingAddress>({
-    firstName: "",
-    lastName: "",
-    phone: "",
-    addressLine1: "",
-    addressLine2: "",
-    province: "",
-    postalCode: "",
-  })
+  // ── Shipping address: picked from the saved address book (/addresses) ──
+  const [addresses, setAddresses] = useState<Address[] | null>(null)
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null)
+  const [editingAddress, setEditingAddress] = useState<"new" | Address | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Address | null>(null)
+  const [addressError, setAddressError] = useState("")
+
+  // Refetch the address book; keep `preferId` selected if it still exists,
+  // otherwise fall back to the default (or the first) address.
+  const reloadAddresses = async (preferId?: number | null) => {
+    try {
+      const list = await listAddresses()
+      setAddresses(list)
+      setSelectedAddressId((current) => {
+        const want = preferId === undefined ? current : preferId
+        if (want && list.some((a) => a.id === want)) return want
+        return (list.find((a) => a.isDefault) ?? list[0])?.id ?? null
+      })
+      return list
+    } catch {
+      setAddressError(t("address.loadError"))
+      setAddresses((prev) => prev ?? [])
+      return null
+    }
+  }
+
+  const handleSaveAddress = async (input: AddressInput) => {
+    const saved = editingAddress === "new"
+      ? await createAddress(input)
+      : await updateAddress((editingAddress as Address).id, input)
+    setEditingAddress(null)
+    setAddressError("")
+    await reloadAddresses(saved.id)
+  }
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -63,16 +101,9 @@ export default function CheckoutPage() {
         if (!res.ok) { router.push("/login"); return }
         const data = await res.json()
         setUserId(data.id)
-        setForm((prev) => ({
-          ...prev,
-          firstName: data.firstName || "",
-          lastName: data.lastName || "",
-          phone: data.phone || "",
-          addressLine1: data.addressLine1 || "",
-          addressLine2: data.addressLine2 || "",
-          province: data.province || "",
-          postalCode: data.postalCode || "",
-        }))
+        const list = await reloadAddresses()
+        // First-time buyer with an empty address book: open the add form straight away.
+        if (list && list.length === 0) setEditingAddress("new")
       } catch (err) {
         console.error("Profile fetch error:", err)
         router.push("/login")
@@ -91,6 +122,7 @@ export default function CheckoutPage() {
 
     loadCart()
     fetchProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
   const formatPrice = (price: number) =>
@@ -172,13 +204,7 @@ export default function CheckoutPage() {
       const formData = new FormData()
       formData.append("slip", slipFile)
       formData.append("user_id", String(userId))
-      formData.append("firstName", form.firstName)
-      formData.append("lastName", form.lastName)
-      formData.append("phone", form.phone)
-      formData.append("addressLine1", form.addressLine1)
-      formData.append("addressLine2", form.addressLine2 || "")
-      formData.append("province", form.province)
-      formData.append("postalCode", form.postalCode)
+      formData.append("address_id", String(selectedAddressId))
       formData.append("payment_method", paymentMethod)
       if (discountCode) formData.append("discount_code", discountCode)
 
@@ -203,6 +229,7 @@ export default function CheckoutPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!userId) { alert(t("checkout.loginRequired")); router.push("/login"); return }
+    if (!selectedAddressId) { setAddressError(t("address.chooseRequired")); return }
     setStep("payment")
     fetchQrCode(grandTotal)
   }
@@ -237,7 +264,7 @@ export default function CheckoutPage() {
                   )}
                 </div>
                 <div className="w-full text-left">
-                  <Label htmlFor="slip">{t("checkout.uploadSlipLabel")}</Label>
+                  <Label htmlFor="slip">{t("checkout.uploadSlipLabel")}<RequiredMark /></Label>
                   <input
                     id="slip"
                     type="file"
@@ -338,37 +365,63 @@ export default function CheckoutPage() {
             <div className="flex flex-col gap-6 lg:col-span-2">
               <Card className="border-border">
                 <CardContent className="p-6">
-                  <h2 className="font-serif text-xl font-bold text-foreground">{t("checkout.shippingInfo")}</h2>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <Label htmlFor="firstName">{t("checkout.firstName")}</Label>
-                      <Input id="firstName" required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} className="mt-1.5" placeholder={t("checkout.firstName")} />
+                  <h2 className="font-serif text-xl font-bold text-foreground">{t("checkout.shippingInfo")}<RequiredMark /></h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{t("address.chooseShipping")}</p>
+
+                  {addresses === null ? (
+                    <p className="mt-4 text-sm text-muted-foreground">{t("common.loading")}</p>
+                  ) : (
+                    <div role="radiogroup" aria-label={t("address.chooseShipping")} className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {addresses.map((a) => {
+                        const selected = a.id === selectedAddressId
+                        const pick = () => { setSelectedAddressId(a.id); setAddressError("") }
+                        return (
+                          <div
+                            key={a.id}
+                            role="radio"
+                            aria-checked={selected}
+                            tabIndex={0}
+                            onClick={pick}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick() } }}
+                            className={`flex cursor-pointer flex-col gap-2 rounded-[14px] border p-4 text-left transition-colors ${selected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-card hover:border-[#c8b8a6]"}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="font-plex-thai text-sm font-medium text-foreground">
+                                {a.recipientName}
+                                <span className="ml-1.5 font-mono text-xs font-normal text-accent">{formatPhone(a.phone)}</span>
+                              </div>
+                              <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-primary" : "border-border"}`}>
+                                {selected && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
+                              </span>
+                            </div>
+                            <p className="line-clamp-2 font-plex-thai text-sm leading-relaxed text-foreground">{formatFullAddress(a, t)}</p>
+                            <div className="mt-auto flex items-center gap-4 pt-1 text-sm">
+                              {a.isDefault && (
+                                <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-[10px] tracking-[1.5px] text-primary-foreground">
+                                  {t("address.defaultBadge")}
+                                </span>
+                              )}
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setEditingAddress(a) }} className="ml-auto font-medium text-primary hover:underline">
+                                {t("address.edit")}
+                              </button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setDeleteTarget(a) }} className="text-muted-foreground hover:text-foreground">
+                                {t("address.delete")}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setEditingAddress("new")}
+                        className="flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-[14px] border border-dashed border-[#c8b8a6] bg-card p-4 text-sm font-medium text-primary transition-colors hover:border-primary hover:bg-primary/5"
+                      >
+                        <Plus className="h-5 w-5" />
+                        {t("address.newTitle")}
+                      </button>
                     </div>
-                    <div>
-                      <Label htmlFor="lastName">{t("checkout.lastName")}</Label>
-                      <Input id="lastName" required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} className="mt-1.5" placeholder={t("checkout.lastName")} />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label htmlFor="phone">{t("checkout.phone")}</Label>
-                      <Input id="phone" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1.5" placeholder={t("checkout.phonePlaceholder")} />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label htmlFor="addressLine1">{t("checkout.address")}</Label>
-                      <Input id="addressLine1" required value={form.addressLine1} onChange={(e) => setForm({ ...form, addressLine1: e.target.value })} className="mt-1.5" placeholder={t("checkout.addressPlaceholder")} />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label htmlFor="addressLine2">{t("checkout.addressLine2")}</Label>
-                      <Input id="addressLine2" value={form.addressLine2} onChange={(e) => setForm({ ...form, addressLine2: e.target.value })} className="mt-1.5" placeholder={t("checkout.addressLine2Placeholder")} />
-                    </div>
-                    <div>
-                      <Label htmlFor="province">{t("checkout.province")}</Label>
-                      <Input id="province" required value={form.province} onChange={(e) => setForm({ ...form, province: e.target.value })} className="mt-1.5" placeholder={t("checkout.province")} />
-                    </div>
-                    <div>
-                      <Label htmlFor="postalCode">{t("checkout.postalCode")}</Label>
-                      <Input id="postalCode" required value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} className="mt-1.5" placeholder="10XXX" />
-                    </div>
-                  </div>
+                  )}
+                  {addressError && <p className="mt-3 text-sm text-destructive">{addressError}</p>}
                 </CardContent>
               </Card>
 
@@ -475,6 +528,32 @@ export default function CheckoutPage() {
               </Card>
             </div>
           </form>
+
+          {/* Add / edit address without leaving checkout */}
+          <Dialog open={editingAddress !== null} onOpenChange={(open) => { if (!open) setEditingAddress(null) }}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto bg-card sm:max-w-2xl">
+              <DialogTitle className="sr-only">
+                {editingAddress === "new" ? t("address.newTitle") : t("address.editTitle")}
+              </DialogTitle>
+              {editingAddress !== null && (
+                <AddressForm
+                  key={editingAddress === "new" ? "new" : editingAddress.id}
+                  framed={false}
+                  mode={editingAddress === "new" ? "new" : "edit"}
+                  initial={editingAddress === "new" ? { ...emptyAddressInput, isDefault: (addresses?.length ?? 0) === 0 } : editingAddress}
+                  lockDefault={editingAddress === "new" ? (addresses?.length ?? 0) === 0 : editingAddress.isDefault}
+                  onSubmit={handleSaveAddress}
+                  onCancel={() => setEditingAddress(null)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <AddressDeleteDialog
+            target={deleteTarget}
+            onClose={() => setDeleteTarget(null)}
+            onDeleted={(id) => reloadAddresses(selectedAddressId === id ? null : selectedAddressId)}
+          />
         </div>
       </main>
       <Footer />

@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
     Dialog,
     DialogContent,
@@ -635,7 +636,7 @@ export default function AdminUsersPage() {
                     <div className="space-y-4">
                         <div>
                             <label className="mb-2 block text-sm font-medium text-foreground">
-                                Username
+                                Username<RequiredMark />
                             </label>
                             <Input
                                 value={staffForm.username}
@@ -647,7 +648,7 @@ export default function AdminUsersPage() {
 
                         <div>
                             <label className="mb-2 block text-sm font-medium text-foreground">
-                                อีเมล
+                                อีเมล<RequiredMark />
                             </label>
                             <Input
                                 type="email"
@@ -660,7 +661,7 @@ export default function AdminUsersPage() {
 
                         <div>
                             <label className="mb-2 block text-sm font-medium text-foreground">
-                                รหัสผ่าน
+                                รหัสผ่าน<RequiredMark />
                             </label>
                             <div className="relative">
                                 <Input

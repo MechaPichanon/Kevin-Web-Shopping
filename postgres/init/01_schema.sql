@@ -174,7 +174,6 @@
     first_name  VARCHAR(80)  NOT NULL DEFAULT '',
     last_name   VARCHAR(80)  NOT NULL DEFAULT '',
     phone       VARCHAR(20)  DEFAULT NULL,
-    address     TEXT         NOT NULL DEFAULT '', -- legacy flat-text mirror of the default addresses row, auto-synced by PUT /profile — see CLAUDE.md "Address sync"
     role        VARCHAR(20)  NOT NULL DEFAULT 'customer',
     is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -185,25 +184,24 @@
   CREATE INDEX IF NOT EXISTS users_email_idx    ON users (email);
   CREATE INDEX IF NOT EXISTS users_username_idx ON users (username);
 
-  -- addresses — saved shipping/billing addresses (multi-address per user)
+  -- addresses — saved shipping addresses. No owner column: who can use an
+  -- address is stored only in user_addresses (many-to-many, 024_).
   CREATE TABLE IF NOT EXISTS addresses (
     address_id     SERIAL       PRIMARY KEY,
-    user_id        INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     recipient_name VARCHAR(160) NOT NULL,
     phone          VARCHAR(20)  NOT NULL,
     address_line1  VARCHAR(200) NOT NULL,
     address_line2  VARCHAR(200) DEFAULT NULL,
+    sub_district   VARCHAR(80)  NOT NULL DEFAULT '',  -- แขวง/ตำบล (022_)
+    district       VARCHAR(80)  NOT NULL DEFAULT '',  -- เขต/อำเภอ (022_)
     province       VARCHAR(80)  NOT NULL,
     postal_code    VARCHAR(10)  NOT NULL,
     country        CHAR(2)      NOT NULL DEFAULT 'TH'
   );
 
-  CREATE INDEX IF NOT EXISTS addresses_user_id_idx ON addresses (user_id);
-
-  -- user_addresses — many-to-many sharing: lets more than one account use the
-  -- same saved address (e.g. family members at one house). addresses.user_id
-  -- stays as the original creator (informational); this table is the real
-  -- access/sharing source of truth.
+  -- user_addresses — the single source of truth for users<->addresses
+  -- (many-to-many): a user can have several addresses and one address can be
+  -- shared by several accounts (e.g. family members at one house).
   CREATE TABLE IF NOT EXISTS user_addresses (
     user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     address_id INTEGER     NOT NULL REFERENCES addresses(address_id) ON DELETE CASCADE,
@@ -213,6 +211,9 @@
   );
 
   CREATE INDEX IF NOT EXISTS user_addresses_address_id_idx ON user_addresses (address_id);
+  -- at most one default address per user (022_)
+  CREATE UNIQUE INDEX IF NOT EXISTS user_addresses_one_default_idx
+    ON user_addresses (user_id) WHERE is_default;
 
   -- ════════════════════════════════════════
   -- CART

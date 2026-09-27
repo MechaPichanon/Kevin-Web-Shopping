@@ -30,6 +30,7 @@ const wishlistRoutes = require("./routes/wishlistRoutes");
 const discountRoutes = require("./routes/discountRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const liveChatRoutes = require("./routes/liveChatRoutes");
+const addressRoutes = require("./routes/addressRoutes");
 const adminDiscountRoutes = require("./routes/adminRoutes");
 // Comma-separated, matching CORS_ORIGINS on the chatbot service — a single
 // value (the common case) still works unchanged since split() on a string
@@ -54,6 +55,7 @@ app.use("/wishlist", wishlistRoutes);
 app.use("/discount", discountRoutes);
 app.use("/reviews", reviewRoutes);
 app.use("/live-chat", liveChatRoutes);
+app.use("/addresses", addressRoutes);
 app.use("/", adminDiscountRoutes);
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Auth backend is running" });
@@ -101,8 +103,7 @@ async function ensureUserProfileColumns() {
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '',
       ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '',
-      ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '',
-      ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT '';
+      ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
   `);
 }
 
@@ -377,6 +378,8 @@ app.get("/profile", auth, async (req, res) => {
               u.phone,
               a.address_line1 AS "addressLine1",
               a.address_line2 AS "addressLine2",
+              a.sub_district AS "subDistrict",
+              a.district,
               a.province,
               a.postal_code AS "postalCode"
        FROM users u
@@ -395,6 +398,8 @@ app.get("/profile", auth, async (req, res) => {
       ...row,
       addressLine1: row.addressLine1 || "",
       addressLine2: row.addressLine2 || "",
+      subDistrict: row.subDistrict || "",
+      district: row.district || "",
       province: row.province || "",
       postalCode: row.postalCode || "",
     });
@@ -404,28 +409,18 @@ app.get("/profile", auth, async (req, res) => {
   }
 });
 
+// Addresses are managed separately by the address book (/addresses —
+// routes/addressRoutes.js); this only updates the account's own fields.
 app.put("/profile", auth, async (req, res) => {
-  const client = await pool.connect();
   try {
     const userId = req.user.id;
-    const {
-      firstName = "",
-      lastName = "",
-      email = "",
-      phone = "",
-      addressLine1 = "",
-      addressLine2 = "",
-      province = "",
-      postalCode = "",
-    } = req.body;
+    const { firstName = "", lastName = "", email = "", phone = "" } = req.body;
 
     if (!email.trim()) {
       return res.status(400).json({ error: "Email is required" });
     }
 
-    await client.query("BEGIN");
-
-    const userResult = await client.query(
+    const userResult = await pool.query(
       `UPDATE users
        SET email = $1,
            first_name = $2,
@@ -434,113 +429,20 @@ app.put("/profile", auth, async (req, res) => {
        WHERE id = $5
        RETURNING id, username, email, first_name AS "firstName", last_name AS "lastName",
                  phone`,
-      [
-        email.trim(),
-        firstName.trim(),
-        lastName.trim(),
-        phone.trim(),
-        userId,
-      ]
+      [email.trim(), firstName.trim(), lastName.trim(), phone.trim(), userId]
     );
 
     if (userResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return res.status(404).json({ error: "User not found" });
     }
 
-    const recipientName = `${firstName.trim()} ${lastName.trim()}`.trim();
-
-    const defaultAddressResult = await client.query(
-      `SELECT a.address_id
-       FROM user_addresses ua
-       JOIN addresses a ON a.address_id = ua.address_id
-       WHERE ua.user_id = $1 AND ua.is_default = TRUE`,
-      [userId]
-    );
-
-    const hasAddressInput = [addressLine1, province, postalCode].some((s) =>
-      s.trim()
-    );
-
-    let addressRow = {
-      addressLine1: "",
-      addressLine2: "",
-      province: "",
-      postalCode: "",
-    };
-
-    if (defaultAddressResult.rows.length > 0) {
-      const addressId = defaultAddressResult.rows[0].address_id;
-      const updated = await client.query(
-        `UPDATE addresses
-         SET recipient_name = $1,
-             phone = $2,
-             address_line1 = $3,
-             address_line2 = $4,
-             province = $5,
-             postal_code = $6
-         WHERE address_id = $7
-         RETURNING address_line1 AS "addressLine1", address_line2 AS "addressLine2", province, postal_code AS "postalCode"`,
-        [
-          recipientName,
-          phone.trim(),
-          addressLine1.trim(),
-          addressLine2.trim(),
-          province.trim(),
-          postalCode.trim(),
-          addressId,
-        ]
-      );
-      addressRow = updated.rows[0];
-    } else if (hasAddressInput) {
-      // Only create the user's first address row once they've actually
-      // entered something — otherwise every profile save (e.g. just
-      // changing a phone number) would leave behind an empty default row.
-      const inserted = await client.query(
-        `INSERT INTO addresses (
-           user_id, recipient_name, phone, address_line1, address_line2, province, postal_code
-         )
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
-         RETURNING address_id, address_line1 AS "addressLine1", address_line2 AS "addressLine2", province, postal_code AS "postalCode"`,
-        [
-          userId,
-          recipientName,
-          phone.trim(),
-          addressLine1.trim(),
-          addressLine2.trim(),
-          province.trim(),
-          postalCode.trim(),
-        ]
-      );
-      addressRow = inserted.rows[0];
-
-      await client.query(
-        `INSERT INTO user_addresses (user_id, address_id, is_default) VALUES ($1, $2, TRUE)`,
-        [userId, addressRow.address_id]
-      );
-    }
-
-    await client.query("COMMIT");
-
-    res.json({
-      message: "Profile updated",
-      user: {
-        ...userResult.rows[0],
-        addressLine1: addressRow.addressLine1 || "",
-        addressLine2: addressRow.addressLine2 || "",
-        province: addressRow.province || "",
-        postalCode: addressRow.postalCode || "",
-      },
-    });
+    res.json({ message: "Profile updated", user: userResult.rows[0] });
   } catch (err) {
-    await client.query("ROLLBACK");
     console.error("PROFILE UPDATE ERROR:", err.message);
     if (err.code === "23505") {
       return res.status(400).json({ error: "Email already in use" });
     }
     res.status(500).json({ error: "Server error" });
-  } finally {
-    client.release();
   }
 });
 /* ======================

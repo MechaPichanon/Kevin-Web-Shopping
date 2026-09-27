@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Check, CheckCircle2, Eye, EyeOff, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { useLang } from "@/lib/language-context"
 import { API_BASE as API } from "@/lib/api"
 
@@ -115,7 +116,7 @@ function ResetPasswordForm() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="space-y-2">
                     <label htmlFor="password" className="text-sm font-medium text-foreground">
-                      {t("auth.newPassword")}
+                      {t("auth.newPassword")}<RequiredMark />
                     </label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -153,7 +154,7 @@ function ResetPasswordForm() {
 
                   <div className="space-y-2">
                     <label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">
-                      {t("auth.confirmPassword")}
+                      {t("auth.confirmPassword")}<RequiredMark />
                     </label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
