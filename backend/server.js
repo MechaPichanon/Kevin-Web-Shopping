@@ -98,15 +98,6 @@ app.post(
     })
   }
 )
-async function ensureUserProfileColumns() {
-  await pool.query(`
-    ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '',
-      ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '',
-      ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
-  `);
-}
-
 
 app.use("/products", productRoutes)
 /* ======================
@@ -900,19 +891,12 @@ app.use(handleUploadErrors);
    START SERVER
 ====================== */
 const PORT = process.env.PORT || 5000;
-ensureUserProfileColumns()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(` Server running on http://localhost:${PORT}`);
-    });
+app.listen(PORT, () => {
+  console.log(` Server running on http://localhost:${PORT}`);
+});
 
-    // Auto-confirm orders shipped too long without the customer clicking
-    // "I received it" — run once at boot, then hourly. No cron dependency
-    // needed for a once-an-hour sweep on a single long-lived process.
-    autoConfirmShippedOrders();
-    setInterval(autoConfirmShippedOrders, 60 * 60 * 1000);
-  })
-  .catch((err) => {
-    console.error("SCHEMA INIT ERROR:", err.message);
-    process.exit(1);
-  });
+// Auto-confirm orders shipped too long without the customer clicking
+// "I received it" — run once at boot, then hourly. No cron dependency
+// needed for a once-an-hour sweep on a single long-lived process.
+autoConfirmShippedOrders();
+setInterval(autoConfirmShippedOrders, 60 * 60 * 1000);
