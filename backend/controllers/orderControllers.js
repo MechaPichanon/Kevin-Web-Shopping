@@ -171,10 +171,9 @@ const createOrder = async (req, res) => {
         discount_code,
         discount_amount,
         total_price,
-        payment_slip_url,
         payment_status
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending_verification')
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_verification')
       RETURNING order_id
       `,
       [
@@ -186,7 +185,6 @@ const createOrder = async (req, res) => {
         discount_code || null,
         discountAmount,
         totalPrice,
-        slipUrl,
       ]
     );
 
@@ -472,7 +470,9 @@ function formatOrderRow(o, items, slips) {
     total: Number(o.total_price),
     status: o.status,
     paymentStatus: o.payment_status,
-    paymentSlipUrl: o.payment_slip_url,
+    // Latest slip (slips arrive oldest → newest) — payment_slips is the only
+    // store of slip URLs; orders has no slip column (026_).
+    paymentSlipUrl: slips && slips.length ? slips[slips.length - 1].slip_url : null,
     paymentMethod: o.payment_method,
     trackingNumber: o.tracking_number,
     courierName: o.courier_name,
@@ -500,7 +500,6 @@ const ORDER_SELECT = `
     o.user_id,
     o.status,
     o.payment_status,
-    o.payment_slip_url,
     o.subtotal,
     o.shipping_fee,
     o.discount_code,
@@ -914,10 +913,10 @@ const uploadPaymentSlip = async (req, res) => {
     await client.query(
       `
       UPDATE orders
-      SET payment_slip_url = $2, payment_status = 'pending_verification', updated_at = NOW()
+      SET payment_status = 'pending_verification', updated_at = NOW()
       WHERE order_id = $1
       `,
-      [id, slipUrl]
+      [id]
     );
 
     await client.query("COMMIT");
@@ -985,10 +984,10 @@ const customerReuploadPaymentSlip = async (req, res) => {
     await client.query(
       `
       UPDATE orders
-      SET payment_slip_url = $2, payment_status = 'pending_verification', updated_at = NOW()
+      SET payment_status = 'pending_verification', updated_at = NOW()
       WHERE order_id = $1
       `,
-      [id, slipUrl]
+      [id]
     );
 
     await client.query(

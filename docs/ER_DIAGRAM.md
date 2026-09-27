@@ -4,7 +4,7 @@ Thai clothing e-commerce platform (bachelor's thesis) with an AI product chatbot
 (RAG), image search (CLIP) and a live-chat "talk to a human" handoff.
 Database: **PostgreSQL 15 + pgvector** — single source of truth for all data.
 
-- **Source of truth:** `postgres/init/01_schema.sql` (up to date through migration `024_`)
+- **Source of truth:** `postgres/init/01_schema.sql` (up to date through migration `026_`)
 - **22 tables** in 8 groups (see summary below)
 - Notation: `PK` primary key, `FK` foreign key, `UK` unique. Types like
   `NUMERIC(10_2)` mean `NUMERIC(10,2)` (comma replaced so Mermaid can parse it).
@@ -142,7 +142,6 @@ erDiagram
         NUMERIC(10_2)   total_price       "NOT NULL >= 0"
         VARCHAR(20)     status            "pending | confirmed | shipped | cancelled"
         VARCHAR(20)     payment_status    "unpaid | pending_verification | paid | rejected"
-        TEXT            payment_slip_url  "mirror of newest payment_slips.slip_url"
         VARCHAR(100)    tracking_number   "entered manually by admin"
         VARCHAR(100)    courier_name      "slug: thailand_post, kerry, flash, jt, ..."
         TIMESTAMPTZ     shipped_at        "set once; drives 7-day auto-confirm"
@@ -345,7 +344,6 @@ diagram as a note, not as a relationship line:
 
 - `orders.discount_code` → `discount_codes.code`: stored as plain text. A code can be deleted or edited later without affecting past orders.
 - `product_images.color` → `variants.color`: matched by string value. `NULL` means the photo applies to every color.
-- `orders.payment_slip_url` is a copy of the newest `payment_slips.slip_url`.
 - `order_items.product_name` / `variant_desc` and `orders.shipping_snapshot` are **snapshots** frozen at order time, on purpose. Editing products or addresses later doesn't change old orders.
 
 ## Key constraints & business rules
@@ -358,7 +356,7 @@ diagram as a note, not as a relationship line:
 - `wishlist`: PK `(user_id, product_id)`.
 - `reviews`: UNIQUE `(product_id, user_id, order_id)`, one review per purchase.
 - `orders.status` flow: `pending → confirmed` (payment approved) `→ shipped → confirmed` (customer clicks "received", or auto-confirm after 7 days). `cancelled` is terminal and restores stock and the discount-code use.
-- `payment_slips`: one row per upload, never deleted. A rejected slip can be re-uploaded, which adds a new row.
+- `payment_slips`: one row per upload, never deleted. A rejected slip can be re-uploaded, which adds a new row. It is the **only** store of slip URLs: an order's current slip is its latest row (`ORDER BY uploaded_at DESC, slip_id DESC`). `orders.payment_slip_url` was dropped in `026_`.
 - `chat_sessions.conversation_id` UNIQUE; `chat_messages.message_id` is monotonic and used as the polling cursor.
 - `product_chunks` UNIQUE `(product_id, chunk_index)`; `product_image_embeddings.image_id` UNIQUE (one embedding per image).
 - Password reset uses a stateless JWT and has **no table**.

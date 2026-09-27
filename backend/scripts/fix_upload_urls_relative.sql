@@ -11,10 +11,6 @@ UPDATE product_images
 SET image_url = regexp_replace(image_url, '^https?://[^/]+', '')
 WHERE image_url ~ '^https?://[^/]+/uploads/';
 
-UPDATE orders
-SET payment_slip_url = regexp_replace(payment_slip_url, '^https?://[^/]+', '')
-WHERE payment_slip_url ~ '^https?://[^/]+/uploads/';
-
 UPDATE payment_slips
 SET slip_url = regexp_replace(slip_url, '^https?://[^/]+', '')
 WHERE slip_url ~ '^https?://[^/]+/uploads/';

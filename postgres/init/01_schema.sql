@@ -264,7 +264,6 @@
     total_price       NUMERIC(10,2) NOT NULL CHECK (total_price >= 0),
     status            VARCHAR(20)   NOT NULL DEFAULT 'pending',
     payment_status    VARCHAR(20)   NOT NULL DEFAULT 'unpaid',
-    payment_slip_url  TEXT          DEFAULT NULL,  -- customer-uploaded transfer slip image
     tracking_number   VARCHAR(100)  DEFAULT NULL,
     courier_name      VARCHAR(100)  DEFAULT NULL,
     shipped_at        TIMESTAMPTZ   DEFAULT NULL,  -- stamped once, first time status becomes 'shipped' (drives the auto-confirm sweep)
@@ -325,7 +324,8 @@
 
   -- payment_slips — history of customer-uploaded transfer slips (one row per
   -- upload, never deleted). Each row carries its own admin verdict + reason.
-  -- orders.payment_slip_url mirrors the newest slip_url here for the order views.
+  -- The ONLY store of slip URLs: an order's current slip is its latest row
+  -- (ORDER BY uploaded_at DESC, slip_id DESC). orders has no slip column (026_).
   CREATE TABLE IF NOT EXISTS payment_slips (
     slip_id       SERIAL       PRIMARY KEY,
     order_id      INTEGER      NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
