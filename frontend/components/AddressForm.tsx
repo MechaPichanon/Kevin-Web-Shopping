@@ -2,7 +2,7 @@
 
 // Add / edit address form — Claude Design "Profile Addresses". Used inline on
 // the profile address book and inside a Dialog on checkout.
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useLang } from "@/lib/language-context"
 import { en, type TranslationKey } from "@/lib/i18n/dictionaries"
 import {
@@ -12,6 +12,7 @@ import {
   validateAddress,
 } from "@/lib/addresses"
 import { THAI_PROVINCES } from "@/lib/thaiProvinces"
+import { type ThaiGeo, districtsOf, loadThaiGeo, subDistrictsOf } from "@/lib/thaiGeo"
 import { RequiredMark } from "@/components/ui/required-mark"
 
 type Props = {
@@ -34,6 +35,15 @@ export default function AddressForm({ mode, initial, lockDefault = false, framed
   const [err, setErr] = useState<AddressErrors>({})
   const [submitError, setSubmitError] = useState("")
   const [saving, setSaving] = useState(false)
+  // District / sub-district lists; null while loading or if the fetch failed,
+  // in which case those two fields fall back to free-text inputs.
+  const [geo, setGeo] = useState<ThaiGeo | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    loadThaiGeo().then((g) => { if (alive) setGeo(g) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   // Small italic English accent under/after Thai labels (design), TH view only.
   const accent = (key: TranslationKey) =>
@@ -44,6 +54,24 @@ export default function AddressForm({ mode, initial, lockDefault = false, framed
     if (k === "postalCode") v = v.replace(/\D/g, "").slice(0, 5)
     setF((prev) => ({ ...prev, [k]: v }))
     setErr((prev) => ({ ...prev, [k]: "" }))
+  }
+
+  // Cascading picks (select mode): a new province clears district, sub-district
+  // and postal code; a new district clears sub-district and postal code; a
+  // sub-district fills the postal code (still editable afterwards).
+  const pickProvince = (v: string) => {
+    if (!geo) return set("province", v)
+    setF((prev) => ({ ...prev, province: v, district: "", subDistrict: "", postalCode: "" }))
+    setErr((prev) => ({ ...prev, province: "" }))
+  }
+  const pickDistrict = (v: string) => {
+    setF((prev) => ({ ...prev, district: v, subDistrict: "", postalCode: "" }))
+    setErr((prev) => ({ ...prev, district: "" }))
+  }
+  const pickSubDistrict = (v: string) => {
+    const zip = geo ? subDistrictsOf(geo, f.province, f.district).find(([name]) => name === v)?.[1] : undefined
+    setF((prev) => ({ ...prev, subDistrict: v, postalCode: zip ?? prev.postalCode }))
+    setErr((prev) => ({ ...prev, subDistrict: "", ...(zip ? { postalCode: "" } : {}) }))
   }
 
   const border = (k: keyof AddressInput) => (err[k] ? "border-[#c0765e]" : "border-border")
@@ -83,10 +111,18 @@ export default function AddressForm({ mode, initial, lockDefault = false, framed
 
   // Keep an existing province selectable even if it isn't in the list
   // (addresses saved before the <select> existed were free text).
-  const provinces: string[] =
-    f.province && !(THAI_PROVINCES as readonly string[]).includes(f.province)
-      ? [f.province, ...THAI_PROVINCES]
-      : [...THAI_PROVINCES]
+  // Same for district / sub-district values typed in before these were selects.
+  const withCurrent = (list: readonly string[], current: string): string[] =>
+    current && !list.includes(current) ? [current, ...list] : [...list]
+  const provinces = withCurrent(THAI_PROVINCES, f.province)
+  const districts = geo ? withCurrent(districtsOf(geo, f.province), f.district) : []
+  const subDistricts = geo
+    ? withCurrent(subDistrictsOf(geo, f.province, f.district).map(([name]) => name), f.subDistrict)
+    : []
+  // Pick order: province → district → sub-district.
+  const districtLocked = !f.province
+  const subDistrictLocked = !f.district
+  const lockedCls = "disabled:cursor-not-allowed disabled:opacity-55"
 
   const titleKey = mode === "new" ? "address.newTitle" : "address.editTitle"
 
@@ -120,17 +156,33 @@ export default function AddressForm({ mode, initial, lockDefault = false, framed
 
       <div className={`grid gap-4 sm:grid-cols-2 ${framed ? "lg:grid-cols-4" : ""}`}>
         {field("province", "address.province", true,
-          <select value={f.province} onChange={(e) => set("province", e.target.value)}
+          <select value={f.province} onChange={(e) => pickProvince(e.target.value)}
             className={`${inputBase} ${border("province")}`}>
             <option value="">{t("address.selectProvince")}</option>
             {provinces.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>)}
-        {field("district", "address.district", true,
-          <input value={f.district} onChange={(e) => set("district", e.target.value)}
-            placeholder={t("address.districtPlaceholder")} className={`${inputBase} ${border("district")}`} />)}
-        {field("subDistrict", "address.subDistrict", true,
-          <input value={f.subDistrict} onChange={(e) => set("subDistrict", e.target.value)}
-            placeholder={t("address.subDistrictPlaceholder")} className={`${inputBase} ${border("subDistrict")}`} />)}
+        {field("district", "address.district", true, geo ? (
+          <select value={f.district} onChange={(e) => pickDistrict(e.target.value)} disabled={districtLocked}
+            className={`${inputBase} ${border("district")} ${lockedCls}`}>
+            <option value="">{t(districtLocked ? "address.pickProvinceFirst" : "address.selectDistrict")}</option>
+            {districts.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        ) : (
+          <input value={f.district} onChange={(e) => set("district", e.target.value)} disabled={districtLocked}
+            placeholder={t(districtLocked ? "address.pickProvinceFirst" : "address.districtPlaceholder")}
+            className={`${inputBase} ${border("district")} ${lockedCls}`} />
+        ))}
+        {field("subDistrict", "address.subDistrict", true, geo ? (
+          <select value={f.subDistrict} onChange={(e) => pickSubDistrict(e.target.value)} disabled={subDistrictLocked}
+            className={`${inputBase} ${border("subDistrict")} ${lockedCls}`}>
+            <option value="">{t(subDistrictLocked ? "address.pickDistrictFirst" : "address.selectSubDistrict")}</option>
+            {subDistricts.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        ) : (
+          <input value={f.subDistrict} onChange={(e) => set("subDistrict", e.target.value)} disabled={subDistrictLocked}
+            placeholder={t(subDistrictLocked ? "address.pickDistrictFirst" : "address.subDistrictPlaceholder")}
+            className={`${inputBase} ${border("subDistrict")} ${lockedCls}`} />
+        ))}
         {field("postalCode", "address.postalCode", true,
           <input value={f.postalCode} onChange={(e) => set("postalCode", e.target.value)} inputMode="numeric"
             maxLength={5} placeholder="10110" className={`${inputBase} ${border("postalCode")} font-mono tracking-[2px]`} />)}
