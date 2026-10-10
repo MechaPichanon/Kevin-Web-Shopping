@@ -3,12 +3,15 @@
 compare_intent_f1.py
 Compares intent classification F1 between:
   System A: old pure rule-based (git HEAD logic, inlined)
-  System B: new hybrid rules+LLM (current intent.py, temperature=0 for reproducibility)
+  System B: new hybrid rules+LLM (the real intent.detect_intent, temperature 0,
+            on whichever backend llm_client uses: OpenRouter if
+            OPENROUTER_API_KEY is set, else local Ollama)
 
 Run from any directory:
     pip install scikit-learn scipy
     python backend/chatbot/tests/compare_intent_f1.py
-Requires Ollama running on port 11434 for System B only.
+System B needs Ollama (local) or OPENROUTER_API_KEY. Results are written to
+compare_intent_f1_results_<model>.md, so runs on different models don't overwrite each other.
 """
 import json
 import re
@@ -26,30 +29,8 @@ except ImportError:
     print("Missing deps — run: pip install scikit-learn scipy")
     sys.exit(1)
 
-import requests
-import intent as _hmod  # current hybrid module
-
-
-# ── temperature-0 patch so LLM runs are reproducible ─────────────────────────
-def _llm_t0(message: str):
-    try:
-        resp = requests.post(
-            f"{_hmod.OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": _hmod.OLLAMA_CHAT_MODEL,
-                "prompt": _hmod._CLASSIFICATION_PROMPT.format(message=message),
-                "stream": False,
-                "options": {"temperature": 0},
-            },
-            timeout=20,
-        )
-        label = resp.json().get("response", "").strip().lower().split()[0]
-        label = re.sub(r"[^a-z_]", "", label)
-        return _hmod._INTENT_LABELS.get(label, _hmod.Intent.PRODUCT_INFO)
-    except Exception:
-        return _hmod.Intent.PRODUCT_INFO
-
-_hmod._llm_classify_intent = _llm_t0  # monkey-patch before any calls
+import intent as _hmod  # current hybrid module — called as-is (temperature 0 built in)
+import llm_client
 
 
 # ── System A: old pure rule-based (inlined from git HEAD) ────────────────────
@@ -227,8 +208,11 @@ def evaluate_subset(name, data):
 
 
 def save_markdown(results):
-    out = Path(__file__).parent / "compare_intent_f1_results.md"
-    lines = ["# Intent Classifier F1 Comparison: Rule-Based vs Hybrid LLM\n\n"]
+    model = llm_client.OPENROUTER_CHAT_MODEL if llm_client.OPENROUTER_API_KEY else llm_client.OLLAMA_CHAT_MODEL
+    out = Path(__file__).parent / f"compare_intent_f1_results_{re.sub(r'[^A-Za-z0-9.-]+', '_', model)}.md"
+    lines = ["# Intent Classifier F1 Comparison: Rule-Based vs Hybrid LLM\n\n",
+             f"System B LLM: {llm_client.backend_name()}, temperature 0, via the real "
+             "`intent.detect_intent`.\n\n"]
     lines.append("| Subset | System A Rules (macro F1) | System B Hybrid (macro F1) | Δ | McNemar p |\n")
     lines.append("|---|---|---|---|---|\n")
     for r in results:

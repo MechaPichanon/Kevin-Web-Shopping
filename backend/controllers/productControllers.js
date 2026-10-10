@@ -1,21 +1,7 @@
 const crypto = require("crypto")
 const db = require("../db")
 const { requestImageEmbedding } = require("../utils/imageEmbedding")
-
-function buildChunkText({ product_name, category, sub_category, description, price, size, color, sleeve, collar }) {
-  const lines = [
-    `Name: ${product_name || ""}`,
-    `Category: ${category || ""}`,
-    sub_category  ? `Sub-category: ${sub_category}`     : null,
-    price != null ? `Price: ${price} THB`               : null,
-    size          ? `Sizes: ${size}`                    : null,
-    color         ? `Colors: ${color}`                  : null,
-    sleeve        ? `Sleeve: ${sleeve}`                 : null,
-    collar        ? `Collar: ${collar}`                 : null,
-    description   ? `Description: ${description}`       : null,
-  ].filter(Boolean)
-  return lines.join("\n").trim()
-}
+const { loadProductChunkText } = require("../utils/productChunkText")
 
 // Links a "set" variant to the real component variants it bundles
 // (products.category='set'). Always clears any prior mapping first so
@@ -311,11 +297,6 @@ const addProduct = async (req, res) => {
     const now = Date.now()
     const productId = "P" + now
     const firstV = variants[0]
-    const chunkContent = buildChunkText({
-      product_name, category, sub_category, description,
-      price: firstV.price, size: firstV.size, color: firstV.color,
-      sleeve: firstV.sleeve, collar: firstV.collar,
-    })
 
     client = await db.connect()
     await client.query("BEGIN")
@@ -364,6 +345,8 @@ const addProduct = async (req, res) => {
       newImageId = imageResult.rows[0].image_id
     }
 
+    // Built from the rows just saved (all active variants + Thai fields).
+    const chunkContent = await loadProductChunkText(client, productId)
     await client.query(
       `INSERT INTO product_chunks (product_id, chunk_index, content)
        VALUES ($1, 0, $2)
@@ -418,13 +401,6 @@ const updateProduct = async (req, res) => {
     if (req.file) {
       image_url = `/uploads/${req.file.filename}`
     }
-
-    const firstV = variants[0]
-    const chunkContent = buildChunkText({
-      product_name, category, sub_category, description,
-      price: firstV.price, size: firstV.size, color: firstV.color,
-      sleeve: firstV.sleeve, collar: firstV.collar,
-    })
 
     client = await db.connect()
     await client.query("BEGIN")
@@ -513,6 +489,8 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    // Built from the rows just saved (all active variants + Thai fields).
+    const chunkContent = await loadProductChunkText(client, productId)
     await client.query(
       `INSERT INTO product_chunks (product_id, chunk_index, content)
        VALUES ($1, 0, $2)

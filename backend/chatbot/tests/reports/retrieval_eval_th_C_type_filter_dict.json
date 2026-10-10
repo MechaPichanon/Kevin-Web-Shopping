@@ -1,0 +1,646 @@
+{
+ "label": "C_type_filter_dict",
+ "summary": {
+  "hit1": 1.0,
+  "hit3": 1.0,
+  "mrr": 1.0,
+  "oos_pass": 0.25,
+  "n_in_scope": 25,
+  "n_oos": 4
+ },
+ "results": [
+  {
+   "id": 1,
+   "query": "แนะนำเสื้อโปโลหน่อย",
+   "expected": [
+    "P1785413760020",
+    "P1790276260899",
+    "P1790428133113",
+    "P1790428254079",
+    "P1790422423364",
+    "P1790422327054",
+    "P1790422517589",
+    "P1790357131489",
+    "P1790360078995",
+    "P1790426639353",
+    "P1790422663481",
+    "P1789636793916",
+    "P1790426861125"
+   ],
+   "label": "polo (any)",
+   "top3": [
+    "P1790357131489",
+    "P1790276260899",
+    "P1790360078995"
+   ],
+   "top3_names": [
+    "Ribbed Polo",
+    "Crochet Knit Polo Shirt",
+    "Solid Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 2,
+   "query": "มีโปโลถักไหม",
+   "expected": [
+    "P1790276260899",
+    "P1790428133113",
+    "P1790428254079",
+    "P1790422423364",
+    "P1790422327054",
+    "P1790422517589",
+    "P1790426639353",
+    "P1790422663481",
+    "P1790426861125"
+   ],
+   "label": "knit polos",
+   "top3": [
+    "P1790276260899",
+    "P1790428133113",
+    "P1790422517589"
+   ],
+   "top3_names": [
+    "Crochet Knit Polo Shirt",
+    "Folk Motif Knit Polo",
+    "Pinstripe Knit Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 3,
+   "query": "โปโลคอซิป",
+   "expected": [
+    "P1789636793916"
+   ],
+   "label": "Zip Collar Polo",
+   "top3": [
+    "P1789636793916",
+    "P1790276260899",
+    "P1790422517589"
+   ],
+   "top3_names": [
+    "Zip Collar Polo",
+    "Crochet Knit Polo Shirt",
+    "Pinstripe Knit Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 4,
+   "query": "โปโลลายริ้ว",
+   "expected": [
+    "P1790357131489",
+    "P1790422423364",
+    "P1790422517589",
+    "P1790426639353"
+   ],
+   "label": "striped polos",
+   "top3": [
+    "P1790357131489",
+    "P1790422423364",
+    "P1790426639353"
+   ],
+   "top3_names": [
+    "Ribbed Polo",
+    "Multi-Stripe Knit Polo",
+    "Spaced Stripe Knit Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 5,
+   "query": "โปโลข้าวโพด",
+   "expected": [
+    "P1785413760020"
+   ],
+   "label": "Corn Polo",
+   "top3": [
+    "P1785413760020",
+    "P1790357131489",
+    "P1790422327054"
+   ],
+   "top3_names": [
+    "Corn Polo",
+    "Ribbed Polo",
+    "Pebble Knit Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 6,
+   "query": "โปโลสีพื้นสีดำ",
+   "expected": [
+    "P1790360078995"
+   ],
+   "label": "Solid Polo",
+   "top3": [
+    "P1790360078995",
+    "P1790276260899",
+    "P1790357131489"
+   ],
+   "top3_names": [
+    "Solid Polo",
+    "Crochet Knit Polo Shirt",
+    "Ribbed Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 7,
+   "query": "โปโลลายดาว",
+   "expected": [
+    "P1790422663481"
+   ],
+   "label": "Star Stitch Knit Polo",
+   "top3": [
+    "P1790422663481",
+    "P1790357131489",
+    "P1790422327054"
+   ],
+   "top3_names": [
+    "Star Stitch Knit Polo",
+    "Ribbed Polo",
+    "Pebble Knit Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 8,
+   "query": "มีกางเกงขาสั้นอะไรบ้าง",
+   "expected": [
+    "P1790359217659",
+    "P1790422825342"
+   ],
+   "label": "shorts",
+   "top3": [
+    "P1790359217659",
+    "P1790422825342",
+    "P1785413921520"
+   ],
+   "top3_names": [
+    "Heavyweight Shorts",
+    "Swim Shorts",
+    "Silk Pants"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 9,
+   "query": "กางเกงว่ายน้ำ",
+   "expected": [
+    "P1790422825342"
+   ],
+   "label": "Swim Shorts",
+   "top3": [
+    "P1790422825342",
+    "P1785413921520",
+    "P1790359217659"
+   ],
+   "top3_names": [
+    "Swim Shorts",
+    "Silk Pants",
+    "Heavyweight Shorts"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 10,
+   "query": "ชุดว่ายน้ำ",
+   "expected": [
+    "P1790422825342"
+   ],
+   "label": "Swim Shorts",
+   "top3": [
+    "P1790422825342",
+    "P1790427870203",
+    "P1785413921520"
+   ],
+   "top3_names": [
+    "Swim Shorts",
+    "Abstract Swirl Silk Shirt",
+    "Silk Pants"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 11,
+   "query": "อยากได้กางเกงผ้าไหม",
+   "expected": [
+    "P1785413921520"
+   ],
+   "label": "Silk Pants",
+   "top3": [
+    "P1785413921520",
+    "P1790359217659",
+    "P1790422825342"
+   ],
+   "top3_names": [
+    "Silk Pants",
+    "Heavyweight Shorts",
+    "Swim Shorts"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 12,
+   "query": "กางเกงขายาว",
+   "expected": [
+    "P1785413921520"
+   ],
+   "label": "Silk Pants",
+   "top3": [
+    "P1785413921520",
+    "P1790359217659",
+    "P1790422825342"
+   ],
+   "top3_names": [
+    "Silk Pants",
+    "Heavyweight Shorts",
+    "Swim Shorts"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 13,
+   "query": "มีกางเกงอะไรบ้าง",
+   "expected": [
+    "P1790359217659",
+    "P1790422825342",
+    "P1785413921520"
+   ],
+   "label": "any pants",
+   "top3": [
+    "P1785413921520",
+    "P1790359217659",
+    "P1790422825342"
+   ],
+   "top3_names": [
+    "Silk Pants",
+    "Heavyweight Shorts",
+    "Swim Shorts"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 14,
+   "query": "เสื้อเชิ้ตลินิน",
+   "expected": [
+    "P1790427699513"
+   ],
+   "label": "Linen Shirt",
+   "top3": [
+    "P1790427699513",
+    "P1790427149166",
+    "P1790516464509"
+   ],
+   "top3_names": [
+    "Linen Shirt",
+    "Fern Line Silk Shirt",
+    "shirt test"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 15,
+   "query": "เสื้อเชิ้ตลินินสีดำไซส์ M",
+   "expected": [
+    "P1790427699513"
+   ],
+   "label": "Linen Shirt",
+   "top3": [
+    "P1790427699513",
+    "P1790421087421",
+    "P1790276260899"
+   ],
+   "top3_names": [
+    "Linen Shirt",
+    "Monstera Silk Shirt",
+    "Crochet Knit Polo Shirt"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 16,
+   "query": "เสื้อเชิ้ตผ้าไหมลายดอก",
+   "expected": [
+    "P1785413565827"
+   ],
+   "label": "floral silk shirt",
+   "top3": [
+    "P1785413565827",
+    "P1790427952438",
+    "P1790516464509"
+   ],
+   "top3_names": [
+    "floral silk shirt",
+    "Leaf Shadow Silk Shirt",
+    "shirt test"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 17,
+   "query": "เสื้อเชิ้ตไหมลายมอนสเตอร่า",
+   "expected": [
+    "P1790421087421"
+   ],
+   "label": "Monstera Silk Shirt",
+   "top3": [
+    "P1790421087421",
+    "P1790427952438",
+    "P1790427870203"
+   ],
+   "top3_names": [
+    "Monstera Silk Shirt",
+    "Leaf Shadow Silk Shirt",
+    "Abstract Swirl Silk Shirt"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 18,
+   "query": "เชิ้ตลายใบไม้ ใส่ไปทะเล",
+   "expected": [
+    "P1790427952438",
+    "P1790421087421",
+    "P1790427149166"
+   ],
+   "label": "botanical silk shirts",
+   "top3": [
+    "P1790427952438",
+    "P1790427149166",
+    "P1790421087421"
+   ],
+   "top3_names": [
+    "Leaf Shadow Silk Shirt",
+    "Fern Line Silk Shirt",
+    "Monstera Silk Shirt"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 19,
+   "query": "เสื้อเชิ้ตผ้าไหม",
+   "expected": [
+    "P1790427870203",
+    "P1790427149166",
+    "P1785413565827",
+    "P1790427952438",
+    "P1790421087421",
+    "P1790516464509"
+   ],
+   "label": "silk shirts",
+   "top3": [
+    "P1790427952438",
+    "P1790516464509",
+    "P1785413565827"
+   ],
+   "top3_names": [
+    "Leaf Shadow Silk Shirt",
+    "shirt test",
+    "floral silk shirt"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 20,
+   "query": "อยากได้เสื้อยืดสีดำ",
+   "expected": [
+    "P1790358882979"
+   ],
+   "label": "Heavyweight T-Shirt",
+   "top3": [
+    "P1790358882979",
+    "P1790359217659"
+   ],
+   "top3_names": [
+    "Heavyweight T-Shirt",
+    "Heavyweight Shorts"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 21,
+   "query": "เสื้อยืดหนาๆ",
+   "expected": [
+    "P1790358882979"
+   ],
+   "label": "Heavyweight T-Shirt",
+   "top3": [
+    "P1790358882979",
+    "P1790359217659"
+   ],
+   "top3_names": [
+    "Heavyweight T-Shirt",
+    "Heavyweight Shorts"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 22,
+   "query": "เสื้อสีเหลือง",
+   "expected": [
+    "P1790422423364"
+   ],
+   "label": "Multi-Stripe Knit Polo (only yellow top)",
+   "top3": [
+    "P1790422423364",
+    "P1790516464509",
+    "P1785413565827"
+   ],
+   "top3_names": [
+    "Multi-Stripe Knit Polo",
+    "shirt test",
+    "floral silk shirt"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 23,
+   "query": "เสื้อสีน้ำตาล",
+   "expected": [
+    "P1790427870203",
+    "P1790422327054",
+    "P1790422517589",
+    "P1790360078995"
+   ],
+   "label": "brown tops",
+   "top3": [
+    "P1790360078995",
+    "P1790427870203",
+    "P1790516464509"
+   ],
+   "top3_names": [
+    "Solid Polo",
+    "Abstract Swirl Silk Shirt",
+    "shirt test"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 24,
+   "query": "เสื้อเชิ้ตสีแดง",
+   "expected": [
+    "P1790427149166",
+    "P1785413565827",
+    "P1790426861125"
+   ],
+   "label": "red shirts",
+   "top3": [
+    "P1785413565827",
+    "P1790427149166",
+    "P1790426861125"
+   ],
+   "top3_names": [
+    "floral silk shirt",
+    "Fern Line Silk Shirt",
+    "Chain Loop Knit Polo"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 25,
+   "query": "เสื้อผ้าเบาๆ ใส่สบาย อากาศร้อน",
+   "expected": [
+    "P1790427699513",
+    "P1790427870203",
+    "P1790427149166",
+    "P1785413565827",
+    "P1790427952438",
+    "P1790421087421",
+    "P1790516464509"
+   ],
+   "label": "linen/silk shirts",
+   "top3": [
+    "P1790427699513",
+    "P1790516464509",
+    "P1790427952438"
+   ],
+   "top3_names": [
+    "Linen Shirt",
+    "shirt test",
+    "Leaf Shadow Silk Shirt"
+   ],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 26,
+   "query": "ขายรองเท้าผ้าใบไหม",
+   "expected": [],
+   "label": "out of scope",
+   "top3": [
+    "P1785413921520",
+    "P1790427952438",
+    "P1790516464509"
+   ],
+   "top3_names": [
+    "Silk Pants",
+    "Leaf Shadow Silk Shirt",
+    "shirt test"
+   ],
+   "hit1": 0.0,
+   "hit3": 0.0,
+   "rr": 0.0
+  },
+  {
+   "id": 27,
+   "query": "หุ้นวันนี้เป็นไง",
+   "expected": [],
+   "label": "out of scope",
+   "top3": [
+    "P1790427952438",
+    "P1790516464509",
+    "P1790427870203"
+   ],
+   "top3_names": [
+    "Leaf Shadow Silk Shirt",
+    "shirt test",
+    "Abstract Swirl Silk Shirt"
+   ],
+   "hit1": 0.0,
+   "hit3": 0.0,
+   "rr": 0.0
+  },
+  {
+   "id": 28,
+   "query": "ขอสูตรทำต้มยำ",
+   "expected": [],
+   "label": "out of scope",
+   "top3": [],
+   "top3_names": [],
+   "hit1": 1.0,
+   "hit3": 1.0,
+   "rr": 1.0
+  },
+  {
+   "id": 29,
+   "query": "มีโทรศัพท์มือถือขายไหม",
+   "expected": [],
+   "label": "out of scope",
+   "top3": [
+    "P1790422327054",
+    "P1790360078995",
+    "P1785413565827"
+   ],
+   "top3_names": [
+    "Pebble Knit Polo",
+    "Solid Polo",
+    "floral silk shirt"
+   ],
+   "hit1": 0.0,
+   "hit3": 0.0,
+   "rr": 0.0
+  }
+ ]
+}

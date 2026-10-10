@@ -627,6 +627,38 @@ _THAI_TO_EN = {
     "น้ำเงิน":    "navy blue",
     "เทา":        "gray",
     "เปรียบเทียบ": "compare",
+    # Product types / fabrics used in this catalogue. Bare "ไหม" is left out on
+    # purpose — it is also the Thai question particle ("มีไหม").
+    "โปโล":       "polo",
+    "เชิ้ต":       "shirt",
+    "ขาสั้น":     "shorts",
+    "ว่ายน้ำ":    "swim",
+    "ลินิน":      "linen",
+    "ผ้าไหม":     "silk",
+    "ถัก":        "knit",
+    # Colours (longest-first replacement keeps "เขียวมะกอก" → "green มะกอก")
+    "แดง":        "red",
+    "เขียว":      "green",
+    "เหลือง":     "yellow",
+    "น้ำตาล":     "brown",
+    "ครีม":       "cream",
+    "ชมพู":       "pink",
+    "ฟ้า":        "sky blue",
+    "กรมท่า":     "navy",
+    "เบจ":        "beige",
+}
+
+
+# Query type token → product tokens that count as that type. The admin page
+# saves the category as "pant" (singular) while queries say "pants"; shorts are
+# pants; a Thai "เสื้อ" (→ "shirt") covers polos and t-shirts too.
+_TYPE_TARGETS: Dict[str, set] = {
+    "shirt":  {"shirt", "tshirt", "polo"},
+    "tshirt": {"tshirt"},
+    "polo":   {"polo"},
+    "pants":  {"pants", "pant", "shorts"},
+    "shorts": {"shorts"},
+    "jacket": {"jacket"},
 }
 
 
@@ -765,20 +797,21 @@ def _retrieve_products_core(query: str) -> List[Dict]:
         preprocessed     = _preprocess_query(query)
         query_tokens     = _tokenize(preprocessed)
         corrected_tokens = _autocorrect_tokens(query_tokens, index.get("vocab", []))
-        corrected_query  = " ".join(corrected_tokens).strip() or preprocessed or (query or "")
-        query_vec        = get_ollama_embedding(corrected_query)
+        corrected_query  = " ".join(corrected_tokens).strip()
+        # Embed the original text too: _tokenize keeps only [a-z0-9], so Thai
+        # words missing from _THAI_TO_EN would otherwise never reach bge-m3
+        # (multilingual). corrected_tokens still drive the lexical score.
+        embed_text       = f"{query} {corrected_query}".strip() if corrected_query else (query or "")
+        query_vec        = get_ollama_embedding(embed_text)
     except (EmbeddingError, OSError, json.JSONDecodeError):
         return keyword_retrieve_products(query)
 
     query_token_set   = set(corrected_tokens)
-    query_type_tokens = query_token_set.intersection({"shirt", "pants", "jacket", "tshirt"})
+    query_type_tokens = query_token_set.intersection(set(_TYPE_TARGETS))
 
     type_targets: set = set()
     for t in query_type_tokens:
-        if t == "shirt":
-            type_targets.update({"shirt", "tshirt"})
-        else:
-            type_targets.add(t)
+        type_targets.update(_TYPE_TARGETS[t])
 
     scored = []
     best_vec = 0.0

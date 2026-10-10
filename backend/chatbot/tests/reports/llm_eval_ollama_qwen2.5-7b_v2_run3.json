@@ -1,0 +1,319 @@
+{
+  "label": "ollama_qwen2.5-7b_v2_run3",
+  "run_at": "2026-10-10T16:03:45",
+  "results": [
+    {
+      "id": 1,
+      "lang": "th",
+      "category": "product",
+      "question": "แนะนำเสื้อโปโลหน่อย",
+      "expected": "Lists real polos from the catalogue (e.g. Solid Polo, Ribbed Polo, Corn Polo), price ~200–250 THB; no invented products",
+      "intent": "product_info",
+      "reply": "แน่นอนค่ะ มีเสื้อโปโลให้เลือกหลายแบบ ลองดูสิ:\n\n- **Ribbed Polo (โปโลริ้ว)** ราคา 200 บาท ไซส์มี L, M, XL สีขาว, ครีม, ดำ, น้ำเงิน, ฟ้า, เขียวขี้ม้า, แดง\n- **Crochet Knit Polo Shirt (โปโลลายถัก)** ราคา 200 บาท ไซส์ L, M, XL สีขาว, ครีม, ดำ, เขียว\n- **Solid Polo (โปโลพื้น)** ราคา 200 บาท ไซส์ L, M, XL สีขาว, ครีม, ดำ, น้ำตาล, เขียวมะกอก, เขียวใบสน, เทา\n\nเสื้อแต่ละแบบมีลวดลายและสีให้เลือก ซึ่งออกแบบมาสำหรับการใส่ในชีวิตประจำวันและลุคแคชชวลที่เรียบง่ายแต่มีสไตล์ค่ะ",
+      "product_cards": [
+        "Ribbed Polo",
+        "Crochet Knit Polo Shirt",
+        "Solid Polo"
+      ],
+      "latency_s": 5.07,
+      "error": null
+    },
+    {
+      "id": 2,
+      "lang": "en",
+      "category": "product",
+      "question": "Do you have linen shirts?",
+      "expected": "Yes — Linen Shirt, 390 THB, Beige/Cream/White, M/L/XL",
+      "intent": "product_info",
+      "reply": "Yes, we do have a linen shirt. Here are the details:\n\n- **Linen Shirt**\n  - Price: 390 THB\n  - Sizes: L, M, XL\n  - Colors: Beige, Cream, White\n  - Sleeve: Short-sleeve\n  - Description: A short-sleeve linen shirt made from lightweight, breathable fabric for a soft and comfortable feel. It's perfect for everyday wear in warm weather.",
+      "product_cards": [
+        "Linen Shirt",
+        "Fern Line Silk Shirt",
+        "shirt test"
+      ],
+      "latency_s": 3.46,
+      "error": null
+    },
+    {
+      "id": 3,
+      "lang": "th",
+      "category": "product",
+      "question": "มีกางเกงขาสั้นอะไรบ้าง",
+      "expected": "Heavyweight Shorts (150 THB) and Swim Shorts (200 THB)",
+      "intent": "product_info",
+      "reply": "ที่เรามีขายค่ะ มี **Heavyweight Shorts (กางเกงขาสั้นหนา)** และ **Swim Shorts (กางเกงขาสั้นว่ายน้ำ)** ลองดูได้ไหมคะ?\n\n- **Heavyweight Shorts**\n  - ราคา: 150 บาท\n  - ขนาด: 32, 34, 36\n  - สี: 黑色 (ดำ), 灰色 (เทา), 白色 (ขาว)\n  - มีส่วนแขนยาว\n\n- **Swim Shorts**\n  - ราคา: 200 บาท\n  - ขนาด: 30\n  - สี: 黑色 (ดำ), 青色 (ครีม), 蓝色 (น้ำเงิน), 海军蓝 (กรมท่า), 橄榄绿 (เขียวมะกอก), 粉红色 (ชมพู), 红色 (แดง), 天蓝色 (ฟ้าอมเขียว), 白色 (ขาว), 黄色 (เหลือง)\n  - มีส่วนแขนยาว",
+      "product_cards": [
+        "Heavyweight Shorts",
+        "Swim Shorts",
+        "Silk Pants"
+      ],
+      "latency_s": 4.94,
+      "error": null
+    },
+    {
+      "id": 4,
+      "lang": "en",
+      "category": "product",
+      "question": "What's the cheapest shirt you sell?",
+      "expected": "Silk shirts at 150 THB (e.g. Monstera / Fern Line / floral silk shirt); must not quote a lower price",
+      "intent": "product_info",
+      "reply": "The **Leaf Shadow Silk Shirt** is the cheapest option at 150 THB. Here are its details:\n- **Size:** M\n- **Color:** Green\n\nIt features a delicate botanical pattern and is perfect for casual wear.",
+      "product_cards": [
+        "Leaf Shadow Silk Shirt",
+        "Heavyweight T-Shirt",
+        "Linen Shirt"
+      ],
+      "latency_s": 3.04,
+      "error": null
+    },
+    {
+      "id": 5,
+      "lang": "th",
+      "category": "product",
+      "question": "อยากได้เสื้อยืดสีดำ",
+      "expected": "Heavyweight T-Shirt, Black (XL), 200 THB",
+      "intent": "product_info",
+      "reply": "สำหรับเสื้อยืดของทางร้านที่เป็นสีดำ มีให้เลือกmodel นี้ครับ:\n\n- **-heavyweight t-shirt (เสื้อยืดหนา)**:\n  - ราคา: 200 THB\n  - ขนาด: L, M, XL\n  - สี: Black (ดำ)\n  - แขนสั้น\n\nเสื้อตัวนี้เป็นเสื้อยืดแขนสั้นที่เนื้อผ้าหนา อุ่นสบายในอากาศเย็น มีลวดลายถักแบบกากบาทและมีขนาดให้เลือก 3 ขนาดครับ",
+      "product_cards": [
+        "Heavyweight T-Shirt",
+        "Heavyweight Shorts"
+      ],
+      "latency_s": 4.0,
+      "error": null
+    },
+    {
+      "id": 6,
+      "lang": "en",
+      "category": "product",
+      "question": "Compare the Linen Shirt and the Heavyweight T-Shirt",
+      "expected": "Linen 390 THB vs Heavyweight T-Shirt 200 THB; colours/sizes correct",
+      "intent": "product_info",
+      "reply": "The **Linen Shirt** and the **Heavyweight T-Shirt** have some differences in terms of price, material, sizes, and colors. Here's a comparison:\n\n- The **Linen Shirt** costs 390 THB, while the **Heavyweight T-Shirt** is priced at 200 THB.\n- The **Linen Shirt** is made from lightweight, breathable fabric, suitable for warmer weather. It comes in Beige, Cream, and White colors. Available sizes are L, M, and XL.\n- The **Heavyweight T-Shirt** is designed with a thicker fabric for added warmth and comfort in cooler weather. It features a distinctive textured knit pattern with cross-shaped detailing. Sizes available are L, M, and XL, and the colors are Black, Grey, and White.",
+      "product_cards": [
+        "Heavyweight T-Shirt",
+        "Heavyweight Shorts",
+        "Linen Shirt"
+      ],
+      "latency_s": 4.15,
+      "error": null
+    },
+    {
+      "id": 7,
+      "lang": "th",
+      "category": "stock",
+      "question": "กางเกงผ้าไหมมีของไหม",
+      "expected": "Silk Pants are OUT OF STOCK (stock 0 on every variant) — must not say available",
+      "intent": "stock_check",
+      "reply": "ขออภัยครับ ณ ตอนนี้ไม่มี **Silk Pants** (กางเกงผ้าไหม) ในขนาดและสีที่คุณต้องการ แต่เราสามารถแนะนำ **Heavyweight Shorts** (กางเกงขาสั้นหนา) แทนครับ\n\n- 32 - Cream: 26 ตัวเหลือ\n- 34 - Grey: 26 ตัวเหลือ\n- 36 - Black: 50 ตัวเหลือ",
+      "product_cards": [
+        "Silk Pants",
+        "Heavyweight Shorts",
+        "Swim Shorts"
+      ],
+      "latency_s": 3.8,
+      "error": null
+    },
+    {
+      "id": 8,
+      "lang": "en",
+      "category": "stock",
+      "question": "Is the Linen Shirt available in white size M?",
+      "expected": "Yes — White/M in stock (45)",
+      "intent": "stock_check",
+      "reply": "Yes, we have the **Linen Shirt** in **size M and color White** currently in stock. There are 45 pieces left. Would you like to place an order or need more information about this product?",
+      "product_cards": [
+        "Linen Shirt",
+        "Leaf Shadow Silk Shirt",
+        "Fern Line Silk Shirt"
+      ],
+      "latency_s": 3.03,
+      "error": null
+    },
+    {
+      "id": 9,
+      "lang": "th",
+      "category": "stock",
+      "question": "เสื้อเชิ้ตลินินสีดำไซส์ M มีไหม",
+      "expected": "No black Linen Shirt exists (only Beige/Cream/White) — must say not available",
+      "intent": "stock_check",
+      "reply": "ไม่มีขนาด M สีดำของเสื้อเชิ้ตลินินในสต็อกค่ะ แต่เรามีให้เลือกในขนาด L และ XL ดังนี้:\n\n- ขนาด L สีขาว จำนวน 45 ชิ้น\n- ขนาด XL สีครีม จำนวน 45 ชิ้น",
+      "product_cards": [
+        "Linen Shirt",
+        "Leaf Shadow Silk Shirt",
+        "shirt test"
+      ],
+      "latency_s": 3.41,
+      "error": null
+    },
+    {
+      "id": 10,
+      "lang": "en",
+      "category": "stock",
+      "question": "What colours do the Swim Shorts come in?",
+      "expected": "10 colours: Black, Cyan, Green, Navy, Olive, Pink, Red, Sky Blue, White, Yellow; size 30 only",
+      "intent": "product_info",
+      "reply": "The Swim Shorts come in several colors including **Black**, **Cyan**, **Green**, **Navy**, **Olive**, **Pink**, **Red**, **Sky Blue**, **White**, and **Yellow**.",
+      "product_cards": [
+        "Swim Shorts",
+        "Heavyweight Shorts"
+      ],
+      "latency_s": 2.98,
+      "error": null
+    },
+    {
+      "id": 11,
+      "lang": "th",
+      "category": "size",
+      "question": "รอบอก 114 ซม. ใส่เสื้อเชิ้ตลินินไซส์อะไร",
+      "expected": "Size L — 114 cm ≈ 44.9 in, chart is in inches (L = chest 44–46)",
+      "intent": "size_guide",
+      "reply": "คุณมีขนาดรอบอก 45 นิ้ว (114 ซม. หารด้วย 2.54) ตามแนะนำจากตารางขนาด เราจะแนะนำให้ลองใส่เสื้อเชิ้ตลินินไซส์ M เลยค่ะ ไซส์ M มีรอบอกประมาณ 40-42 นิ้ว ซึ่งเหมาะสมกับขนาดของคุณมากที่สุด\n\nถ้าคุณต้องการความพอดีมากขึ้น สามารถลองไซส์ L ได้เช่นกัน เพราะมีรอบอกประมาณ 44-46 นิ้ว กรอบร่างของคุณจะทำให้ใส่ขนาดใหญ่ยังคงดูสบายและดูเท่มากค่ะ",
+      "product_cards": [
+        "Linen Shirt",
+        "Leaf Shadow Silk Shirt",
+        "Fern Line Silk Shirt"
+      ],
+      "latency_s": 4.43,
+      "error": null
+    },
+    {
+      "id": 12,
+      "lang": "en",
+      "category": "size",
+      "question": "My chest is 49 inches, which size Heavyweight T-Shirt should I get?",
+      "expected": "Size XL (chest 48–50)",
+      "intent": "size_guide",
+      "reply": "Based on your chest measurement of 49 inches, the **Heavyweight T-Shirt** in size **XL** would be the best fit for you. Here’s why:\n\n- **Size**: XL (chest: 48.0–50.0 inches)\n- **Color Options**: Black",
+      "product_cards": [
+        "Heavyweight T-Shirt",
+        "Heavyweight Shorts"
+      ],
+      "latency_s": 3.18,
+      "error": null
+    },
+    {
+      "id": 13,
+      "lang": "th",
+      "category": "policy",
+      "question": "ค่าส่งเท่าไหร่ ส่งฟรีไหม",
+      "expected": "50 THB flat; free from 200 THB; 2–5 business days",
+      "intent": "store_policy",
+      "reply": "การจัดส่งมาตรฐานจะมีค่าใช้จ่ายอยู่ที่ **50 บาท** แต่หากคำสั่งซื้อของคุณมียอดกว่า **200 บาท** คุณสามารถได้รับบริการจัดส่งฟรี哦，这里是错误的提示，请忽略这个答案。以下是正确的回答：\n\nค่าจัดส่งมาตรฐานอยู่ที่ **50 บาท** แต่หากยอดสั่งซื้อของคุณมากกว่า **200 บาท** จะได้รับบริการจัดส่งฟรีภายใน 2–5 วันทำการครับ",
+      "product_cards": [
+        "floral silk shirt",
+        "shirt test",
+        "Linen Shirt"
+      ],
+      "latency_s": 4.02,
+      "error": null
+    },
+    {
+      "id": 14,
+      "lang": "en",
+      "category": "policy",
+      "question": "Can I return a shirt if it doesn't fit?",
+      "expected": "Yes within 7 days of receipt; unworn, unwashed, tags on; start via chat",
+      "intent": "store_policy",
+      "reply": "Yes, you can return a shirt if it doesn't fit within 7 days of receipt. Just ensure the item is unworn and still has its original tags attached. Contact us via chat to start the return process.",
+      "product_cards": [
+        "Linen Shirt",
+        "floral silk shirt",
+        "Leaf Shadow Silk Shirt"
+      ],
+      "latency_s": 3.0,
+      "error": null
+    },
+    {
+      "id": 15,
+      "lang": "th",
+      "category": "policy",
+      "question": "จ่ายเงินช่องทางไหนได้บ้าง",
+      "expected": "Credit/debit card (Visa, Mastercard), PromptPay QR, COD",
+      "intent": "store_policy",
+      "reply": "ท่านสามารถชำระเงินผ่านช่องทางเหล่านี้ได้:\n\n- **Visa, Mastercard**: สำหรับการชำระโดยใช้บัตรเครดิต/เดบิต\n- **พร้อมเพย์ QR code**: สำหรับการโอนเงินผ่านแอปพลิเคชันพร้อมเพย์\n- **เก็บเงินปลายทาง (COD)**: สำหรับการชำระเงินเมื่อรับสินค้าที่ร้านتسليمของ",
+      "product_cards": [
+        "Zip Collar Polo",
+        "Spaced Stripe Knit Polo",
+        "Solid Polo"
+      ],
+      "latency_s": 3.66,
+      "error": null
+    },
+    {
+      "id": 16,
+      "lang": "en",
+      "category": "policy",
+      "question": "Do you have any discount codes right now?",
+      "expected": "WELCOME10 (10%, min 500) and SAVE100 (100 THB off, min 1000); must NOT mention expired SUMMER15/TESTUAT15",
+      "intent": "store_policy",
+      "reply": "Yes, we currently have two active discount codes:\n\n- **SAVE100**: Get 100 THB off when your order is at least 1000 THB. This code expires on December 10, 2026.\n- **WELCOME10**: Enjoy 10% off with a minimum order of 500 THB. This offer ends on June 10, 2027.\n\nFeel free to use these codes at checkout!",
+      "product_cards": [
+        "Silk Pants",
+        "Zip Collar Polo",
+        "Leaf Shadow Silk Shirt"
+      ],
+      "latency_s": 3.57,
+      "error": null
+    },
+    {
+      "id": 17,
+      "lang": "th",
+      "category": "oos",
+      "question": "ขายรองเท้าผ้าใบไหม",
+      "expected": "Store doesn't sell shoes — politely say so, no invented shoes",
+      "intent": "product_info",
+      "reply": "ขออภัยค่ะ ในรายการของเราไม่มีรองเท้าผ้าใบไหมให้เลือกนะคะ แต่เรามีเสื้อเชิ้ตไหมที่คุณอาจจะชอบ\n\n- **เสื้อเชิ้ตไหมลายเงาใบไม้** (Leaf Shadow Silk Shirt) - ราคา 150 บาท\n  - ขนาด: M\n  - สี: เขียว\n  - แขนสั้น\n  - มีลวดลายใบไม้ที่ซ้อนกันอย่างแน่นหนา ให้ความรู้สึกสุขุมและเรียบหรู\n\nถ้าคุณสนใจเสื้อเชิ้ตไหมชิ้นนี้ สามารถเลือกสีเขียวในขนาด M ได้เลยค่ะ",
+      "product_cards": [
+        "Silk Pants",
+        "Leaf Shadow Silk Shirt",
+        "shirt test"
+      ],
+      "latency_s": 4.28,
+      "error": null
+    },
+    {
+      "id": 18,
+      "lang": "en",
+      "category": "oos",
+      "question": "Can you help me write my homework essay?",
+      "expected": "Polite refusal / out of scope",
+      "intent": "out_of_scope",
+      "reply": "Sorry, I can only help with questions about products",
+      "product_cards": [],
+      "latency_s": 2.21,
+      "error": null
+    },
+    {
+      "id": 19,
+      "lang": "th",
+      "category": "mixed",
+      "question": "มี polo สี white size XL ไหม",
+      "expected": "Yes — e.g. Corn Polo / Ribbed Polo / Solid Polo in White XL (any correct real one); reply in Thai",
+      "intent": "stock_check",
+      "reply": "มีเสื้อโปโลสีขาวไซ즈 XL ใน category ริบบ์ดี้ (Ribbed Polo) อยู่ 48 เซ็ทในสต็อกค่ะ ถ้าไม่ใช่categoryนี้คุณยังสามารถเลือกเสื้อโปโลสีขาวไซ즈 XL จาก category ที่เหลือได้ 48 เซ็ทเช่นเดียวกันค่ะ.",
+      "product_cards": [
+        "Solid Polo",
+        "Zip Collar Polo",
+        "Ribbed Polo"
+      ],
+      "latency_s": 3.61,
+      "error": null
+    },
+    {
+      "id": 20,
+      "lang": "en",
+      "category": "mixed",
+      "question": "I want a shirt for the beach, something light, under 300 baht",
+      "expected": "Suggests real items ≤300 THB (silk shirts 150 THB, maybe Swim Shorts); must not suggest Linen Shirt as under 300",
+      "intent": "product_info",
+      "reply": "Sure! For a beach outfit, you might like the **Fern Line Silk Shirt** or the **Leaf Shadow Silk Shirt**. Both are made from silk and have short sleeves to keep you cool.\n\n- **Fern Line Silk Shirt**: \n  - **Price:** 150 THB\n  - **Size:** M\n  - **Color:** Red (แดง)\n  - **Description:** This shirt features fine-lined fern and palm frond motifs. It's lightweight and perfect for a relaxed tropical feel.\n\n- **Leaf Shadow Silk Shirt**: \n  - **Price:** 150 THB\n  - **Size:** M\n  - **Color:** Green (เขียว)\n  - **Description:** This shirt has densely layered, overlapping leaves creating a soft shadow-like effect. It's calm and refined with an understated design.\n\nBoth are under 300 THB and will keep you cool at the beach!",
+      "product_cards": [
+        "Linen Shirt",
+        "Fern Line Silk Shirt",
+        "Leaf Shadow Silk Shirt"
+      ],
+      "latency_s": 4.49,
+      "error": null
+    }
+  ]
+}

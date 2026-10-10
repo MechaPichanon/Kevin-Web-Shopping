@@ -1,0 +1,91 @@
+{
+ "label": "ollama_qwen2.5-7b_v2",
+ "results": [
+  {
+   "first": "แนะนำเสื้อโปโลหน่อย",
+   "follow_up": "ตัวนี้มีสีดำไหม",
+   "expect": "reuse",
+   "pass": true,
+   "cards_turn1": [
+    "Ribbed Polo",
+    "Crochet Knit Polo Shirt",
+    "Solid Polo"
+   ],
+   "cards_turn2": [
+    "Ribbed Polo",
+    "Crochet Knit Polo Shirt",
+    "Solid Polo"
+   ],
+   "intent_turn2": "stock_check",
+   "reply_turn2": "ใช่ครับ เสื้อโปโลริ้วไซส์ M สีดำยังมีอยู่ 52 ตัว\n\n- **พละริ้ว** (Ribbed Polo) ไซส์ M สีดำ: 43 ตัว\n- **พละริ้ว** (Ribbed Polo) ไซส์ L สีดำ: 35 ตัว\n\nคุณสามารถเลือกได้ว่าจะซื้อไซส์ไหนครับ"
+  },
+  {
+   "first": "แนะนำเสื้อโปโลหน่อย",
+   "follow_up": "ไซส์ M เหลือไหม",
+   "expect": "reuse",
+   "pass": true,
+   "cards_turn1": [
+    "Ribbed Polo",
+    "Crochet Knit Polo Shirt",
+    "Solid Polo"
+   ],
+   "cards_turn2": [
+    "Ribbed Polo",
+    "Crochet Knit Polo Shirt",
+    "Solid Polo"
+   ],
+   "intent_turn2": "size_guide",
+   "reply_turn2": "ยังมีไซส์ M ให้เลือกอยู่ครับ\n\n- **Ribbed Polo (โปโลริ้ว)**\n  - สีดำ (Black): ราคา 200 THB\n  - สีครีม (Cream): ราคา 200 THB\n  \n- **Crochet Knit Polo Shirt (โปโลลายถัก)**\n  - สีดำ (Black): ราคา 200 THB\n  - สีเขียว (Green): ราคา 200 THB\n\nถ้าคุณสนใจให้เราส่งรายละเอียดเพิ่มเติมได้เลยครับ"
+  },
+  {
+   "first": "Do you have linen shirts?",
+   "follow_up": "Is it available in black?",
+   "expect": "reuse",
+   "pass": true,
+   "cards_turn1": [
+    "Linen Shirt",
+    "Fern Line Silk Shirt",
+    "shirt test"
+   ],
+   "cards_turn2": [
+    "Linen Shirt",
+    "Fern Line Silk Shirt",
+    "shirt test"
+   ],
+   "intent_turn2": "stock_check",
+   "reply_turn2": "I'm sorry, we don't have the Linen Shirt in black. However, we do have it in **Beige** (size L), **White** (size M), and **Cream** (size XL) available. Would any of these work for you?"
+  },
+  {
+   "first": "แนะนำเสื้อโปโลหน่อย",
+   "follow_up": "หุ้นวันนี้เป็นไง",
+   "expect": "out_of_scope",
+   "pass": true,
+   "cards_turn1": [
+    "Ribbed Polo",
+    "Crochet Knit Polo Shirt",
+    "Solid Polo"
+   ],
+   "cards_turn2": [],
+   "intent_turn2": "out_of_scope",
+   "reply_turn2": "ขอโทษค่ะ ฉันช่วยได้แค่เรื่องสินค้า ขนาด ราคา และนโยบายร้านค้าเท่านั้นค่ะ 😊"
+  },
+  {
+   "first": "แนะนำเสื้อโปโลหน่อย",
+   "follow_up": "มีกางเกงขาสั้นไหม",
+   "expect": "new_search",
+   "pass": true,
+   "cards_turn1": [
+    "Ribbed Polo",
+    "Crochet Knit Polo Shirt",
+    "Solid Polo"
+   ],
+   "cards_turn2": [
+    "Heavyweight Shorts",
+    "Swim Shorts",
+    "Silk Pants"
+   ],
+   "intent_turn2": "stock_check",
+   "reply_turn2": "ใช่ค่ะ เราขายกางเกงขาสั้นอยู่ 2 แบบนะคะ\n\n- **กางเกงขาสั้นหนา (Heavyweight Shorts)**\n  - ขนาดและสีที่มีในสต็อก:\n    - 32–White: เหลือ 26 ชิ้น\n    - 34–Grey: เหลือ 26 ชิ้น\n    - 36–Black: เหลือ 50 ชิ้น\n\n- **กางเกงขาสั้นว่ายน้ำ (Swim Shorts)**\n  - ขนาดและสีที่มีในสต็อก:\n    - 30–Black, Cyan, Green, Navy, Olive, Pink, Red, Sky Blue, White, Yellow: ทุกสีเหลืออยู่ 67 ชิ้น"
+  }
+ ]
+}

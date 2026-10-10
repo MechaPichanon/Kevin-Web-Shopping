@@ -6,11 +6,13 @@ try:
     from .retrieval import retrieve_products, load_products
     from .db import get_conn, release_conn
     from . import image_search
+    from . import llm_client
 except ImportError:
     from intent import detect_intent, Intent
     from retrieval import retrieve_products, load_products
     from db import get_conn, release_conn
     import image_search
+    import llm_client
 from typing import Dict, Any, List, Optional
 import uuid
 import time
@@ -28,19 +30,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 "ollama run qwen2.5:7b uvicorn chatbot.main:app --reload"
-
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
-
-# When set, chat completions go to OpenRouter instead of local Ollama — no
-# GPU/host Ollama needed for the deployed demo. Unset (local dev default)
-# keeps using Ollama qwen2.5:7b exactly as before.
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
-# Interim default (the original pick, Typhoon2, was delisted from
-# OpenRouter) — pending the user's own Thai-quality comparison against
-# qwen/qwen3.7-flash.
-OPENROUTER_CHAT_MODEL = os.getenv("OPENROUTER_CHAT_MODEL", "google/gemini-3.5-flash-lite")
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 OUT_OF_SCOPE_RESPONSE = (
     "Sorry, I can only help with questions about products"
@@ -141,10 +130,10 @@ def _fetch_stock_context(product_ids: list) -> str:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT product_id, size, color, stock
-            FROM variants
-            WHERE product_id = ANY(%s) AND is_active = true
-            ORDER BY product_id, size, color
+            SELECT p.product_name, v.size, v.color, v.stock
+            FROM variants v JOIN products p ON p.product_id = v.product_id
+            WHERE v.product_id = ANY(%s) AND v.is_active = true
+            ORDER BY p.product_name, v.size, v.color
             """,
             (product_ids,),
         )
@@ -154,10 +143,12 @@ def _fetch_stock_context(product_ids: list) -> str:
         release_conn(conn)
     if not rows:
         return ""
-    lines = ["Current stock:"]
-    for pid, size, color, stock in rows:
+    # Rows carry the product name (not the ID): the Product Data block shows
+    # names only, so ID-keyed rows couldn't be matched to a product.
+    lines = ["Current stock (product | size | colour):"]
+    for name, size, color, stock in rows:
         status = f"{stock} left" if stock > 0 else "out of stock"
-        lines.append(f"  {pid} | {size} | {color}: {status}")
+        lines.append(f"  {name} | {size} | {color}: {status}")
     return "\n".join(lines)
 
 
@@ -169,12 +160,12 @@ def _fetch_measurement_context(product_ids: list) -> str:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT product_id, size, chest_min, chest_max, waist_min, waist_max
-            FROM variants
-            WHERE product_id = ANY(%s)
-              AND (chest_min IS NOT NULL OR waist_min IS NOT NULL)
-              AND is_active = true
-            ORDER BY product_id, size
+            SELECT DISTINCT p.product_name, v.size, v.chest_min, v.chest_max, v.waist_min, v.waist_max
+            FROM variants v JOIN products p ON p.product_id = v.product_id
+            WHERE v.product_id = ANY(%s)
+              AND (v.chest_min IS NOT NULL OR v.waist_min IS NOT NULL)
+              AND v.is_active = true
+            ORDER BY p.product_name, v.size
             """,
             (product_ids,),
         )
@@ -184,9 +175,9 @@ def _fetch_measurement_context(product_ids: list) -> str:
         release_conn(conn)
     if not rows:
         return ""
-    lines = ["Size measurement guide (cm):"]
-    for pid, size, ch_min, ch_max, w_min, w_max in rows:
-        parts = [f"{pid} | {size}"]
+    lines = ["Size measurement guide (inches):"]
+    for name, size, ch_min, ch_max, w_min, w_max in rows:
+        parts = [f"{name} | {size}"]
         if ch_min is not None:
             parts.append(f"chest {ch_min}–{ch_max}")
         if w_min is not None:
@@ -256,10 +247,45 @@ def _get_or_create_conversation_id(conversation_id: Optional[str]) -> str:
         _CONVERSATIONS[cid] = {"last_active": time.time(), "low_conf_streak": 0}
     return cid
 
+_TH_REFERENTIAL = ("ตัวนี้", "ตัวนั้น", "อันนี้", "อันนั้น", "แบบนี้", "แบบนั้น", "เมื่อกี้")
+_TH_ATTRIBUTE = ("สี", "ไซส์", "ขนาด", "ราคา", "สต็อก", "เหลือ")
+_TH_PRODUCT_WORDS = ("เสื้อ", "เชิ้ต", "โปโล", "กางเกง", "ขาสั้น", "แจ็กเก็ต", "ชุด")
+_EN_POINTERS = {"it", "its", "this", "that", "these", "those", "them", "they"}
+_EN_PRODUCT_WORDS = {"shirt", "shirts", "tshirt", "tshirts", "tee", "polo", "polos",
+                     "pants", "trousers", "shorts", "jacket", "jackets", "hoodie", "hoodies"}
+
+
+def _refers_to_previous(message: str) -> bool:
+    """
+    Stricter than _is_followup_reference: true only when the message clearly
+    points back at the last products ("ตัวนี้มีสีดำไหม", "ไซส์ M เหลือไหม",
+    "is it available in black") and names no product type of its own. In that
+    case the previous products are reused instead of running a new search,
+    which would otherwise match unrelated products on the attribute word alone.
+    """
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+    if _is_thai(text):
+        if any(w in text for w in _TH_PRODUCT_WORDS):
+            return False
+        return _is_followup_reference(text)
+    tokens = set(re.findall(r"[a-z0-9']+", text))
+    return bool(tokens & _EN_POINTERS) and not tokens & _EN_PRODUCT_WORDS
+
+
 def _is_followup_reference(message: str) -> bool:
     text = (message or "").strip().lower()
     if not text:
         return False
+
+    # Thai has no [a-z0-9] tokens, so the English length rule below would call
+    # every Thai message a follow-up. Require a Thai pointer word ("ตัวนี้"), or a
+    # short message that asks about an attribute ("ไซส์ M เหลือไหม").
+    if _is_thai(text):
+        if any(w in text for w in _TH_REFERENTIAL):
+            return True
+        return len(text.replace(" ", "")) <= 15 and any(w in text for w in _TH_ATTRIBUTE)
 
     tokens = set(re.findall(r"[a-z0-9']+", text))
     referential = {
@@ -328,6 +354,14 @@ def format_products_for_prompt(products):
                 if colors_th:
                     color_display += f" ({', '.join(colors_th)})"
                 block += f"  Colors: {color_display}\n"
+            # Which colour comes in which size: Sizes/Colors above are separate
+            # lists, so "is black available in M?" couldn't be answered. No stock
+            # counts here, since the product cache isn't refreshed by orders (live
+            # stock goes in the stock section for stock questions).
+            pairs = sorted(set((v.get("size"), v.get("color")) for v in variants
+                               if v.get("size") and v.get("color")))
+            if pairs:
+                block += "  Size/colour options: " + ", ".join(f"{sz}–{c}" for sz, c in pairs) + "\n"
             if sleeves:     block += f"  Sleeve: {', '.join(sleeves)}\n"
             if desc:        block += f"  Description: {desc}\n"
             if desc_th:     block += f"  คำอธิบาย: {desc_th}\n"
@@ -735,7 +769,12 @@ def _bot_turn(request: ChatRequest):
             )
             return {"reply": out_msg, "intent": intent, "quick_replies": QUICK_REPLIES_BY_INTENT["OUT_OF_SCOPE"], "conversation_id": conversation_id}
 
-    products = retrieve_products(request.message)
+    previous_products = _CONVERSATIONS.get(conversation_id, {}).get("last_products")
+    if isinstance(previous_products, list) and previous_products and _refers_to_previous(request.message):
+        logger.info("Follow-up about the previous products; reusing them instead of retrieving.")
+        products = previous_products
+    else:
+        products = retrieve_products(request.message)
     logger.info(f"Retrieved products count: {len(products)}")
 
     if not products:
@@ -801,7 +840,9 @@ def _bot_turn(request: ChatRequest):
     intent_instruction_map = {
         Intent.SIZE_GUIDE: (
             "The user wants sizing help. Use the measurement guide below to recommend a size. "
-            "If they gave measurements, match them to the size ranges provided."
+            "If they gave measurements, match them to the size ranges provided. "
+            "All ranges are in inches; if the user gives centimetres (cm / ซม.), "
+            "divide by 2.54 to convert to inches first."
         ),
         Intent.STOCK_CHECK: (
             "The user wants to know if something is in stock. Use the stock data below. "
@@ -869,36 +910,13 @@ Product Data:
 {history_block}
 User Question: {request.message}"""
     
-    if OPENROUTER_API_KEY:
-        logger.info(f"sending prompt to OpenRouter ({OPENROUTER_CHAT_MODEL})")
-        response = requests.post(
-            f"{OPENROUTER_BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
-            json={
-                "model": OPENROUTER_CHAT_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=300
-        )
-        data = response.json()
-        try:
-            reply = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            logger.error(f"unexpected OpenRouter response: {data}")
-            reply = "Sorry, something went wrong."
-    else:
-        logger.info("sending prompt to local Ollama")
-        response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": OLLAMA_CHAT_MODEL,
-                "prompt": prompt,
-                "stream": False,
-            },
-            timeout=300
-        )
-        data = response.json()
-        reply = data.get("response", "Sorry, something went wrong.")
+    # OpenRouter when OPENROUTER_API_KEY is set, local Ollama otherwise (llm_client.py).
+    logger.info(f"sending prompt to {llm_client.backend_name()}")
+    try:
+        reply = llm_client.complete(prompt)
+    except llm_client.LLMError as exc:
+        logger.error(f"chat completion failed: {exc}")
+        reply = "Sorry, something went wrong."
 
     if isinstance(reply, str) and reply.strip().upper() == "OUT_OF_SCOPE":
         reply = OUT_OF_SCOPE_RESPONSE

@@ -15,46 +15,8 @@ const fs = require("fs");
 const path = require("path");
 
 const pool = require("../db");
-
-// ─────────────────────────────────────────────
-// Build the RAG text chunk for a product
-// Aggregates variant info so the chatbot can answer about sizes, colours, prices.
-// ─────────────────────────────────────────────
-function productToChunkText(product) {
-  const variants = Array.isArray(product.variants) ? product.variants : [];
-
-  const sizes     = [...new Set(variants.map((v) => v.size).filter(Boolean))].sort();
-  const colors    = [...new Set(variants.map((v) => v.color).filter(Boolean))];
-  const colorsTh  = [...new Set(variants.map((v) => v.color_th).filter(Boolean))];
-  const sleeves   = [...new Set(variants.map((v) => v.sleeve).filter(Boolean))];
-  const collars   = [...new Set(variants.map((v) => v.collar).filter(Boolean))];
-  const prices    = variants.map((v) => v.price).filter((p) => p != null && !isNaN(p));
-
-  let priceStr = "";
-  if (prices.length) {
-    const lo = Math.min(...prices);
-    const hi = Math.max(...prices);
-    priceStr = lo === hi ? `${lo} THB` : `${lo}–${hi} THB`;
-  }
-
-  const lines = [
-    `Name: ${product.product_name || ""}`,
-    `Category: ${product.category || ""}`,
-    product.sub_category ? `Sub-category: ${product.sub_category}` : null,
-    priceStr           ? `Price: ${priceStr}`                    : null,
-    sizes.length       ? `Sizes: ${sizes.join(", ")}`           : null,
-    colors.length      ? `Colors: ${colors.join(", ")}`         : null,
-    sleeves.length     ? `Sleeve: ${sleeves.join(", ")}`        : null,
-    collars.length     ? `Collar: ${collars.join(", ")}`        : null,
-    product.description ? `Description: ${product.description}` : null,
-    // Thai block — included when available so bge-m3 can match Thai queries
-    product.product_name_th ? `ชื่อ: ${product.product_name_th}` : null,
-    colorsTh.length ? `สี: ${colorsTh.join(", ")}` : null,
-    product.description_th ? `คำอธิบาย: ${product.description_th}` : null,
-  ].filter(Boolean);
-
-  return lines.join("\n").trim();
-}
+// Same RAG text as the admin add/edit path and retrieval.py _product_to_text().
+const { productToChunkText } = require("../utils/productChunkText");
 
 // ─────────────────────────────────────────────
 async function main() {

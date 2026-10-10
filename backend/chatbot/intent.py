@@ -1,10 +1,13 @@
 from enum import Enum
+import logging
 import re
-import os
-import requests
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
+try:
+    from . import llm_client
+except ImportError:
+    import llm_client
+
+logger = logging.getLogger(__name__)
 
 class Intent(str, Enum):
     PRODUCT_INFO = "product_info"
@@ -38,22 +41,23 @@ Category:"""
 
 
 def _llm_classify_intent(message: str) -> Intent:
+    # Same backend as the chat reply (OpenRouter when configured, else Ollama).
+    # temperature 0 so production matches how the classifier was evaluated.
     try:
-        resp = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": OLLAMA_CHAT_MODEL,
-                "prompt": _CLASSIFICATION_PROMPT.format(message=message),
-                "stream": False,
-            },
-            timeout=15,
+        raw = llm_client.complete(
+            _CLASSIFICATION_PROMPT.format(message=message), temperature=0, timeout=15
         )
-        label = resp.json().get("response", "").strip().lower().split()[0]
-        # Strip any punctuation the model might append (e.g. "product_info.")
-        label = re.sub(r"[^a-z_]", "", label)
-        return _INTENT_LABELS.get(label, Intent.PRODUCT_INFO)
-    except Exception:
+    except llm_client.LLMError as exc:
+        logger.warning("intent LLM call failed, defaulting to product_info: %s", exc)
         return Intent.PRODUCT_INFO
+
+    words = raw.strip().lower().split()
+    # Strip any punctuation the model might append (e.g. "product_info.")
+    label = re.sub(r"[^a-z_]", "", words[0]) if words else ""
+    if label not in _INTENT_LABELS:
+        logger.warning("intent LLM returned unknown label %r, defaulting to product_info", raw[:80])
+        return Intent.PRODUCT_INFO
+    return _INTENT_LABELS[label]
 
 
 def detect_intent(message: str) -> Intent:

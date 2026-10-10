@@ -147,8 +147,9 @@ This forces Turbopack to recompile from the current source. Confirmed via `docke
 Browser
   └─► Next.js 16 (port 3000)
         ├─► POST /api/chat  ──proxy──►  FastAPI /chat (port 8000)
-        │                                  ├─ intent.py     (rule-based classifier)
+        │                                  ├─ intent.py     (rule pre-filters + LLM classifier, temperature 0)
         │                                  ├─ retrieval.py  (hybrid vector+lexical RAG)
+        │                                  ├─ llm_client.py (the one LLM switch: OpenRouter if OPENROUTER_API_KEY, else Ollama — used by main.py AND intent.py)
         │                                  └─ embeddings.py (Ollama bge-m3 client)
         └─► /auth/* /profile  ──────────►  Express (port 5000)
               /orders/* /payment/*             ├─ bcrypt + JWT + pg
@@ -518,7 +519,11 @@ The chatbot retrieves products using a hybrid score:
 combined = (0.78 × cosine_similarity) + (0.22 × token_overlap_ratio)
 ```
 
-Products not matching a detected clothing type are penalised ×0.25. Top `RAG_TOP_K` results above `RAG_MIN_SCORE` are injected into the LLM system prompt.
+When the query names a clothing type, products of that type are returned first and others only fill leftover slots (other types are also scored ×`RAG_TYPE_PENALTY`, default 0.6). Type words map via `_TYPE_TARGETS` in `retrieval.py`: `shirt`→shirt/tshirt/polo, `pants`→pants/**pant**/shorts (the admin page saves the category as singular `pant`), plus `polo`, `shorts`, `tshirt`, `jacket`. Top `RAG_TOP_K` results above `RAG_MIN_SCORE` are injected into the LLM system prompt.
+
+**Thai queries:** `_preprocess_query()` swaps known Thai words for English (`_THAI_TO_EN` — product types, fabrics, colours; bare `ไหม` deliberately excluded since it's also the question particle) for the lexical score, but the **query embedding uses the original text + those tokens** (`embed_text` in `_retrieve_products_core`). Before 2026-10-10 only the `[a-z0-9]` tokens were embedded, so "แนะนำเสื้อโปโลหน่อย" was embedded as just `shirt` — see `backend/chatbot/tests/retrieval_eval_th_results.md` (Thai Hit@1 0.56 → 1.00 on its own test set).
+
+**Product chunk text** (`product_chunks.content`, what bge-m3 embeds) is built in **one** place per language, and the two must stay identical: `backend/utils/productChunkText.js` (`productToChunkText`/`loadProductChunkText` — used by admin add/edit in `productControllers.js` and by `import_products.js`) and `_product_to_text()` in `retrieval.py` (on-the-fly fallback). Both aggregate **all active variants** plus every Thai field. The admin path reads the rows it just saved inside the same transaction (previously it used only `variants[0]` and no Thai). After changing the format, run `node backend/scripts/regenerate_chunk_text.js --yes` (dry run without `--yes`; it reads the DB, never `products.json`), then `backfill_chunk_embeddings.js`, then restart the chatbot — the index watermark is `MAX(products.updated_at)`, which rewriting chunks doesn't change.
 
 ### Data flow (PostgreSQL is now the single source of truth)
 
@@ -565,7 +570,7 @@ backend/data/products.json
 |---|---|---|
 | `OLLAMA_EMBED_MODEL` | `bge-m3` | Changing invalidates all caches |
 | `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Used only when `OPENROUTER_API_KEY` is unset |
-| `OPENROUTER_API_KEY` | unset | When set, chat completions go to OpenRouter instead of Ollama |
+| `OPENROUTER_API_KEY` | unset | When set, **every** LLM call (chat reply + intent classifier, via `llm_client.py`) goes to OpenRouter instead of Ollama |
 | `OPENROUTER_CHAT_MODEL` | `google/gemini-3.5-flash-lite` | Only used when `OPENROUTER_API_KEY` is set |
 | `RAG_TOP_K` | `3` | Products sent to LLM |
 | `RAG_MIN_SCORE` | `0.20` | Lower = more recall, more noise |
@@ -719,9 +724,26 @@ without a `user_addresses` link (incl. `createOrder`), legacy columns absent.
 And payment slips (`paymentSlips.test.js`): after reject → re-upload → approve, the
 approved slip is `paymentSlipUrl` on all four order read endpoints with the full
 history still listed, another customer can't read or add to the order's slips,
-`orders.payment_slip_url` is gone. It inserts its order directly (no
+`orders.payment_slip_url` is gone. And product chunk text (`productChunks.test.js`):
+an admin-created product's `product_chunks.content` lists all variants' colours/sizes/
+price range and the Thai fields, and the Node builder matches `retrieval.py`'s format.
+`paymentSlips.test.js` inserts its order directly (no
 `order_items`), so no catalogue/stock row is touched, and deletes any upload
 files it created.
+
+## Chatbot evaluation (thesis numbers)
+
+All in `backend/chatbot/tests/`, run inside the backend container
+(`docker exec -w /app/backend/chatbot kevin-web-shopping-backend-1 python tests/<script>`)
+except `llm_model_eval.py`, which only needs `/chat` on :8000.
+
+- `llm_model_eval.py <label>` — 20 Thai/English questions end-to-end via `/chat`, correct answers taken from the live DB. Graded by hand into `llm_eval_<label>_results.md` (lang, type, question, correct answer, full LLM answer, grade). qwen2.5:7b: 14.5/20 both before and after the 2026-10-10 RAG fixes — **Current baseline:** `llm_eval_ollama_qwen2.5-7b_v2_baseline_results.md`, 3 runs, mean **15.33/20** (TH 5.5, EN 9.83), after the retrieval and prompt fixes. Identical runs differ by up to 2 points, so always compare models by the 3-run mean. What's left is the model: foreign-script text in Thai replies, size↔colour mistakes, and Q11 sizing.
+- `retrieval_eval_th.py <label>` + `retrieval_eval_th.json` — Thai retrieval Hit@1/Hit@3/MRR, no LLM. Stages in `retrieval_eval_th_results.md`.
+- `compare_intent_f1.py` — rule-based vs hybrid intent F1, now through the real `intent.detect_intent` on whatever backend `llm_client` uses; writes `compare_intent_f1_results_<model>.md` (qwen2.5:7b = 0.920, same as the original `compare_intent_f1_results.md`).
+- `test_llm_routing.py` — no-network check that the key switches every LLM call to OpenRouter.
+- `followup_eval.py <label>` — multi-turn check: 'ตัวนี้…' / 'ไซส์ M เหลือไหม' / 'is it…' reuse the previous products (`_refers_to_previous` in `main.py`), and unrelated or new-product messages don't.
+
+**Prompt rules (main.py):** the stock and size-chart rows sent to the LLM are labelled with the product **name**, because the Product Data block shows names only (ID-keyed rows couldn't be matched). Each product also lists `Size/colour options`, with no stock counts, since the product cache isn't refreshed by orders.
 
 ## Key env vars
 
@@ -744,6 +766,8 @@ ORDER_AUTO_CONFIRM_DAYS=7           # days a shipped order waits before auto-con
 - SQL migrations: `NNN_short_description.sql`, three-digit zero-padded; next is `027_`
 - Schema changes happen **only** through `postgres/migrations/` + `01_schema.sql` — no `ALTER TABLE` / `CREATE TABLE` / `ADD COLUMN` in app startup code (Express, FastAPI, scripts). A startup self-heal in `server.js` once silently re-added a column a migration had dropped (`users.address`, see `024_`).
 - Python: `snake_case.py` · TS utilities: `camelCase.ts` · React components: `PascalCase.tsx` · Next.js route dirs: `kebab-case`
+- Every chatbot LLM call goes through `backend/chatbot/llm_client.py` (`complete()`, raises `LLMError`) — never call Ollama/OpenRouter directly. Before this, `intent.py` always called Ollama `qwen2.5:7b`, which doesn't exist on the cloud VM (ADR 0001), so every message silently became `product_info`.
+- Size charts (`variants.chest_min/max`, `waist_min/max`) are in **inches** (the admin form labels them "(inch)"); the chatbot prompt says so and converts cm input.
 - `product_chunks.embedding` is `vector(1024)` (bge-m3). CLIP image embeddings are `vector(512)` in `product_image_embeddings`.
 - Product JSON format: `{ product_id, product_name, category, sub_category, description, variants: [{variant_id, size, color, price, stock, …}] }`
 - `retrieval.py` reads products from PostgreSQL at runtime (NOT from products.json). Falls back to products.json only when `DATABASE_URL` is unset.
