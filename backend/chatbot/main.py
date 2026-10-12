@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 try:
@@ -7,12 +7,14 @@ try:
     from .db import get_conn, release_conn
     from . import image_search
     from . import llm_client
+    from .embeddings import EmbeddingError, get_embedding
 except ImportError:
     from intent import detect_intent, Intent
     from retrieval import retrieve_products, load_products
     from db import get_conn, release_conn
     import image_search
     import llm_client
+    from embeddings import EmbeddingError, get_embedding
 from typing import Dict, Any, List, Optional
 import uuid
 import time
@@ -20,6 +22,7 @@ import requests
 import logging
 import re
 import os
+import secrets
 
 logging.basicConfig(
     filename='chatbot.log',
@@ -973,13 +976,42 @@ async def image_search_endpoint(image: UploadFile = File(...)):
     return {"results": results}
 
 
+# Shared password for endpoints only the Express backend should call. They
+# write to the DB / use CPU, and on the deployed Space they're reachable from
+# the internet. Unset (local dev) → no check, so local behaviour is unchanged.
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
+
+def require_internal_key(x_internal_key: str = Header(default="")):
+    if INTERNAL_API_KEY and not secrets.compare_digest(x_internal_key, INTERNAL_API_KEY):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+class EmbedTextRequest(BaseModel):
+    text: str
+
+
+@app.post("/embed-text", dependencies=[Depends(require_internal_key)])
+def embed_text(req: EmbedTextRequest):
+    """
+    bge-m3 embedding for a product chunk. Called by Express after an admin
+    adds/edits a product (generateAndStoreEmbedding), so Express needs no
+    direct Ollama access — on the deployed Space there is no Ollama at all.
+    """
+    try:
+        return {"embedding": get_embedding(req.text)}
+    except EmbeddingError as exc:
+        logger.error(f"embed-text failed: {exc}")
+        raise HTTPException(status_code=400, detail="Could not embed text")
+
+
 class EmbedOneRequest(BaseModel):
     image_id: int
     product_id: str
     image_url: str
 
 
-@app.post("/image-search/embed-one")
+@app.post("/image-search/embed-one", dependencies=[Depends(require_internal_key)])
 def embed_one_image(req: EmbedOneRequest):
     """
     Compute and store the CLIP embedding for a single product image.

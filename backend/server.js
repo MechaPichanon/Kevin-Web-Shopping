@@ -21,7 +21,8 @@ const productRoutes = require("./routes/productRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const app = express();
 const path = require("path")
-const { upload, handleUploadErrors } = require("./middleware/upload")
+const { handleUploadErrors } = require("./middleware/upload")
+const { storageEnabled, publicUrl, signedUrl } = require("./utils/storage")
 const orderRoutes =
   require("./routes/orderRoutes");
 const { autoConfirmShippedOrders } = require("./controllers/orderControllers");
@@ -81,23 +82,32 @@ app.get("/policies", async (req, res) => {
   }
 });
 
-app.use(
-  "/uploads",
-  express.static(
-    path.join(__dirname, "uploads")
+// Uploaded images. DB rows store "/uploads/<file>" in both modes, so the
+// frontend (resolveApiUrl) and the chatbot's image search work unchanged.
+if (storageEnabled) {
+  // Supabase mode: redirect to the file in Supabase Storage. "slip-…" files
+  // are in the private bucket and get a short-lived signed URL.
+  app.get("/uploads/:file", async (req, res) => {
+    const file = req.params.file;
+    try {
+      if (file.startsWith("slip-")) {
+        res.set("Cache-Control", "no-store");
+        return res.redirect(302, await signedUrl("slips", file));
+      }
+      res.redirect(302, publicUrl("products", file));
+    } catch (err) {
+      console.error("UPLOADS REDIRECT ERROR:", err.message);
+      res.status(404).end();
+    }
+  });
+} else {
+  app.use(
+    "/uploads",
+    express.static(
+      path.join(__dirname, "uploads")
+    )
   )
-)
-app.post(
-  "/upload/image",
-  upload.single("image"),
-  (req, res) => {
-    res.json({
-      imageUrl:
-        "/uploads/" +
-        req.file.filename,
-    })
-  }
-)
+}
 
 app.use("/products", productRoutes)
 /* ======================

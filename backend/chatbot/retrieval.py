@@ -30,9 +30,9 @@ from typing import List, Dict, Optional
 from pathlib import Path
 
 try:
-    from .embeddings import EmbeddingError, get_ollama_embedding
+    from .embeddings import EmbeddingError, get_embedding
 except ImportError:
-    from embeddings import EmbeddingError, get_ollama_embedding
+    from embeddings import EmbeddingError, get_embedding
 
 try:
     from .db import get_conn, release_conn
@@ -530,7 +530,7 @@ def _load_embeddings_from_db(
             continue
         try:
             text = _product_to_text(product)
-            vector_by_id[pid] = get_ollama_embedding(text)
+            vector_by_id[pid] = get_embedding(text)
         except EmbeddingError as exc:
             logger.error("Ollama embedding failed for %s: %s", pid, exc)
 
@@ -802,7 +802,7 @@ def _retrieve_products_core(query: str) -> List[Dict]:
         # words missing from _THAI_TO_EN would otherwise never reach bge-m3
         # (multilingual). corrected_tokens still drive the lexical score.
         embed_text       = f"{query} {corrected_query}".strip() if corrected_query else (query or "")
-        query_vec        = get_ollama_embedding(embed_text)
+        query_vec        = get_embedding(embed_text)
     except (EmbeddingError, OSError, json.JSONDecodeError):
         return keyword_retrieve_products(query)
 

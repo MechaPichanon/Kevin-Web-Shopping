@@ -30,8 +30,9 @@ def fake_post(url, json=None, **kw):
     raise requests.ConnectionError("no chat model on this Ollama")
 
 
-def load(key):
+def load(key, reasoning="on"):
     os.environ["OPENROUTER_API_KEY"] = key
+    os.environ["OPENROUTER_REASONING"] = reasoning
     import llm_client
     import intent
     importlib.reload(llm_client)
@@ -46,7 +47,15 @@ intent = load("sk-or-fake")
 assert intent.detect_intent("ส่งกี่วันคะ") == intent.Intent.STORE_POLICY
 assert calls and all("openrouter.ai" in u for u, _ in calls), calls
 assert calls[-1][1]["temperature"] == 0, calls[-1][1]
+assert "reasoning" not in calls[-1][1], calls[-1][1]
 print("ok  key set   → OpenRouter, temperature 0, ส่งกี่วันคะ = store_policy")
+
+# 1b. OPENROUTER_REASONING=off → every OpenRouter call turns thinking off.
+calls.clear()
+intent = load("sk-or-fake", reasoning="off")
+assert intent.detect_intent("ส่งกี่วันคะ") == intent.Intent.STORE_POLICY
+assert calls[-1][1]["reasoning"] == {"enabled": False}, calls[-1][1]
+print("ok  reasoning off → body has reasoning.enabled=false")
 
 # 2. Key unset → Ollama is used (and its failure is logged + falls back, not raised).
 calls.clear()

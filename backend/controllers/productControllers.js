@@ -1,6 +1,6 @@
 const crypto = require("crypto")
 const db = require("../db")
-const { requestImageEmbedding } = require("../utils/imageEmbedding")
+const { requestImageEmbedding, requestTextEmbedding } = require("../utils/imageEmbedding")
 const { loadProductChunkText } = require("../utils/productChunkText")
 
 // Links a "set" variant to the real component variants it bundles
@@ -43,20 +43,12 @@ async function attachSetComponents(client, variantId, v) {
 }
 
 async function generateAndStoreEmbedding(productId, content) {
-  const baseUrl = (process.env.OLLAMA_BASE_URL || "http://localhost:11434").replace(/\/$/, "")
-  const model   = process.env.OLLAMA_EMBED_MODEL || "bge-m3"
+  // The chatbot computes the bge-m3 vector (Ollama locally, in-process on the
+  // deployed Space) — Express never talks to Ollama directly.
+  const model     = process.env.OLLAMA_EMBED_MODEL || "bge-m3"
+  const embedding = await requestTextEmbedding(content)
 
-  const res = await fetch(`${baseUrl}/api/embeddings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, prompt: content }),
-  })
-  if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`)
-
-  const data = await res.json()
-  if (!Array.isArray(data.embedding)) throw new Error("Ollama response missing embedding array")
-
-  const vec  = `[${data.embedding.join(",")}]`
+  const vec  = `[${embedding.join(",")}]`
   const hash = crypto.createHash("sha256").update(content, "utf8").digest("hex")
 
   await db.query(

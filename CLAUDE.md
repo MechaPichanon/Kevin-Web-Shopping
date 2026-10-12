@@ -150,7 +150,7 @@ Browser
         │                                  ├─ intent.py     (rule pre-filters + LLM classifier, temperature 0)
         │                                  ├─ retrieval.py  (hybrid vector+lexical RAG)
         │                                  ├─ llm_client.py (the one LLM switch: OpenRouter if OPENROUTER_API_KEY, else Ollama — used by main.py AND intent.py)
-        │                                  └─ embeddings.py (Ollama bge-m3 client)
+        │                                  └─ embeddings.py (bge-m3: Ollama locally, in-process sentence-transformers on the deployed Space — EMBED_BACKEND)
         └─► /auth/* /profile  ──────────►  Express (port 5000)
               /orders/* /payment/*             ├─ bcrypt + JWT + pg
               /live-chat/* /addresses/*         ├─ middleware/auth.js (auth, requireAdmin — shared by server.js and routes/orderRoutes.js)
@@ -173,7 +173,8 @@ PostgreSQL 15 + pgvector (port 5432)  ← single source of truth for all data
   │                               ↑ retrieval.py reads embeddings from here at startup
   └─ product_image_embeddings   – CLIP visual search, vector(512) (stub, not yet filled)
 
-Ollama (host :11434)  ←  both FastAPI and backfill scripts reach it directly
+Ollama (host :11434)  ←  local dev only: FastAPI (EMBED_BACKEND=ollama) and backfill scripts reach it directly.
+                          Express never calls it — it asks the chatbot's POST /embed-text (X-Internal-Key).
 
 chatbot/db.py           — psycopg2 ThreadedConnectionPool (lazy init, fallback-safe)
 backend/data/products.json — seed/import tool only; NOT read at chatbot runtime
@@ -569,9 +570,11 @@ backend/data/products.json
 | Variable | Default | Notes |
 |---|---|---|
 | `OLLAMA_EMBED_MODEL` | `bge-m3` | Changing invalidates all caches |
+| `EMBED_BACKEND` | `ollama` | `sentence-transformers` = load `BAAI/bge-m3` in-process (deployed Space, no Ollama). Same vectors: cos ≥ 0.9999 on 23 products + 29 Thai queries, same top-3 for 25/25 — stored embeddings stay valid |
 | `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Used only when `OPENROUTER_API_KEY` is unset |
 | `OPENROUTER_API_KEY` | unset | When set, **every** LLM call (chat reply + intent classifier, via `llm_client.py`) goes to OpenRouter instead of Ollama |
 | `OPENROUTER_CHAT_MODEL` | `google/gemini-3.5-flash-lite` | Only used when `OPENROUTER_API_KEY` is set |
+| `OPENROUTER_REASONING` | `on` | `off` sends `reasoning: {enabled: false}` (no hidden "thinking" step); only used with OpenRouter |
 | `RAG_TOP_K` | `3` | Products sent to LLM |
 | `RAG_MIN_SCORE` | `0.20` | Lower = more recall, more noise |
 
@@ -608,6 +611,17 @@ sentence-transformers
 Pillow
 python-multipart
 ```
+
+## Uploaded images — Supabase Storage (deployed) vs disk (local)
+
+Deploy plan and status: `docs/deploy_plan.md`. DB rows always store `/uploads/<file>`, so the frontend (`resolveApiUrl`) and image search work the same in both modes.
+
+- **Switch:** `backend/utils/storage.js` — `storageEnabled` is true only when `SUPABASE_URL` + `SUPABASE_SECRET_KEY` are set (deployed Express). Local `docker-compose.yml` deliberately doesn't pass them → uploads stay in `backend/uploads/`.
+- **Upload** (`backend/middleware/upload.js`, same `upload.single(field)` call, so the routes/controllers didn't change): in Supabase mode multer keeps the file in memory → `sharp` compresses it (product images fit 1200×1600, slips 1600×3200, quality 85, same format, EXIF/GPS dropped; unreadable bytes → 400) → uploaded to bucket `products` (public) or `slips` (private, field `slip`). Slip filenames are `slip-<uuid>.<ext>` (unguessable); product images keep `<timestamp>.<ext>`.
+- **Read:** `GET /uploads/:file` in `server.js` → 302 to the public `products` URL, or for `slip-…` a 5-minute signed URL from `slips` (404 if missing). Local mode: `express.static` as before.
+- **Existing catalogue:** the 74 product images were uploaded once as 1200×1600 copies via `backend/scripts/upload_existing_images.js --from <dir>` (originals kept in `backend/uploads/`). CLIP vectors of compressed vs original: mean similarity 0.9975, own image still #1 for 74/74 — stored image embeddings didn't need recomputing.
+- `POST /upload/image` was removed (unauthenticated, unused by any frontend version).
+- **Known limitation:** anyone who has a `/uploads/slip-….jpg` address can open it (`<img>` can't send the JWT); fixing that needs a frontend change. See "Security notes" in `docs/deploy_plan.md`.
 
 ## Store policy page
 
@@ -738,6 +752,7 @@ All in `backend/chatbot/tests/`, run inside the backend container
 except `llm_model_eval.py`, which only needs `/chat` on :8000.
 
 - `llm_model_eval.py <label>` — 20 Thai/English questions end-to-end via `/chat`, correct answers taken from the live DB. Graded by hand into `llm_eval_<label>_results.md` (lang, type, question, correct answer, full LLM answer, grade). qwen2.5:7b: 14.5/20 both before and after the 2026-10-10 RAG fixes — **Current baseline:** `llm_eval_ollama_qwen2.5-7b_v2_baseline_results.md`, 3 runs, mean **15.33/20** (TH 5.5, EN 9.83), after the retrieval and prompt fixes. Identical runs differ by up to 2 points, so always compare models by the 3-run mean. What's left is the model: foreign-script text in Thai replies, size↔colour mistakes, and Q11 sizing.
+- OpenRouter `qwen/qwen3.7-flash` (2026-10-12, 3 runs each): thinking ON **19.17/20**, 28.2s avg (`llm_eval_openrouter_qwen3.7-flash_results.md`); thinking OFF (`OPENROUTER_REASONING=off`) **19.33/20**, 3.4s avg, ~7× cheaper. Side-by-side answers with per-reply times: `llm_eval_qwen3.7-flash_thinking_on_vs_off.md`.
 - `retrieval_eval_th.py <label>` + `retrieval_eval_th.json` — Thai retrieval Hit@1/Hit@3/MRR, no LLM. Stages in `retrieval_eval_th_results.md`.
 - `compare_intent_f1.py` — rule-based vs hybrid intent F1, now through the real `intent.detect_intent` on whatever backend `llm_client` uses; writes `compare_intent_f1_results_<model>.md` (qwen2.5:7b = 0.920, same as the original `compare_intent_f1_results.md`).
 - `test_llm_routing.py` — no-network check that the key switches every LLM call to OpenRouter.
@@ -752,8 +767,11 @@ DATABASE_URL=postgresql://<user>:<pass>@localhost:5432/<db>
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=qwen2.5:7b        # used only when OPENROUTER_API_KEY is unset — local dev default
 OLLAMA_EMBED_MODEL=bge-m3           # stays on Ollama — do not change without regenerating embeddings
+EMBED_BACKEND=ollama                # sentence-transformers on the deployed chatbot Space (no Ollama there)
+INTERNAL_API_KEY=                   # shared password Express → chatbot for /embed-text and /image-search/embed-one; set the same value on both deployed servers, leave empty locally (no check)
 OPENROUTER_API_KEY=...              # set to route chat through OpenRouter instead of Ollama
 OPENROUTER_CHAT_MODEL=google/gemini-3.5-flash-lite  # only used when OPENROUTER_API_KEY is set
+OPENROUTER_REASONING=on             # off = skip the model's hidden "thinking": qwen3.7-flash 28s → 3.4s per reply, same score (see Chatbot evaluation)
 RAG_TOP_K=3
 RAG_MIN_SCORE=0.20
 JWT_SECRET=...
