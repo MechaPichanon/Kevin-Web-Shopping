@@ -150,7 +150,7 @@ Browser
         │                                  ├─ intent.py     (rule pre-filters + LLM classifier, temperature 0)
         │                                  ├─ retrieval.py  (hybrid vector+lexical RAG)
         │                                  ├─ llm_client.py (the one LLM switch: OpenRouter if OPENROUTER_API_KEY, else Ollama — used by main.py AND intent.py)
-        │                                  └─ embeddings.py (bge-m3: Ollama locally, in-process sentence-transformers on the deployed Space — EMBED_BACKEND)
+        │                                  └─ embeddings.py (bge-m3: Ollama locally, OpenRouter on the Railway deploy, or in-process sentence-transformers — EMBED_BACKEND)
         └─► /auth/* /profile  ──────────►  Express (port 5000)
               /orders/* /payment/*             ├─ bcrypt + JWT + pg
               /live-chat/* /addresses/*         ├─ middleware/auth.js (auth, requireAdmin — shared by server.js and routes/orderRoutes.js)
@@ -570,7 +570,7 @@ backend/data/products.json
 | Variable | Default | Notes |
 |---|---|---|
 | `OLLAMA_EMBED_MODEL` | `bge-m3` | Changing invalidates all caches |
-| `EMBED_BACKEND` | `ollama` | `sentence-transformers` = load `BAAI/bge-m3` in-process (deployed Space, no Ollama). Same vectors: cos ≥ 0.9999 on 23 products + 29 Thai queries, same top-3 for 25/25 — stored embeddings stay valid |
+| `EMBED_BACKEND` | `ollama` | `openrouter` = OpenRouter `baai/bge-m3` with `OPENROUTER_API_KEY` (Railway deploy — keeps ~1.45 GB of bge-m3 out of the container's RAM); `sentence-transformers` = load `BAAI/bge-m3` in-process. Same vectors either way: cos ≥ 0.9999 vs Ollama/stored on 23 products + 29 Thai queries (same top-3 25/25 for sentence-transformers, 28/29 for OpenRouter — the other a near-tie swap) — stored embeddings stay valid |
 | `OLLAMA_CHAT_MODEL` | `qwen2.5:7b` | Used only when `OPENROUTER_API_KEY` is unset |
 | `OPENROUTER_API_KEY` | unset | When set, **every** LLM call (chat reply + intent classifier, via `llm_client.py`) goes to OpenRouter instead of Ollama |
 | `OPENROUTER_CHAT_MODEL` | `google/gemini-3.5-flash-lite` | Only used when `OPENROUTER_API_KEY` is set |
@@ -767,7 +767,7 @@ DATABASE_URL=postgresql://<user>:<pass>@localhost:5432/<db>
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=qwen2.5:7b        # used only when OPENROUTER_API_KEY is unset — local dev default
 OLLAMA_EMBED_MODEL=bge-m3           # stays on Ollama — do not change without regenerating embeddings
-EMBED_BACKEND=ollama                # sentence-transformers on the deployed chatbot Space (no Ollama there)
+EMBED_BACKEND=ollama                # openrouter on the Railway deploy (no Ollama there); sentence-transformers = in-process
 INTERNAL_API_KEY=                   # shared password Express → chatbot for /embed-text and /image-search/embed-one; set the same value on both deployed servers, leave empty locally (no check)
 OPENROUTER_API_KEY=...              # set to route chat through OpenRouter instead of Ollama
 OPENROUTER_CHAT_MODEL=google/gemini-3.5-flash-lite  # only used when OPENROUTER_API_KEY is set

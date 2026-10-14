@@ -2,13 +2,16 @@
 Text embeddings (bge-m3, 1024-dim) for RAG — one switch, EMBED_BACKEND:
 
   ollama (default)        → Ollama /api/embeddings on OLLAMA_BASE_URL (local dev)
-  sentence-transformers   → BAAI/bge-m3 loaded in this process (HF Space deploy,
-                            no Ollama there)
+  sentence-transformers   → BAAI/bge-m3 loaded in this process (~2.3 GB RAM)
+  openrouter              → OpenRouter /embeddings, model baai/bge-m3, with
+                            OPENROUTER_API_KEY (Railway deploy: keeps bge-m3
+                            out of the container's RAM)
 
-Both give the same vectors: on 2026-10-12, 23 product texts + 29 Thai eval
-queries had cosine ≥ 0.9999 between the two, and vector search returned the
-same top-3 for 25/25 queries — so stored product_chunks embeddings stay valid
-whichever backend made them.
+All give the same vectors: on 2026-10-12, 23 product texts + 29 Thai eval
+queries had cosine ≥ 0.9999 between sentence-transformers and Ollama (same
+top-3 for 25/25 queries); on 2026-10-14, OpenRouter vs Ollama/stored vectors
+had cosine ≥ 0.9999 (same top-3 for 28/29, the other a near-tie swap) — so
+stored product_chunks embeddings stay valid whichever backend made them.
 """
 import os
 import threading
@@ -23,6 +26,7 @@ class EmbeddingError(RuntimeError):
 
 EMBED_BACKEND = os.getenv("EMBED_BACKEND", "ollama").strip().lower()
 ST_MODEL_NAME = os.getenv("EMBED_ST_MODEL", "BAAI/bge-m3")
+OPENROUTER_EMBED_MODEL = os.getenv("OPENROUTER_EMBED_MODEL", "baai/bge-m3")
 
 _st_model = None
 _st_lock = threading.Lock()
@@ -41,6 +45,8 @@ def _get_st_model():
 
 def get_embedding(text: str) -> List[float]:
     """Embedding for `text` from whichever backend EMBED_BACKEND selects."""
+    if EMBED_BACKEND == "openrouter":
+        return get_openrouter_embedding(text)
     if EMBED_BACKEND != "sentence-transformers":
         return get_ollama_embedding(text)
     prompt = (text or "").strip()
@@ -51,6 +57,35 @@ def get_embedding(text: str) -> List[float]:
     except Exception as exc:
         raise EmbeddingError(f"sentence-transformers embedding failed: {exc}") from exc
     return [float(x) for x in vector]
+
+
+def get_openrouter_embedding(text: str, *, timeout_s: int = 60) -> List[float]:
+    """Embedding from OpenRouter (baai/bge-m3, ~$0.01 per 1M tokens)."""
+    prompt = (text or "").strip()
+    if not prompt:
+        raise EmbeddingError("Empty text cannot be embedded")
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        raise EmbeddingError("EMBED_BACKEND=openrouter but OPENROUTER_API_KEY is unset")
+
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/embeddings",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"model": OPENROUTER_EMBED_MODEL, "input": prompt},
+            timeout=timeout_s,
+        )
+        data = response.json()
+    except (requests.RequestException, ValueError) as exc:  # ValueError: body wasn't JSON
+        raise EmbeddingError(f"OpenRouter embeddings request failed: {exc}") from exc
+
+    try:
+        embedding = data["data"][0]["embedding"]
+    except (KeyError, IndexError, TypeError):
+        raise EmbeddingError(
+            f"unexpected OpenRouter embeddings response (HTTP {response.status_code}): {str(data)[:200]}"
+        )
+    return [float(x) for x in embedding]
 
 
 def _ollama_base_url() -> str:

@@ -48,6 +48,45 @@ function createPreviewDataUrl(file: File): Promise<string> {
   });
 }
 
+const UPLOAD_MAX_DIMENSION = 800;
+const UPLOAD_QUALITY = 0.85;
+
+// Search uses a resized copy, not the original: Vercel functions reject
+// bodies over 4.5 MB (phone photos often are), and CLIP only sees 224×224 —
+// tested 2026-10-12: 800 px finds the right product for 74/74 catalogue photos.
+function createUploadBlob(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(
+        1,
+        UPLOAD_MAX_DIMENSION / Math.max(img.width, img.height)
+      );
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      URL.revokeObjectURL(objectUrl);
+      if (!ctx) {
+        reject(new Error("Canvas context unavailable"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Resize failed"))),
+        "image/jpeg",
+        UPLOAD_QUALITY
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image"));
+    };
+    img.src = objectUrl;
+  });
+}
+
 export default function ImageSearchButton() {
   const router = useRouter();
   const { t } = useLang();
@@ -87,7 +126,7 @@ export default function ImageSearchButton() {
   const uploadAndSearch = async (file: File, dataUrl: string) => {
     try {
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append("image", await createUploadBlob(file), "search.jpg");
       const res = await fetch("/api/image-search", {
         method: "POST",
         body: formData,

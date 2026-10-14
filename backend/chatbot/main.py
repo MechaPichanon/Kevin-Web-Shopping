@@ -23,9 +23,12 @@ import logging
 import re
 import os
 import secrets
+import sys
 
+# Logs go to stdout: Railway/Docker show stdout, and a log file on a container
+# would be invisible there (and grow in memory on in-RAM filesystems).
 logging.basicConfig(
-    filename='chatbot.log',
+    stream=sys.stdout,
     level=logging.INFO,
     format="%(asctime)s - %(message)s"
 )
