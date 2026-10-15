@@ -111,6 +111,31 @@ npm run start    # serve production build
 
 > **Important:** This project uses Next.js 16 (App Router). APIs and conventions may differ from your training data — check `node_modules/next/dist/docs/` before using unfamiliar Next.js APIs. See `frontend/AGENTS.md`.
 
+## Live deployment (thesis demo)
+
+Live since 2026-10-15, all in Singapore. Why these hosts: `docs/adr/0006-managed-hosting-split-deploy.md` (supersedes ADR 0001). Step-by-step history/checklist: `docs/deploy_plan.md` (gitignored).
+
+| Part | Host | URL |
+|---|---|---|
+| Storefront | Vercel Hobby, root dir `frontend/`, region `sin1` | https://kevin-web-shopping.vercel.app |
+| Express API | Railway Pro service `api` (`backend/Dockerfile.node`, start command `npm start`) | https://api-production-45eb6.up.railway.app |
+| Chatbot | Railway Pro service `chatbot` (`backend/Dockerfile`, Volume at `/models`) | https://chatbot-production-b06e.up.railway.app |
+| DB + images | Supabase Free, Singapore (Session pooler; Storage `products`/`slips`) | — |
+| Chat LLM + bge-m3 | OpenRouter | — |
+
+Pushing to `main` redeploys all three. Secrets live only in the Railway/Vercel dashboards and local `.env` — never in the repo.
+
+**Production-only settings and why (don't remove):**
+- chatbot `OMP_NUM_THREADS=2`, `MKL_NUM_THREADS=2` — without them PyTorch sizes its thread pool from the host's cores and one image search took ~27 s instead of ~0.7 s.
+- chatbot `HF_HOME=/models` — CLIP weights cached on the Volume. CLIP is still lazy-loaded, so the **first image search after every chatbot restart/redeploy takes ~30 s**; do one yourself before a demo.
+- api `PORT=5000` — set explicitly so it matches the public domain's target port.
+- api `SMTP_USER`/`SMTP_PASS` are **required** in production: without them `POST /auth/forgot-password` returns the reset link in the response (local-dev convenience), so anyone could reset the admin's password.
+- api `DB_POOL_MAX=6` — Express 6 + chatbot 5 fit in Supabase Free's pool of 15.
+- `CORS_ORIGIN` (api, no S) / `CORS_ORIGINS` (chatbot, with S) = the Vercel URL. The api's value also builds the password-reset email link.
+- Vercel `NEXT_PUBLIC_API_URL` is inlined at **build** time — after changing it, redeploy without build cache. If it's missing, the site silently falls back to `localhost:5000` (no products).
+
+**Testing the live services from Windows:** Git Bash/Windows `curl` turns Thai in a command-line argument into `?`. Send Thai JSON from a UTF-8 file (`--data-binary @file.json`). Every `/chat` message costs OpenRouter money (≈3 calls: intent, embedding, reply) — ask first.
+
 ## Troubleshooting
 
 ### Frontend pages 404 even though the source file exists
@@ -495,7 +520,7 @@ Wipes `product_image_embeddings`, `product_chunks`, `reviews`, `payments`, `orde
 
 ### Moving the database (and uploaded images) to another machine
 
-The project isn't deployed yet — data only exists in the local `postgres` Docker volume plus files under `backend/uploads/`. `pg_dump`/`pg_restore` alone only move database rows (e.g. the `image_url` text), never the actual image files, so use these wrapper scripts instead of raw `pg_dump`:
+This is for the **local** Docker database (the live site uses Supabase — see **Live deployment**). Local data exists only in the `postgres` Docker volume plus files under `backend/uploads/`. `pg_dump`/`pg_restore` alone only move database rows (e.g. the `image_url` text), never the actual image files, so use these wrapper scripts instead of raw `pg_dump`:
 
 ```bash
 # On the source machine (postgres service must be running):
@@ -777,6 +802,10 @@ RAG_MIN_SCORE=0.20
 JWT_SECRET=...
 FASTAPI_BASE_URL=http://localhost:8000
 ORDER_AUTO_CONFIRM_DAYS=7           # days a shipped order waits before auto-confirming if the customer never clicks "I received it"
+DB_POOL_MAX=10                      # Express pg pool size; 6 on Railway (Supabase Free pool = 15)
+SMTP_USER= / SMTP_PASS=             # Gmail + App Password; optional locally, REQUIRED in production (see Live deployment)
+CORS_ORIGIN=http://localhost:3000   # api; chatbot uses CORS_ORIGINS (with S)
+OMP_NUM_THREADS=2 / MKL_NUM_THREADS=2  # chatbot on Railway only — see Live deployment
 ```
 
 ## Conventions
