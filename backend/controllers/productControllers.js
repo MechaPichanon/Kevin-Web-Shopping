@@ -10,6 +10,11 @@ const sizeOrder = (col) => `CASE ${col}
       WHEN 'XS' THEN 1 WHEN 'S' THEN 2 WHEN 'M' THEN 3 WHEN 'L' THEN 4
       WHEN 'XL' THEN 5 WHEN 'XXL' THEN 6 WHEN 'F' THEN 7 ELSE 8 END, ${col}`
 
+// A set option's stock field is disabled in the admin form, so it arrives
+// blank; Postgres rejects "" for an integer column. Store 0 — for a set,
+// attachSetComponents' insert trigger then sets the real derived stock.
+const variantStock = (v) => (v.stock === "" || v.stock == null ? 0 : v.stock)
+
 // Links a "set" variant to the real component variants it bundles
 // (products.category='set'). Always clears any prior mapping first so
 // edits (swapping/removing a component) take effect. Components may have
@@ -316,7 +321,7 @@ const addProduct = async (req, res) => {
          v.waist_min || null, v.waist_max || null,
          v.sleeve || null, v.sleeve_th || null,
          v.collar || null, v.collar_th || null,
-         v.price, v.cost_price || null, v.stock,
+         v.price, v.cost_price || null, variantStock(v),
          v.is_active !== false && v.is_active !== "false"]
       )
 
@@ -427,7 +432,7 @@ const updateProduct = async (req, res) => {
           [v.size, v.color, v.color_th || null, v.pattern || null, v.pattern_th || null,
            v.chest_min || null, v.chest_max || null, v.waist_min || null, v.waist_max || null,
            v.sleeve || null, v.sleeve_th || null, v.collar || null, v.collar_th || null,
-           v.price, v.cost_price || null, v.stock, isActive, v.variant_id, productId]
+           v.price, v.cost_price || null, variantStock(v), isActive, v.variant_id, productId]
         )
         submittedIds.push(v.variant_id)
         await attachSetComponents(client, v.variant_id, v)
@@ -443,7 +448,7 @@ const updateProduct = async (req, res) => {
            v.pattern_th || null, v.chest_min || null, v.chest_max || null,
            v.waist_min || null, v.waist_max || null, v.sleeve || null, v.sleeve_th || null,
            v.collar || null, v.collar_th || null, v.price, v.cost_price || null,
-           v.stock, isActive]
+           variantStock(v), isActive]
         )
         submittedIds.push(newId)
         await attachSetComponents(client, newId, v)
