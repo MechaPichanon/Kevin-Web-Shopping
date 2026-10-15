@@ -269,10 +269,9 @@ function luminance(hex: string): number {
 }
 
 // Resolves the currently-picked set components into a VariantDraft, or
-// returns null if fewer than 2 components are picked, a pick's variant no
-// longer exists, or the picked components' patterns don't all match (a set
-// may never bundle mismatched patterns, e.g. a pattern-A shirt with a
-// pattern-B short).
+// returns null if fewer than 2 components are picked or a pick's variant no
+// longer exists. Components may have different patterns: the option is
+// labelled with the shared pattern, or "Set" / "เซ็ต" when they differ.
 function resolveSetDraft(
   picks: SetComponentPick[],
   products: ProductRow[],
@@ -293,11 +292,9 @@ function resolveSetDraft(
   })
   if (resolved.some((r) => !r.prod || !r.variant)) return null
 
-  const patterns = new Set(resolved.map((r) => r.variant!.pattern || null))
-  if (patterns.size > 1) return null
-
+  const patterns = new Set(resolved.map((r) => r.variant!.pattern || ""))
   const label = resolved.map((r) => `${r.prod!.product_name} (${r.variant!.size})`).join(" + ")
-  const patternVal = resolved[0].variant!.pattern || ""
+  const patternVal = patterns.size === 1 ? resolved[0].variant!.pattern || "" : ""
   const patternObj = PATTERNS.find((p) => p.value === patternVal)
 
   return {
@@ -306,7 +303,7 @@ function resolveSetDraft(
     size: label,
     colorHex: "#8b6f5a",
     colorName: patternObj?.label ?? (patternVal || "Set"),
-    colorNameTh: patternObj?.labelTh ?? "",
+    colorNameTh: patternObj?.labelTh ?? (patternVal ? "" : "เซ็ต"),
     pattern: patternVal,
     patternTh: patternObj?.labelTh ?? "",
     chestMin: "", chestMax: "", waistMin: "", waistMax: "",
@@ -1105,9 +1102,6 @@ export default function AdminProductsPage() {
     (sum, r) => sum + (r.variant ? Number(r.variant.price) * (Number(r.pick.quantity) || 1) : 0),
     0
   )
-  const setPatternMismatch =
-    setComponentsResolved.length >= 2 &&
-    new Set(setComponentsResolved.map((r) => r.variant?.pattern || null)).size > 1
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -1821,7 +1815,7 @@ export default function AdminProductsPage() {
                         {isSet && (
                           <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#9aa0ac" }}>
                             A set has no sub-category or pattern of its own — its pattern is
-                            whatever its linked items share.
+                            whatever its linked items share, or &quot;Set&quot; when they differ.
                           </p>
                         )}
                       </div>
@@ -1955,7 +1949,7 @@ export default function AdminProductsPage() {
                       </h2>
                       <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9aa0ac" }}>
                         {isSet
-                          ? "Pick 2 or more items sharing the same pattern to bundle as one set option. Sizes stay independent per item; only the pattern must match."
+                          ? "Pick 2 or more items to bundle as one set option. Sizes stay independent per item."
                           : "Size and color define this individual row. Each variant has its own stock."}
                       </p>
                     </div>
@@ -2046,13 +2040,7 @@ export default function AdminProductsPage() {
                           + Add item
                         </button>
 
-                        {setPatternMismatch && (
-                          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#dc2626", fontWeight: 600 }}>
-                            ลายของสินค้าที่เลือกไม่ตรงกัน ไม่สามารถจับเป็นเซ็ตได้ — patterns don&apos;t
-                            match, this combination cannot be saved as a set.
-                          </p>
-                        )}
-                        {setComponentsResolved.length >= 2 && !setPatternMismatch && (
+                        {setComponentsResolved.length >= 2 && (
                           <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#707683" }}>
                             Sum of individual prices:{" "}
                             <strong>฿{setComponentsSum.toLocaleString()}</strong> — set the flat

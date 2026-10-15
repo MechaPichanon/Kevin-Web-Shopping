@@ -12,9 +12,8 @@ const sizeOrder = (col) => `CASE ${col}
 
 // Links a "set" variant to the real component variants it bundles
 // (products.category='set'). Always clears any prior mapping first so
-// edits (swapping/removing a component) take effect. Rejects when the
-// selected components don't share the same pattern — a set may never mix
-// patterns (e.g. a pattern-A shirt with a pattern-B short).
+// edits (swapping/removing a component) take effect. Components may have
+// different patterns.
 async function attachSetComponents(client, variantId, v) {
   const componentIds = Array.isArray(v.component_variant_ids)
     ? v.component_variant_ids.filter(Boolean)
@@ -24,19 +23,11 @@ async function attachSetComponents(client, variantId, v) {
   if (componentIds.length === 0) return
 
   const { rows: components } = await client.query(
-    `SELECT variant_id, pattern FROM variants WHERE variant_id = ANY($1::text[])`,
+    `SELECT variant_id FROM variants WHERE variant_id = ANY($1::text[])`,
     [componentIds]
   )
   if (components.length !== componentIds.length) {
     throw Object.assign(new Error("ไม่พบ variant ของสินค้าที่เลือกบางรายการ"), { status: 400 })
-  }
-
-  const patterns = new Set(components.map((c) => c.pattern || null))
-  if (patterns.size > 1) {
-    throw Object.assign(
-      new Error("ลายของสินค้าที่เลือกไม่ตรงกัน ไม่สามารถจับเป็นเซ็ตได้"),
-      { status: 400 }
-    )
   }
 
   const qtys = Array.isArray(v.component_quantities) ? v.component_quantities : []
