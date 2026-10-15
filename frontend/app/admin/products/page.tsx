@@ -99,7 +99,7 @@ const COLLAR_OPTIONS = [
 ]
 
 const UPPER_SIZES = ["M", "L", "XL", "XXL"]
-const PANT_SIZES = ["30", "32", "34", "36", "38"]
+const PANT_SIZES = ["30", "32", "34", "36", "38", "F", "M", "L", "XL"]
 
 const PRESET_COLORS = [
   { hex: "#ffffff", name: "White", nameTh: "ขาว" },
