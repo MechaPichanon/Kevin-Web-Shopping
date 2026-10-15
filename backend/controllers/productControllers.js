@@ -3,6 +3,13 @@ const db = require("../db")
 const { requestImageEmbedding, requestTextEmbedding } = require("../utils/imageEmbedding")
 const { loadProductChunkText } = require("../utils/productChunkText")
 
+// Clothing size order (M before L before XL) instead of alphabetical, which
+// puts L before M. Waist sizes ("30", "32", …) fall through to the final
+// `size` sort, which orders them correctly.
+const sizeOrder = (col) => `CASE ${col}
+      WHEN 'XS' THEN 1 WHEN 'S' THEN 2 WHEN 'M' THEN 3 WHEN 'L' THEN 4
+      WHEN 'XL' THEN 5 WHEN 'XXL' THEN 6 WHEN 'F' THEN 7 ELSE 8 END, ${col}`
+
 // Links a "set" variant to the real component variants it bundles
 // (products.category='set'). Always clears any prior mapping first so
 // edits (swapping/removing a component) take effect. Rejects when the
@@ -94,7 +101,7 @@ SELECT
       'cost_price', pv.cost_price,
       'stock',      pv.stock,
       'is_active',  pv.is_active
-    ) ORDER BY pv.price ASC
+    ) ORDER BY pv.price ASC, ${sizeOrder("pv.size")}
   ) FILTER (WHERE pv.variant_id IS NOT NULL) AS variants
 
 FROM products p
@@ -159,7 +166,7 @@ SELECT
       'cost_price', pv.cost_price,
       'stock',      pv.stock,
       'is_active',  pv.is_active
-    ) ORDER BY pv.price ASC
+    ) ORDER BY pv.price ASC, ${sizeOrder("pv.size")}
   ) FILTER (WHERE pv.variant_id IS NOT NULL) AS variants
 
 FROM products p
@@ -587,7 +594,7 @@ SELECT
         FROM set_components sc
         WHERE sc.set_variant_id = v.variant_id
       )
-    ) ORDER BY v.color, v.size
+    ) ORDER BY v.color, ${sizeOrder("v.size")}
   ) FILTER (WHERE v.variant_id IS NOT NULL) AS variants
 
 FROM products p
