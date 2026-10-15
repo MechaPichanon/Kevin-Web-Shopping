@@ -545,7 +545,7 @@ The chatbot retrieves products using a hybrid score:
 combined = (0.78 × cosine_similarity) + (0.22 × token_overlap_ratio)
 ```
 
-When the query names a clothing type, products of that type are returned first and others only fill leftover slots (other types are also scored ×`RAG_TYPE_PENALTY`, default 0.6). Type words map via `_TYPE_TARGETS` in `retrieval.py`: `shirt`→shirt/tshirt/polo, `pants`→pants/**pant**/shorts (the admin page saves the category as singular `pant`), plus `polo`, `shorts`, `tshirt`, `jacket`. Top `RAG_TOP_K` results above `RAG_MIN_SCORE` are injected into the LLM system prompt.
+When the query names a clothing type, products of that type are returned first and others only fill leftover slots (other types are also scored ×`RAG_TYPE_PENALTY`, default 0.6). Type words map via `_TYPE_TARGETS` in `retrieval.py`: `shirt`→shirt/tshirt/polo, `pants`→pants/**pant**/shorts (the admin page saves the category as singular `pant`), plus `polo`, `shorts`, `tshirt`, `jacket`, and `set`/`sets`→set (Thai `ชุดเซ็ต`/`เซ็ต`; bare `ชุด` deliberately not mapped — `ชุดว่ายน้ำ` is swimwear). Top `RAG_TOP_K` results above `RAG_MIN_SCORE` are injected into the LLM system prompt.
 
 **Thai queries:** `_preprocess_query()` swaps known Thai words for English (`_THAI_TO_EN` — product types, fabrics, colours; bare `ไหม` deliberately excluded since it's also the question particle) for the lexical score, but the **query embedding uses the original text + those tokens** (`embed_text` in `_retrieve_products_core`). Before 2026-10-10 only the `[a-z0-9]` tokens were embedded, so "แนะนำเสื้อโปโลหน่อย" was embedded as just `shirt` — see `backend/chatbot/tests/retrieval_eval_th_results.md` (Thai Hit@1 0.56 → 1.00 on its own test set).
 

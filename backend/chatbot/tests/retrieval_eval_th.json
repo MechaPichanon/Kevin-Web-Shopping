@@ -268,6 +268,30 @@
    "query": "มีโทรศัพท์มือถือขายไหม",
    "expected": [],
    "label": "out of scope"
+  },
+  {
+   "id": 30,
+   "query": "มีชุดเซ็ตอะไรบ้าง",
+   "expected": [
+    "P1792064357762"
+   ],
+   "label": "set (any) — added 2026-10-15, live DB"
+  },
+  {
+   "id": 31,
+   "query": "อยากได้เซ็ตเสื้อกับกางเกง",
+   "expected": [
+    "P1792064357762"
+   ],
+   "label": "set (any) — added 2026-10-15, live DB"
+  },
+  {
+   "id": 32,
+   "query": "ชุดเซ็ตราคาเท่าไหร่",
+   "expected": [
+    "P1792064357762"
+   ],
+   "label": "set (any) — added 2026-10-15, live DB"
   }
  ]
 }

@@ -636,6 +636,10 @@ _THAI_TO_EN = {
     "ลินิน":      "linen",
     "ผ้าไหม":     "silk",
     "ถัก":        "knit",
+    # Sets (category "set", Thai name ชุดเซ็ต). Bare "ชุด" is left out on
+    # purpose — "ชุดว่ายน้ำ" means swimwear, not a set.
+    "ชุดเซ็ต":    "set",
+    "เซ็ต":       "set",
     # Colours (longest-first replacement keeps "เขียวมะกอก" → "green มะกอก")
     "แดง":        "red",
     "เขียว":      "green",
@@ -659,6 +663,8 @@ _TYPE_TARGETS: Dict[str, set] = {
     "pants":  {"pants", "pant", "shorts"},
     "shorts": {"shorts"},
     "jacket": {"jacket"},
+    "set":    {"set"},
+    "sets":   {"set"},
 }
 
 

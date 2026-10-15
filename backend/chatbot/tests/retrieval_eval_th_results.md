@@ -68,3 +68,13 @@ Calls `retrieval.retrieve_products()` directly (no LLM), so this measures only t
 - `Chain Loop Knit Polo` has category `shirt` (it's a polo). It still shows up for polo queries because its name contains "Polo".
 - Size chart: `Monstera Silk Shirt` L has chest 44–43, and `Heavyweight Shorts` 32 has waist 32–39. Both look like typos.
 - `shirt test` (เชิ้ต เทส) is an active test product, and it often takes one of the top-3 slots for shirt queries.
+## 2026-10-15 — "set" category (live Supabase DB, Ollama bge-m3)
+
+Added `ชุดเซ็ต`/`เซ็ต` → `set` to `_THAI_TO_EN` and `set`/`sets` to `_TYPE_TARGETS` (bare `ชุด` left out: `ชุดว่ายน้ำ` = swimwear). Added Q30–Q32 (expected: the first set product, `P1792064357762`, live DB only).
+
+| Run | In-scope | Hit@1 | Hit@3 | MRR |
+|---|---|---|---|---|
+| `set_before` (Q1–Q29, old code) | 25 | 1.000 | 1.000 | 1.000 |
+| `set_after` (Q1–Q32, new code) | 28 | 1.000 | 1.000 | 1.000 |
+
+Before the change, "อยากได้เซ็ตเสื้อกับกางเกง" didn't return the set at all (top-3: Silk Pants, Chain Loop Knit Polo, Crochet Knit Polo Shirt); after, the set is #1. Q10 `ชุดว่ายน้ำ` still → Swim Shorts. The data issues listed above were fixed on the live DB on 2026-10-15 (Chain Loop → polo, size charts rewritten, test products removed in the earlier wipe).

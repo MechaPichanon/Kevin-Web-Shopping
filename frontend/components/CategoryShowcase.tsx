@@ -39,7 +39,7 @@ export default function CategoryShowcase() {
     polo: "/images/categories/polo.jpg",
     pant: "/images/categories/pant.jpg",
     tshirt: "/images/categories/tshirt.jpg",
-    // set: "/images/categories/set.jpg",
+    set: "/images/categories/set.jpg",
   };
 
   return (

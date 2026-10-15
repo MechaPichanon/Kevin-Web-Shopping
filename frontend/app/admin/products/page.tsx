@@ -49,7 +49,7 @@ const CATEGORIES = [
   { value: "polo", label: "Polo", labelTh: "โปโล" },
   { value: "pant", label: "Pant", labelTh: "กางเกง" },
   { value: "tshirt", label: "T-shirt", labelTh: "เสื้อยืด" },
-  { value: "set", label: "Set", labelTh: "ชุด" },
+  { value: "set", label: "Set", labelTh: "ชุดเซ็ต" },
 ]
 
 const SUBCATS: Record<string, { value: string; label: string; labelTh: string }[]> = {
